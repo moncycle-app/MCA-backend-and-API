@@ -24,7 +24,7 @@ else {
 		// the picture and its token are asked for once the address is typed (a click on the picture asks for another)
 		const register_captcha = moncycle_captcha.attach({
 			purpose: "register",
-			email: $("#i_email1"),
+			email: $("#i_login_email"),
 			image: $("#r_captcha"),
 			token: $("#i_captcha_token"),
 			answer: $("#i_captcha"),
@@ -33,7 +33,7 @@ else {
 		$("#f_registration").on("submit", function(event) {
 			event.preventDefault();
 			$("#register_error_msg").text("");
-			if ($("#i_email1").val() != $("#i_email1_conf").val()) {
+			if ($("#i_login_email").val() != $("#i_login_email_conf").val()) {
 				$("#register_error_msg").text("L'addresse email et sa confirmation ne sont pas identique.");
 				return;
 			}
@@ -50,7 +50,7 @@ else {
 			var method = $('input[name="method"]:checked').val() == "3" ? "fertilityCare" : "billings";
 			var payload = {
 				firstName: $("#i_firstname").val(),
-				email: $("#i_email1").val(),
+				email: $("#i_login_email").val(),
 				password: $("#i_password").val(),
 				birthYear: parseInt($("#i_anaissance").val()),
 				captcha: $("#i_captcha").val(),
@@ -63,7 +63,7 @@ else {
 			$.ajax({type : 'POST', "url" : "api/register", contentType: "application/json", "data" : JSON.stringify(payload)}).done(function(ret){
 				console.log(ret);
 				// the answer is the same for a new address and for one that has an account: the page says only what is sure
-				$("#success_email").text($("#i_email1").val());
+				$("#success_email").text($("#i_login_email").val());
 				$("#i_password, #i_password_conf").val("");
 				$("#register_form").hide();
 				$("#register_ok").show();

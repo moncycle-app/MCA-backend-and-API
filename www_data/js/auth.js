@@ -23,7 +23,7 @@ else {
 		// token is tied to the account's counters, so a new one is made after every refused attempt
 		const login_captcha = moncycle_captcha.attach({
 			purpose: "login",
-			email: $("#i_email1"),
+			email: $("#i_login_email"),
 			image: $("#l_captcha"),
 			token: $("#i_captcha_token"),
 			answer: $("#i_captcha"),
@@ -33,7 +33,7 @@ else {
 		// the lost password always asks for one
 		const reset_captcha = moncycle_captcha.attach({
 			purpose: "recover",
-			email: $("#r_email1"),
+			email: $("#r_login_email"),
 			image: $("#rc_captcha_img"),
 			token: $("#rc_captcha_token"),
 			answer: $("#rc_captcha"),
@@ -46,7 +46,7 @@ else {
 			$("#connexion_but").prop("disabled", true);
 			$("#connexion_but").val("Connexion ⏳");
 			var payload = {
-				email: $("#i_email1").val(),
+				email: $("#i_login_email").val(),
 				password: $("#i_password").val(),
 				name: $("#i_token_name").val(),
 				cookie: $("#i_token_cookie").val() === "true",
@@ -96,7 +96,7 @@ else {
 			$("#reset_but").prop("disabled", true);
 			$("#reset_but").val("Rénitialiser ⏳");
 			$("#reset_error_msg").text("");
-			var email = $("#r_email1").val();
+			var email = $("#r_login_email").val();
 			$.ajax({
 				type: "POST",
 				url: "api/recover_password",
@@ -131,17 +131,17 @@ else {
 		});
 		// The address of the link in a mail. A "+" that reaches the page as itself (a mail reader or a link checker that
 		// decodes %2B) is read as a space by URLSearchParams, and an address never holds a space: it is a "+".
-		const email1 = (new URLSearchParams(window.location.search)).get("email1");
-		$("#i_email1").val(email1 === null ? "" : email1.trim().replace(/ /g, "+"));
+		const login_email = (new URLSearchParams(window.location.search)).get("login_email");
+		$("#i_login_email").val(login_email === null ? "" : login_email.trim().replace(/ /g, "+"));
 		$("#but_demo_bill").on("click", function(event) {
 			event.preventDefault();
-			$("#i_email1").val("demo.bill@moncycle.app");
+			$("#i_login_email").val("demo.bill@moncycle.app");
 			$("#i_password").val("demo");
 			$("#connexion_form").submit();
 		});
 		$("#but_demo_fc").on("click", function(event) {
 			event.preventDefault();
-			$("#i_email1").val("demo.fc@moncycle.app");
+			$("#i_login_email").val("demo.fc@moncycle.app");
 			$("#i_password").val("demo");
 			$("#connexion_form").submit();
 		});

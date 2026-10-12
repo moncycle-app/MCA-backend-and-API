@@ -199,3 +199,12 @@ ADD `email_token_new_email` varchar(255) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL
 ADD UNIQUE `email_token_hash` (`email_token_hash`),
 ALGORITHM=INPLACE, LOCK=NONE;
 UPDATE `user_account` SET `email_verified_at` = `inscription_date`;
+
+-- The two addresses of an account get names that say what they are for. login_email signs in and receives the links of the account;
+-- notification_emails is a list of addresses (separated by ";", 5 at most) that receive the cycles, the reminders and the warnings with it:
+-- the column is wider than the address it held (1024 characters, in place: a utf8mb4 varchar already has a two-byte length).
+ALTER TABLE `user_account`
+CHANGE `email1` `login_email` varchar(255) COLLATE 'utf8mb4_bin' NOT NULL,
+CHANGE `email2` `notification_emails` varchar(1024) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL,
+RENAME INDEX `email1` TO `login_email`,
+ALGORITHM=INPLACE, LOCK=NONE;

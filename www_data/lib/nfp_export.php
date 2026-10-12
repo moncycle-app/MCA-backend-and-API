@@ -144,7 +144,7 @@ function nfp_export_file($db, string $start_date, string $end_date, array $user_
 	if (!$anonymous) {
 		$user = ["identifier" => strval($user_account["no_user_account"])];
 		if (!empty($user_account["name_user_account"])) $user["firstName"] = $user_account["name_user_account"];
-		if (!empty($user_account["email1"])) $user["email"] = $user_account["email1"];
+		if (!empty($user_account["login_email"])) $user["email"] = $user_account["login_email"];
 		// birthDate is deliberately absent: user_account.age holds a birth *year*, and the
 		// format's birthDate is a full YYYY-MM-DD, which would mean inventing a day and month.
 		$file["userInformation"] = $user;

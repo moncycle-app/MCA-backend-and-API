@@ -140,13 +140,6 @@
 			<br />
 			<input class="auto_save" value="1" type="checkbox" id="i_research" name="research"/> <label for="i_research">Autoriser des exports de la base de données avec des cycles anonymisés pour la research sur les méthodes naturelles.</label><br />
 			<br />
-			<label for="i_email1">E-mail:</label> <br /><span class="label_info">Identifiant de connexion et envoi des cycles (pour la changer, voir « Changer mon adresse e-mail » plus bas).</span><br />
-			<input id="i_email1" type="email" readonly name="email1" value="" /><br />
-			<br />
-			<label for="i_email2">2e e-mail:</label> <br /><span class="label_info">Permet de recevoir les cycles sur une deuxième addresse. Pour la changer, confirmez avec votre mot de passe: un mail prévient votre adresse de connexion.</span><br />
-			<input id="i_email2" type="email" name="email2" value="" /><br />
-			<input id="i_email2_password" type="password" autocomplete="current-password" placeholder="mot de passe" /> <button type="button" id="but_email2_save">💾 enregistrer</button><span class="net_stat" id="net_stat_email2"></span><br />
-			<br />
 			<label for="i_anaissance">Année de naissance:</label><br />
 			<select id="i_anaissance" name="age" class="auto_save" required></select><br />
 			<!-- <br />
@@ -192,28 +185,47 @@
 
 
 
-			<h2>Changer mon adresse e-mail <span class="net_stat" id="email_change_ok"></span></h2>
-			<form id="form_email_change" action="api/email_change" method="post">
+			<h2>Adresses qui reçoivent mes cycles <span class="net_stat" id="notification_emails_ok"></span></h2>
+			<form id="form_notification_emails" action="api/account" method="post">
 			<br />
+			<span class="label_info">Vos cycles sont envoyés à l'adresse de connexion et à celles de cette liste. Plusieurs adresses possibles, séparées par « ; » (5 au plus). Pour la changer, confirmez avec votre mot de passe: un mail prévient votre adresse de connexion.</span><br />
+			<br />
+			<label for="i_notification_emails">Adresses:</label><br />
+			<input type="text" id="i_notification_emails" name="notification_emails" maxlength="1024" placeholder="adresse1@exemple.fr;adresse2@exemple.fr" autocomplete="off" /><br />
+			<br />
+			<label for="i_notification_emails_password">Mot de passe:</label><br />
+			<input type="password" id="i_notification_emails_password" name="password" autocomplete="current-password" required /><br />
+			<br />
+			<input id="but_notification_emails" type="submit" value="💾 enregistrer" /><br />
+			<span id="notification_emails_msg" class="rouge"></span><br /></form>
+			<br /><br /><br />
+
+
+
+			<h2>Changer mon adresse de connexion <span class="net_stat" id="login_email_ok"></span></h2>
+			<form id="form_login_email" action="api/account" method="post">
+			<br />
+			<label for="i_login_email">Adresse de connexion actuelle:</label><br />
+			<input id="i_login_email" type="email" readonly name="login_email" value="" /><br />
 			<span class="label_info">C'est l'adresse qui sert à se connecter et à retrouver un mot de passe perdu. Un lien de confirmation est envoyé à la <b>nouvelle</b> adresse et un mail prévient l'ancienne: le changement n'a lieu qu'une fois ce lien utilisé.</span><br />
 			<br />
-			<label for="i_email_change_new">Nouvelle adresse e-mail:</label><br />
-			<input type="email" id="i_email_change_new" name="new_email" maxlength="255" required /><br />
+			<label for="i_login_email_new">Nouvelle adresse de connexion:</label><br />
+			<input type="email" id="i_login_email_new" name="new_login_email" maxlength="255" required /><br />
 			<br />
-			<label for="i_email_change_password">Mot de passe:</label><br />
-			<input type="password" id="i_email_change_password" name="password" autocomplete="current-password" required /><br />
+			<label for="i_login_email_password">Mot de passe:</label><br />
+			<input type="password" id="i_login_email_password" name="password" autocomplete="current-password" required /><br />
 			<br />
-			<label for="i_email_change_code">Code:</label><br />
-			<input type="number" id="i_email_change_code" name="code" placeholder="authentification multifacteur (si activée)" /><br />
+			<label for="i_login_email_code">Code:</label><br />
+			<input type="number" id="i_login_email_code" name="code" placeholder="authentification multifacteur (si activée)" /><br />
 			<br />
-			<input id="but_email_change" type="submit" value="📧 envoyer le lien" /><br />
-			<span id="email_change_msg" class="rouge"></span><br /></form>
+			<input id="but_login_email" type="submit" value="📧 envoyer le lien" /><br />
+			<span id="login_email_msg" class="rouge"></span><br /></form>
 			<br /><br /><br />
 
 
 
 			<h2>Changer mon mot de passe <span class="net_stat" id="mdp_change_ok"></span></h2>
-			<form id="form_mdp_change" action="api/password_change" method="post">
+			<form id="form_mdp_change" action="api/account" method="post">
 			<br />
 			<label for="i_old_pw">Ancien mot de passe:</label><br />
 			<input type="password" id="i_old_pw" name="old_pw" required /><br />  

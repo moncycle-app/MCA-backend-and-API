@@ -262,7 +262,7 @@ function sec_totp_state_name($state) {
 // to add it to an authenticator app.
 function sec_totp_begin($db, array $user_account): array {
 	$totp = TOTP::generate();
-	$totp->setLabel($user_account["email1"]);
+	$totp->setLabel($user_account["login_email"]);
 	$totp->setIssuer('MONCYCLE.APP');
 	$totp->setParameter('image', APP_URL . "img/moncycleapp512.jpg");
 	db_update_user_account_totp_secret($db, $totp->getSecret(), $user_account["no_user_account"]);

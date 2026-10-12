@@ -27,7 +27,7 @@
 		<meta property="og:image" content="/img/moncycleapp_apercu.jpg" />
 		<meta property="og:description" content="Application de suivi de cycle pour les méthodes naturelles de régulation des naissances." />
 		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
-		<script type="text/javascript" src="js/email_token.js" defer></script>
+		<script type="text/javascript" src="js/verify_email.js" defer></script>
 		<link rel="stylesheet" href="css/commun.css" />
 		<link rel="stylesheet" href="css/account.css" />
 		<style>
@@ -42,10 +42,10 @@
 			<a href="auth"><button type="button" class="nav_button">Se connecter 🔑</button></a>
 		</center>
 
-		<!-- The link of a mail (js/email_token.js): the purpose and the token are in the fragment of the address. The form below carries them to the API. -->
+		<!-- The link of a mail (js/verify_email.js): the purpose and the token are in the fragment of the address. The form below carries them to the API. -->
 		<div class="contennu" id="et_form_box" style="display:none">
 			<h2 id="et_title"></h2>
-			<form action="api/email_token" method="post" id="f_email_token"><br />
+			<form action="api/verify_email" method="post" id="f_verify_email"><br />
 				<input type="hidden" name="purpose" id="i_purpose" value="" />
 				<input type="hidden" name="token" id="i_token" value="" />
 				<span id="et_text"></span><br />

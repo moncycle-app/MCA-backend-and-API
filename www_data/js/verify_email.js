@@ -6,15 +6,15 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// The page of the link in a mail (email_token.html), as a file of its own: the CSP is script-src 'self', so no inline script.
+// The page of the link in a mail (verify_email.html), as a file of its own: the CSP is script-src 'self', so no inline script.
 // The address holds the purpose and the token in its fragment ("#purpose=resetPassword&t=..."): a fragment is never sent to a server,
 // written in a log or given as a Referer, and a mail scanner that only fetches the link does not run this script, so it uses nothing
 // up. The fragment is read once and then taken off the address; the form below carries the purpose and the token (hidden fields) and
-// is what is sent to POST /api/email_token.
+// is what is sent to POST /api/verify_email.
 
 $(document).ready(function(){
 	const pages = {
-		verifyEmail: {
+		accountCreation: {
 			title: "Confirmer votre adresse e-mail",
 			text: "Un compte a été créé avec cette adresse. Confirmez-la pour pouvoir vous connecter.",
 			button: "Confirmer mon adresse ✅",
@@ -55,7 +55,7 @@ $(document).ready(function(){
 	}
 	$("#et_form_box").show();
 
-	$("#f_email_token").on("submit", function(event) {
+	$("#f_verify_email").on("submit", function(event) {
 		event.preventDefault();
 		$("#et_error_msg").text("");
 		if (page.password && $("#i_new_password").val() != $("#i_new_password_conf").val()) {
@@ -67,7 +67,7 @@ $(document).ready(function(){
 		if (page.password) payload.newPassword = $("#i_new_password").val();
 		$.ajax({
 			type: "POST",
-			url: "api/email_token",
+			url: "api/verify_email",
 			contentType: "application/json",
 			data: JSON.stringify(payload),
 		}).done(function(ret) {
@@ -76,7 +76,7 @@ $(document).ready(function(){
 			$("#et_form_box").hide();
 			$("#et_done_text").text(page.done);
 			// the address to sign in with, as the server knows it now
-			$("#et_login_link").attr("href", "auth?email1=" + encodeURIComponent(ret.data.email));
+			$("#et_login_link").attr("href", "auth?login_email=" + encodeURIComponent(ret.data.loginEmail));
 			$("#et_done").show();
 		}).fail(function(jqXHR) {
 			console.error(jqXHR);

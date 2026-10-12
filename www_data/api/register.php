@@ -77,8 +77,8 @@ $account = $registration["account"];
 $sent = false;
 if (!is_null($account) && !is_null($registration["token"])) {
 	$sent = $registration["created"]
-		? mail_send_verify_email($account["name"], $account["email1"], $registration["token"])
-		: mail_send_account_exists($account["name"], $account["email1"], $registration["token"]);
+		? mail_send_verify_email($account["name"], $account["login_email"], $registration["token"])
+		: mail_send_account_exists($account["name"], $account["login_email"], $registration["token"]);
 }
 
 http_data(202, ["sent" => $sent]);

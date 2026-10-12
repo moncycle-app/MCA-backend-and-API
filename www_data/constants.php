@@ -85,6 +85,11 @@ const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_BILLINGS . ", " . ACCOUNT_DEMO_ID_F
 // What user_account and auth_token can hold: the widths of their columns, and the birth years a person can give.
 const ACCOUNT_LIMIT_NAME_CHARS = 255;               // user_account.name varchar(255)
 const ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS = 255;   // user_account.register_comment varchar(255)
+// user_account.notification_emails: the addresses that receive the cycles, the reminders and the warnings with the login address, separated
+// by ";" (the form a client sends and reads, and the form that is stored: lower case, no space, no duplicate).
+const ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR = ";";
+const ACCOUNT_NOTIFICATION_EMAILS_MAX = 5;                 // how many
+const ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS = 1024;      // user_account.notification_emails varchar(1024)
 const ACCOUNT_BIRTH_YEAR_MAX_AGE = 100;             // this year, or up to this many years back (user_account.age is a smallint)
 
 // The methods that change nothing: all a read-only token may use (api_start()).
@@ -126,19 +131,19 @@ const AUTH_TOKEN_IP_PREFIX_V6 = 48;
 const EMAIL_TOKEN_BYTES = 32;
 const EMAIL_TOKEN_LIMIT_CHARS = 64;                 // a token a client sends that is longer than this is no token and is not looked up (the real one has 43)
 // user_account.email_token_purpose: what the link does once it is used.
-const EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL = 1;         // proves the address of a new account: the account becomes usable
+const EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION = 1;     // proves the address of a new account: the account becomes usable
 const EMAIL_TOKEN_PURPOSE_RESET_PASSWORD = 2;       // lets whoever reads the mail choose a new password (and proves the address too)
 const EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL = 3;         // proves the new primary address, which then replaces the old one
-// purpose => the string the JSON API (POST /api/email_token) and the link of the mail speak.
+// purpose => the string the JSON API (POST /api/verify_email) and the link of the mail speak.
 const EMAIL_TOKEN_PURPOSE_NAMES = [
-	EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL => "verifyEmail",
+	EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION => "accountCreation",
 	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => "resetPassword",
 	EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL => "changeEmail",
 ];
 // purpose => how long the link lives, in minutes. A reset is short because it hands over the account; a verification is long because
 // the person may read their mail days later.
 const EMAIL_TOKEN_LIFETIME_MINUTES = [
-	EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL => 3 * 24 * 60,
+	EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION => 3 * 24 * 60,
 	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => 60,
 	EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL => 24 * 60,
 ];

@@ -173,18 +173,23 @@ const moncycle_app_text = {
 	tokens_prefix_title : "Début du jeton: il permet de distinguer les connexions d'une même application.",
 	tokens_none : "Aucune connexion.",
 
-	/* --- change of the primary address: what the server refuses (its own words are English) --- */
-	email_change_errors : {
+	/* --- POST /api/account: what the server refuses when the password is asked again (its own words are English) --- */
+	account_errors : {
 		invalid_password : "mot de passe incorrect",
+		missing_password : "le mot de passe est nécessaire",
 		totp_required : "un code d\u2019authentification multifacteur est nécessaire",
 		totp_invalid : "le code d\u2019authentification multifacteur est incorrect",
 		invalid_email : "l\u2019adresse e-mail n\u2019est pas valide",
-		email_unchanged : "c\u2019est déjà l\u2019adresse de votre compte",
-		missing_fields : "l\u2019adresse et le mot de passe sont nécessaires",
-		missing_password : "le mot de passe est nécessaire",
+		email_unchanged : "c\u2019est déjà l\u2019adresse de connexion de votre compte",
+		invalid_notification_emails : "les adresses doivent être valides, séparées par « ; », 5 au plus",
+		password_too_short : "le nouveau mot de passe est trop court (10 caractères au moins)",
+		password_too_long : "le nouveau mot de passe est trop long (72 octets au plus)",
+		password_invalid : "le nouveau mot de passe contient un caractère interdit",
+		password_unchanged : "le nouveau mot de passe est identique à l\u2019ancien",
 		demo_account : "indisponible sur un compte de démo",
 		read_only_token : "cette connexion est en lecture seule",
 	},
+
 	tokens_confirm_revoke_all : "Déconnecter tous vos autres appareils et applications ?\n\nCet appareil reste connecté. Les autres devront se reconnecter.",
 	tokens_revoked : function (n) {
 		return ` ✅\u00A0${moncycle_app_text.count(n, "connexion supprimée", "connexions supprimées")}`;
@@ -299,13 +304,13 @@ $(document).ready(function(){
 		if(moncycle_app_usr.sponsor) $("#merci_don").show();
 		if (moncycle_store.is_demo(moncycle_app_usr.userId)) $("#warning_demo").show();
 		if(moncycle_app_usr.method == "fertilityCare") $("#description_section").hide();
-		$("#tech_info_id").text(moncycle_app_usr.email);
-		$("#i_email1").val(moncycle_app_usr.email);
-		$("#i_token_new_email").val(moncycle_app_usr.email);
+		$("#tech_info_id").text(moncycle_app_usr.loginEmail);
+		$("#i_login_email").val(moncycle_app_usr.loginEmail);
+		$("#i_token_new_email").val(moncycle_app_usr.loginEmail);
 		if (moncycle_app_usr.totpState == "active") $("#token_new_code_wrapper").show();
 		if (moncycle_store.is_demo(moncycle_app_usr.userId)) $("#tokens_section").hide();
 		else tokens_load();
-		$("#i_email2").val(moncycle_app_usr.secondaryEmail);
+		$("#i_notification_emails").val(moncycle_app_usr.notificationEmails);
 		let nfp_method = moncycle_app_nfp_method_from_api(moncycle_app_usr.method, moncycle_app_usr.temperatureTracking);
 		$(`#m_${nfp_method}`).attr("checked", "");
 		if (moncycle_app_usr.research) $("#i_research").prop('checked', true);
@@ -599,28 +604,35 @@ $(document).ready(function(){
 	});
 
 
-	// THE SECOND ADDRESS: it receives every cycle by mail, so the password confirms a change
-	$("#but_email2_save").on("click", function() {
-		let net_stat = $("#net_stat_email2");
-		net_stat.removeClass("vert rouge").text('⏳');
-		$.ajax({
-			type: "POST",
-			url: "../api/account",
-			contentType: "application/json",
-			data: JSON.stringify({secondaryEmail: $("#i_email2").val(), password: $("#i_email2_password").val()}),
-		}).done(function() {
-			$("#i_email2_password").val('');
-			net_stat.addClass('vert').text(' ✅ enregistré');
-			moncycle_app_sync_later();
-		}).fail(function(jqXHR) {
+	// Everything about the account is changed by POST /api/account: the settings as they are typed, and what hands the account (or its cycles)
+	// over -- the addresses and the password -- with the current password sent again. A form carries the data, the script sends the form.
+	const account_update = function (payload, done, fail) {
+		$.ajax({type: "POST", url: "../api/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
 			console.error(jqXHR);
-			net_stat.addClass('rouge').text(" ❌ " + moncycle_app_error_message(jqXHR));
+			fail(jqXHR);
 		});
-	});
-	$("#i_email2_password").on("keydown", function(event) {
-		if (event.key !== "Enter") return;
+	};
+	// what the server refuses, in French (its own words are English); the server's message when the code is not known here
+	const account_error = function (jqXHR) {
+		const code = ((jqXHR.responseJSON || {}).error || {}).code;
+		return moncycle_app_text.account_errors[code] || moncycle_app_error_message(jqXHR).replace(/\.$/, "");
+	};
+
+	// THE ADDRESSES THAT RECEIVE THE CYCLES: it is the cycles of the owner, so the password confirms a change
+	$("#form_notification_emails").on("submit", function(event) {
 		event.preventDefault();
-		$("#but_email2_save").click();
+		$("#notification_emails_ok").text('');
+		$("#notification_emails_msg").text('');
+		$("#but_notification_emails").prop("disabled", true);
+		account_update({notificationEmails: $("#i_notification_emails").val(), password: $("#i_notification_emails_password").val()}, function () {
+			$("#but_notification_emails").prop("disabled", false);
+			$("#i_notification_emails_password").val('');
+			$("#notification_emails_ok").text('✅ enregistré');
+			moncycle_app_sync_later();
+		}, function (jqXHR) {
+			$("#but_notification_emails").prop("disabled", false);
+			moncycle_app_show_error($("#notification_emails_msg"), "erreur:", account_error(jqXHR), "❌ ", ".");
+		});
 	});
 
 	// CHANGEMENT DU MOT DE PASSE
@@ -633,42 +645,38 @@ $(document).ready(function(){
 			return;
 		}
 		$("#but_mdp_change").prop("disabled", true);
-		var payload = {oldPassword: $("#i_old_pw").val(), newPassword: $("#i_pw1").val(), logoutOtherDevices: $("#i_logout_other_devices").is(":checked")};
-		$.ajax({type: "POST", url: "../api/password_change", contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
+		account_update({password: $("#i_old_pw").val(), newPassword: $("#i_pw1").val(), logoutOtherDevices: $("#i_logout_other_devices").is(":checked")}, function () {
 			$("#but_mdp_change").prop("disabled", false);
 			$("#form_mdp_change input[type=password]").val('');
 			$("#i_logout_other_devices").prop("checked", false);
 			$("#mdp_change_ok").text('✅ enregistré');
-		}).fail(function(jqXHR){
-			console.error(jqXHR);
+		}, function (jqXHR) {
 			$("#but_mdp_change").prop("disabled", false);
-			moncycle_app_show_error($("#mdp_ret_msg"), "erreur:", moncycle_app_error_message(jqXHR), "❌ ", ".");
+			moncycle_app_show_error($("#mdp_ret_msg"), "erreur:", account_error(jqXHR), "❌ ", ".");
 		});
 	});
 
-	// CHANGEMENT DE L'ADRESSE PRINCIPALE: the link goes to the new address, the change happens when it is used (email_token.html)
-	$("#form_email_change").on("submit", function(event) {
+	// CHANGEMENT DE L'ADRESSE DE CONNEXION: the link goes to the new address, the change happens when it is used (verify_email.html)
+	$("#form_login_email").on("submit", function(event) {
 		event.preventDefault();
-		$("#email_change_ok").text('');
-		$("#email_change_msg").text('');
-		$("#but_email_change").prop("disabled", true);
-		var payload = {newEmail: $("#i_email_change_new").val(), password: $("#i_email_change_password").val()};
-		if ($("#i_email_change_code").val()) payload.code = parseInt($("#i_email_change_code").val());
-		$.ajax({type: "POST", url: "../api/email_change", contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
-			$("#but_email_change").prop("disabled", false);
-			$("#form_email_change input[type=password], #form_email_change input[type=number]").val('');
-			if (ret.data.sent) {
-				$("#email_change_ok").text('✅ lien envoyé');
-				$("#form_email_change input[type=email]").val('');
+		$("#login_email_ok").text('');
+		$("#login_email_msg").text('');
+		$("#but_login_email").prop("disabled", true);
+		var payload = {loginEmail: $("#i_login_email_new").val(), password: $("#i_login_email_password").val()};
+		if ($("#i_login_email_code").val()) payload.code = parseInt($("#i_login_email_code").val());
+		account_update(payload, function (ret) {
+			$("#but_login_email").prop("disabled", false);
+			$("#form_login_email input[type=password], #form_login_email input[type=number]").val('');
+			if (ret.data.loginEmailLinkSent) {
+				$("#login_email_ok").text('✅ lien envoyé');
+				$("#i_login_email_new").val('');
 			}
 			else {
-				$("#email_change_msg").text("❌ le mail n'a pas pu être envoyé, réessayez plus tard.");
+				$("#login_email_msg").text("❌ le mail n'a pas pu être envoyé, réessayez plus tard.");
 			}
-		}).fail(function(jqXHR){
-			console.error(jqXHR);
-			$("#but_email_change").prop("disabled", false);
-			const code = ((jqXHR.responseJSON || {}).error || {}).code;
-			moncycle_app_show_error($("#email_change_msg"), "erreur:", moncycle_app_text.email_change_errors[code] || moncycle_app_error_message(jqXHR).replace(/\.$/, ""), "❌ ", ".");
+		}, function (jqXHR) {
+			$("#but_login_email").prop("disabled", false);
+			moncycle_app_show_error($("#login_email_msg"), "erreur:", account_error(jqXHR), "❌ ", ".");
 		});
 	});
 

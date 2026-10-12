@@ -13,7 +13,7 @@ require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/log.php";
 
 // Sends one mail from the app. $kind says which of the thirteen it is (verify_email, account_exists, reset_password,
-// password_changed, confirm_email, email_change_requested, email_change_taken, email_changed, secondary_email, new_login, cycle,
+// password_changed, confirm_email, email_change_requested, email_change_taken, email_changed, notification_emails, new_login, cycle,
 // reminder, deletion_warning); it is all the log keeps of it, with how many addresses and files: never an address, a subject or a
 // body (several of them hold a link that opens an account). $to lists the addresses
 // (empty ones are skipped), $attachments is [file name => content]. True when the SMTP server took
@@ -71,6 +71,13 @@ function mail_html(string $greeting, string $content, string $why): string {
 	HTML;
 }
 
+// Who gets what the account's owner is meant to read (the cycles, the reminder, the warning before an erasure): the login address and every
+// address of the notification list, once each.
+function mail_recipients(array $account): array {
+	$list = explode(ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR, $account["notification_emails"] ?? "");
+	return array_values(array_unique(array_filter(array_merge([$account["login_email"]], $list))));
+}
+
 // the usual "why you get this": $because completes "Vous le recevez car ..."
 function mail_why(string $because): string {
 	return "Vous le recevez car $because. La réception d'emails est nécessaire au bon fonctionnement de l'application. Si vous ne souhaitez plus recevoir d'emails de notre part, merci de ne plus utiliser MONCYCLE.APP.";
@@ -78,13 +85,13 @@ function mail_why(string $because): string {
 
 // a link to a page of the app with the address filled in
 function mail_link(string $email, string $page, string $text): string {
-	return "<a style='color: #1e824c' href='" . rtrim(APP_URL, "/") . "/" . $page . "?email1=" . urlencode($email) . "'>" . $text . "</a>";
+	return "<a style='color: #1e824c' href='" . rtrim(APP_URL, "/") . "/" . $page . "?login_email=" . urlencode($email) . "'>" . $text . "</a>";
 }
 
 // The address of a link that uses the slot of an account (lib/email_token.php): a page of the app (APP_URL), the purpose and the token in
 // the fragment, which no server, log or Referer ever sees.
 function mail_token_url(int $purpose, string $token): string {
-	return rtrim(APP_URL, "/") . "/email_token#purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
+	return rtrim(APP_URL, "/") . "/verify_email#purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
 }
 
 // The link in full, as its own text: shown that way it can be copied whole from any mail reader, whatever it does to a link with another
@@ -106,7 +113,7 @@ function mail_token_lifetime(int $purpose): string {
 // erases it after ACCOUNT_UNVERIFIED_DELETE_DAYS days.
 function mail_send_verify_email(string $name, string $email, string $token): bool {
 	$name = htmlspecialchars($name);
-	$purpose = EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL;
+	$purpose = EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION;
 	$link = mail_token_link($purpose, $token);
 	$days = ACCOUNT_UNVERIFIED_DELETE_DAYS;
 	$content = <<<HTML
@@ -244,20 +251,24 @@ function mail_send_email_changed(string $email, string $new_email, string $name)
 		'L\'adresse de connexion de votre compte moncycle.app est maintenant ' . $new_email . '.');
 }
 
-// The notice to the account's own address that its secondary address changed ("" = removed): the secondary
-// one receives every cycle, so whoever holds the account must be able to see it was changed.
-function mail_send_secondary_email_changed(string $email, string $new_email2): bool {
-	$new = htmlspecialchars($new_email2);
-	$what = $new_email2 === "" ? "La deuxième adresse de votre compte a été <b>supprimée</b>." : "La deuxième adresse de votre compte, qui reçoit vos cycles par e-mail, est maintenant <b>{$new}</b>.";
+// The notice to the account's login address that the list of addresses that receive its cycles changed ("" = emptied). Those addresses
+// receive every cycle, so whoever holds the account must be able to see it was changed. $new_list is the stored form: ";" between two.
+function mail_send_notification_emails_changed(string $email, string $new_list): bool {
+	$shown = htmlspecialchars(str_replace(ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR, ", ", $new_list));
+	$what = $new_list === ""
+		? "La liste des adresses de votre compte qui reçoivent vos cycles par e-mail a été <b>vidée</b>."
+		: "Les adresses de votre compte qui reçoivent vos cycles par e-mail, avec votre adresse de connexion, sont maintenant: <b>{$shown}</b>.";
 	$login = mail_link($email, "auth", "connectez-vous");
 	$content = <<<HTML
 	{$what}<br />
 	Si ce n'est pas vous, {$login} et changez votre mot de passe depuis la page "👨‍💻 Mon compte".<br />
 	<br />
 	HTML;
-	return mail_send('secondary_email', [$email], 'La deuxième adresse de votre compte a changé',
+	return mail_send('notification_emails', [$email], 'Les adresses qui reçoivent vos cycles ont changé',
 		mail_html("Bonjour,", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
-		$new_email2 === "" ? 'La deuxième adresse de votre compte a été supprimée.' : 'La deuxième adresse de votre compte est maintenant ' . $new_email2 . '.');
+		$new_list === ""
+			? 'La liste des adresses de votre compte qui reçoivent vos cycles a été vidée.'
+			: 'Les adresses de votre compte qui reçoivent vos cycles, avec votre adresse de connexion, sont maintenant: ' . str_replace(ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR, ', ', $new_list) . '.');
 }
 
 // The notice to the account's own address that a token was made: every login makes one, a browser's session or a custom token
@@ -267,7 +278,7 @@ function mail_send_secondary_email_changed(string $email, string $new_email2): b
 // account page shows it), so the owner can tell which line of the list of connections this mail is about. $expires_at is the
 // "Y-m-d H:i:s" UTC the token dies on, null when the 40 days unused / 1 year rule applies.
 function mail_send_new_login(array $account, string $name, string $prefix, string $scope, ?string $user_agent, ?string $expires_at): bool {
-	$email = $account["email1"];
+	$email = $account["login_email"];
 	$account_name = htmlspecialchars($account["name"]);
 	$token_name = htmlspecialchars($name);
 	$token_prefix = htmlspecialchars($prefix);
@@ -418,14 +429,14 @@ function mail_cycle_text(string $name, string $first_day, string $last_day, int 
 // The export of a finished cycle (a row of db_select_cycles_finished()), with $files attached:
 // [file name => content], the PDF, the CSV and the NFP file.
 function mail_send_cycle(array $account, string $first_day, string $last_day, int $nb_days, array $files): bool {
-	return mail_send('cycle', [$account["email1"], $account["email2"]], "Votre cycle du $first_day au $last_day ($nb_days jours)",
+	return mail_send('cycle', mail_recipients($account), "Votre cycle du $first_day au $last_day ($nb_days jours)",
 		mail_cycle_html($account["name"], $first_day, $last_day, $nb_days),
 		mail_cycle_text($account["name"], $first_day, $last_day, $nb_days), $files);
 }
 
 function mail_send_reminder(array $account): bool {
 	$name = htmlspecialchars($account["name"]);
-	$email = $account["email1"];
+	$email = $account["login_email"];
 	$reset = mail_link($email, "register", "Réinitialisez votre mot de passe");
 	$login = mail_link($email, "auth", "C'est par ici");
 	$content = <<<HTML
@@ -441,14 +452,14 @@ function mail_send_reminder(array $account): bool {
 	</ol>
 	HTML;
 	$why = "Vous le recevez car vous possédez un compte sur MONCYCLE.APP. La réception d'emails est nécessaire au bon fonctionnement de l'application. Si vous ne souhaitez plus recevoir d'emails de notre part, ignorez ce mail, vous n'en recevrez plus d'autre.";
-	return mail_send('reminder', [$email, $account["email2"]], "Comment allez-vous?",
+	return mail_send('reminder', mail_recipients($account), "Comment allez-vous?",
 		mail_html("Bonjour {$name},", $content, $why),
 		"Cela fait longtemps que l'on ne vous a pas vu sur moncycle.app, tout va bien?");
 }
 
 function mail_send_deletion_warning(array $account, int $days): bool {
 	$name = htmlspecialchars($account["name"]);
-	$email = $account["email1"];
+	$email = $account["login_email"];
 	$login = mail_link($email, "auth", "connectez-vous");
 	$reset = mail_link($email, "register", "Réinitialisez-le");
 	$content = <<<HTML
@@ -465,7 +476,7 @@ function mail_send_deletion_warning(array $account, int $days): bool {
 	<br />
 	HTML;
 	$why = "Vous le recevez car vous possédez un compte inactif sur MONCYCLE.APP; ce mail est nécessaire pour vous informer, conformément au RGPD, de la suppression prochaine de vos données en l'absence d'activité.";
-	return mail_send('deletion_warning', [$email, $account["email2"]], "Votre compte moncycle.app va être supprimé dans $days jours",
+	return mail_send('deletion_warning', mail_recipients($account), "Votre compte moncycle.app va être supprimé dans $days jours",
 		mail_html("Bonjour {$name},", $content, $why),
 		"Faute d'activité, votre compte moncycle.app sera supprimé dans $days jours. Connectez-vous pour le conserver.");
 }

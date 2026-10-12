@@ -165,7 +165,7 @@ info:
 
     **No password is ever sent by email.** The user chooses it here (10 to 72 bytes). The account cannot
     be signed in to until its address is proved: the mail holds a link (a page of the app, with a token
-    in its fragment) that the page posts to `POST /email_token` with `purpose: "verifyEmail"`. Until
+    in its fragment) that the page posts to `POST /verify_email` with `purpose: "accountCreation"`. Until
     then `POST /token` answers `403 email_not_verified`.
 
     Then log in and keep the token:
@@ -415,7 +415,7 @@ tags:
   - name: account
     description: |-
       The account lifecycle: register, verify the address, captcha, log in, log out, change or
-      recover the password, change the primary address, two-factor authentication, change
+      recover the password, change the login address, two-factor authentication, change
       settings, delete the account.
 
       Read **section 3 and 4** of the introduction first. The order of the calls matters: a
@@ -557,8 +557,8 @@ paths:
       summary: Create an account
       description: |-
         Creates an account with the password the caller gives, and **emails a link that proves the
-        address**. The account cannot be signed in to until the link is used (`POST /email_token`,
-        purpose `verifyEmail`): `POST /token` answers `403 email_not_verified` meanwhile. An account
+        address**. The account cannot be signed in to until the link is used (`POST /verify_email`,
+        purpose `accountCreation`): `POST /token` answers `403 email_not_verified` meanwhile. An account
         whose address is not proved within 7 days is erased. No password is ever sent by email.
 
         ### The answer does not say whether the address is new
@@ -930,7 +930,7 @@ paths:
             `captcha_required` — send `captcha` (the answer) and `captchaToken` (from `POST /captcha`, purpose `login`, this address). Also the answer to a wrong or used-up one: after each refused attempt, ask for a new token.
             `captcha_expired` — the `captchaToken` is more than 5 minutes old.
             `account_disabled` — the account was deactivated by an administrator, or it is one of the two public demo accounts and this instance has them turned off (`DEMO_ENABLED`).
-            `email_not_verified` — the password is right, but the address was never proved: the link mailed at sign-up has not been used (`POST /email_token`). Said only to someone who knows the password (a wrong one still answers `401 invalid_credentials`), counted as no failed attempt, and no token is made.
+            `email_not_verified` — the password is right, but the address was never proved: the link mailed at sign-up has not been used (`POST /verify_email`). Said only to someone who knows the password (a wrong one still answers `401 invalid_credentials`), counted as no failed attempt, and no token is made.
             `account_locked` — too many recent failures. Wait; it clears after 60 minutes with no new failure. With two-factor authentication on, it also refuses the right password and code.
             `cross_origin_refused` — a browser page of another origin sent this write (see section 3 of the introduction).
           content:
@@ -1009,7 +1009,7 @@ paths:
           or in the answer of `POST /token`). Another account's token, or one that does not exist, is a
           `404` `not_found` (a prefix is looked up in your own account only). Revoking your own `prefix` is a logout.
         - `{"all": true}` — revokes **every token but the one you are using**. This is what to do when a device is lost or a
-          token leaked; `POST /password_change` with `logoutOtherDevices` does the same with the password.
+          token leaked; `POST /account` with `newPassword` and `logoutOtherDevices` does the same with the password.
 
         A read-only token may revoke only itself. The demo accounts' tokens cannot be revoked by `prefix` or `all`
         (`403` `demo_account`): they belong to every visitor.
@@ -1068,99 +1068,13 @@ paths:
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
 
-  /password_change:
-    post:
-      tags: [account]
-      summary: Change the password
-      description: |-
-        Changes the password of the account you are logged in as. You must know the current
-        password, even though you are already authenticated.
-
-        The new password must be **10 characters at least and 72 bytes at most** and must be
-        different from the current one. A link to choose a password (`POST /recover_password`) that
-        is still waiting in the mailbox stops working once the password is changed here; a pending
-        change of address is left alone.
-
-        By default existing tokens are **not** revoked: the user stays logged in everywhere,
-        including on any device a third party might hold. Send `logoutOtherDevices: true` to
-        close every other session of the account in the same change. The session making the
-        request is never closed, and its token stays valid.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [oldPassword, newPassword]
-              properties:
-                oldPassword:
-                  type: string
-                  description: The password in use right now.
-                newPassword:
-                  type: string
-                  description: Minimum 10 characters. Must differ from the current one.
-                logoutOtherDevices:
-                  type: boolean
-                  default: false
-                  description: |-
-                    `true` closes every other session of the account (their tokens stop working,
-                    each of those devices has to log in again). The calling session stays open.
-                    The password change and the sign-out happen together or not at all.
-      responses:
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
-        "200":
-          description: Password changed.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      changed:
-                        type: boolean
-                        enum: [true]
-                      loggedOutDevices:
-                        type: integer
-                        description: Number of other sessions closed. Always `0` unless `logoutOtherDevices` was `true`.
-        "400":
-          description: |-
-            `missing_fields` — `oldPassword` or `newPassword` is absent or empty.
-            `invalid_parameter` — `oldPassword` or `newPassword` is not a string, or `logoutOtherDevices` is present but is not a JSON boolean.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "401":
-          description: |-
-            `unauthorized` — no valid token.
-            `invalid_password` — `oldPassword` is wrong.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "422":
-          description: |-
-            `password_too_short` — fewer than 10 characters.
-            `password_too_long` — more than 72 bytes (bcrypt reads no more).
-            `password_invalid` — the new password holds a null character (`\u0000`).
-            `password_unchanged` — the new password is the same as the current one.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-
   /recover_password:
     post:
       tags: [account]
       summary: Send a link to choose a new password
       description: |-
         Emails the owner a **link to choose a new password**. **The password is not touched until the
-        link is used** (`POST /email_token`, purpose `resetPassword`): asking for one locks nobody
+        link is used** (`POST /verify_email`, purpose `resetPassword`): asking for one locks nobody
         out, and the sessions that are open stay open.
 
         **This endpoint always answers `200` with `sent: true`**, whether the account exists or
@@ -1250,19 +1164,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /email_token:
+  /verify_email:
     post:
       tags: [account]
       summary: Use the link of a mail
       description: |-
         Uses the link that a mail carried: it **proves the address** of a new account
-        (`verifyEmail`), **sets a new password** (`resetPassword`) or **changes the primary
+        (`accountCreation`), **sets a new password** (`resetPassword`) or **changes the login
         address** (`changeEmail`). No token is needed: the person may open the mail on another
         device, and the link's token is the whole proof.
 
         ### The link
 
-        A mail's link is a page of the app: `APP_URL` + `email_token#purpose=<purpose>&t=<token>`.
+        A mail's link is a page of the app: `APP_URL` + `verify_email#purpose=<purpose>&t=<token>`.
         The purpose and the token are in the **fragment**, which no server, log or `Referer`
         ever sees, and a mail scanner that only fetches the link runs no script, so it uses
         nothing up. The page posts them here. A client that is not a web page does the same: read
@@ -1270,19 +1184,19 @@ paths:
 
         - The token is 32 random bytes; the server keeps its SHA-256 only.
         - **One slot per account:** a new link (a sign-up, a `POST /recover_password`, a
-          `POST /email_change`) replaces the one before it, whatever that one was for.
+          `POST /account` that changes `loginEmail`) replaces the one before it, whatever that one was for.
         - A link is **single use** and checked against its purpose: the link of one action cannot do
           another (`invalid_token`).
-        - It lives 3 days (`verifyEmail`), 1 hour (`resetPassword`) or 1 day (`changeEmail`), then
+        - It lives 3 days (`accountCreation`), 1 hour (`resetPassword`) or 1 day (`changeEmail`), then
           answers `token_expired`.
 
         ### What each purpose does
 
         | `purpose` | Does | Also |
         |---|---|---|
-        | `verifyEmail` | the address is proved: the account can be signed in to | |
+        | `accountCreation` | the address is proved: the account can be signed in to | |
         | `resetPassword` | sets `newPassword` | proves the address; the sessions that are open **stay open** and the TOTP is not touched; the owner is told by mail |
-        | `changeEmail` | the primary address becomes the one the link was made for | the old address is told by mail; the sessions stay open |
+        | `changeEmail` | the login address becomes the one the link was made for | the old address is told by mail; the sessions stay open |
 
         The password is checked **before** the link is touched: a refused password (`422`) does not
         use the link up.
@@ -1297,7 +1211,7 @@ paths:
               properties:
                 purpose:
                   type: string
-                  enum: [verifyEmail, resetPassword, changeEmail]
+                  enum: [accountCreation, resetPassword, changeEmail]
                   description: What the link is for, as the link says.
                 token:
                   type: string
@@ -1323,8 +1237,8 @@ paths:
                     properties:
                       purpose:
                         type: string
-                        enum: [verifyEmail, resetPassword, changeEmail]
-                      email:
+                        enum: [accountCreation, resetPassword, changeEmail]
+                      loginEmail:
                         type: string
                         description: The address to sign in with from now on.
                         example: marie@example.org
@@ -1350,91 +1264,6 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "409":
           description: "`email_taken` — (`changeEmail`) another account has the new address since the link was made. The account keeps its address."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-
-  /email_change:
-    post:
-      tags: [account]
-      summary: Ask to change the primary address
-      description: |-
-        Asks to change the address that signs in and that every recovery rests on. **Nothing changes
-        yet:** a link is mailed to the **new** address (it proves the owner has it) and the current
-        address is told. The address changes when the link is used (`POST /email_token`, purpose
-        `changeEmail`, valid 1 day); the sessions that are open stay open.
-
-        A session alone is not enough: the **password** confirms, and the **TOTP code** too when the
-        account has one. Like the other checks made with a session (`DELETE /totp`, `POST /account`),
-        a wrong password or code here is not counted against the account.
-
-        **The answer does not say whether the new address is free.** An address that another account
-        has gets a mail saying that someone asked to use it, no link, and the same `202`. The link
-        shares the account's single slot: this call replaces any link that was waiting.
-
-        Not available on the two public demo accounts (`403 demo_account`).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [newEmail, password]
-              properties:
-                newEmail:
-                  type: string
-                  format: email
-                  description: The new login address. Spaces around it are ignored and it is stored in lower case.
-                  example: marie.new@example.org
-                password:
-                  type: string
-                  description: The password in use right now.
-                code:
-                  type: string
-                  description: The TOTP code, when two-factor authentication is on.
-                  example: "123456"
-      responses:
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
-        "202":
-          description: Request accepted. This says nothing about whether the address is free.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      sent:
-                        type: boolean
-                        description: "`false` means the mail could not be sent."
-        "400":
-          description: |-
-            `missing_fields` — `newEmail` is absent, empty or not a string.
-            `invalid_email` — not a valid email address.
-            `missing_password` — `password` is absent, empty or not a string.
-            `email_unchanged` — this is already the account's address.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "401":
-          description: |-
-            `unauthorized` — no valid token.
-            `invalid_password` — the password is wrong.
-            `totp_required` — the account has two-factor authentication on and no `code` was sent.
-            `totp_invalid` — `code` is wrong or expired.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "403":
-          description: |-
-            `read_only_token` — the token is read-only.
-            `demo_account` — a public demo account.
-            `cross_origin_refused` — a browser page of another origin sent this write (see section 3 of the introduction).
           content:
             application/json:
               schema:
@@ -1631,35 +1460,56 @@ paths:
   /account:
     post:
       tags: [account]
-      summary: Update account settings
+      summary: Update the account (settings, login address, password)
       description: |-
-        Updates the settings of the logged-in account.
+        **Every setting of the logged-in account is changed here**: its name, method, preferences,
+        the addresses and the password.
 
         **Unlike `POST /day`, this is a partial update.** Only the fields present in the body
         are touched. Everything else keeps its value. Send a body with just the one setting you
         want to change.
 
-        The response lists what really changed in `fieldsUpdated`. Use it to confirm: a field
-        you sent but which does not appear there was **rejected or ignored**, and the call still
-        answered `200`. There is no validation error for a bad value here.
+        ### What needs the password again
 
-        Things that surprise people:
+        Three changes hand the account, or its cycles, to someone else, so a session alone is not
+        enough: send the **current password** as `password` in the same body.
+
+        | Field | What it does | Also needs |
+        |---|---|---|
+        | `newPassword` | sets the new password, at once (10 to 72 bytes, different from the current one) | `logoutOtherDevices: true` closes the other sessions |
+        | `notificationEmails` | the addresses that receive the finished cycles, the reminders and the warnings, with the login address. A list, `;` between two, 5 at most, `""` to empty it. Made at once; a notice goes to the login address | |
+        | `loginEmail` | **asks** to change the address that signs in. Nothing changes yet: a link goes to the **new** address and the change happens when it is used (`POST /verify_email`, purpose `changeEmail`, 1 day); the old address is told | the TOTP `code` when the account has one |
+
+        Without `password` the answer is `400` `missing_password`, with a wrong one `401`
+        `invalid_password`, and **nothing is changed**: everything is checked before anything is
+        written, so a refused request changes nothing at all. Sending the value the account
+        already has asks for no password (an unchanged `notificationEmails` is ignored; an
+        unchanged `loginEmail` is `400` `email_unchanged`). The sessions that are open stay open
+        when the login address changes. The two public demo accounts cannot change these three
+        (`403` `demo_account`).
+
+        A wrong password or code here is not counted against the account (like `DELETE /totp`).
+
+        ### The other settings
+
+        The response lists what really changed in `fieldsUpdated`. Use it to confirm: a setting
+        from the list below that you sent but which does not appear there was **rejected or
+        ignored**, and the call still answered `200`. There is no validation error for a bad
+        value of those (the three above, which hand something over, are validated: `400`).
 
         - `name` is ignored when it is not a string, is empty, or is longer than 255 characters.
-        - `secondaryEmail` is ignored when it is not a valid address. Send `""` to remove it. It
-          is stored in lower case. **Changing it takes the account password**, sent as `password`
-          in the same body: it receives every finished cycle by email, so a stolen session alone
-          cannot redirect them. Without `password` the answer is `400` `missing_password` and
-          with a wrong one `401` `invalid_password`, and nothing is changed. Sending the address
-          the account already has changes nothing and needs no password. Once changed, a notice
-          goes to the login address.
         - `birthYear` is ignored when it is not the current year or one of the 100 years before.
         - `method` and `temperatureTracking` are stored together as one value. If you send only
           one of the two, **the other falls back to its default** (`billings`, and `false`).
           Always send both together. Both appear in `fieldsUpdated` under the single
           name `method`.
-        - This endpoint cannot change the login email or the password. Use
-          `POST /password_change` for the password.
+
+        ### The response
+
+        `loggedOutDevices` is there when `newPassword` was sent, `loginEmailLinkSent` when
+        `loginEmail` was: `false` means the mail with the link could not be sent. The link also goes
+        out for an address that another account has, as a mail telling its owner, with the same
+        answer: nobody can tell who has an account.
       requestBody:
         required: true
         description: Every field is optional. An empty object `{}` is valid and changes nothing.
@@ -1673,14 +1523,35 @@ paths:
                   maxLength: 255
                   description: First name, or both first names when a couple shares the account. Ignored when empty or over 255 characters.
                   example: Marie
-                secondaryEmail:
-                  type: string
-                  description: A second address, to also receive charts by email. Send `""` to remove it. Changing it needs `password`.
-                  example: partner@example.org
                 password:
                   type: string
                   format: password
-                  description: The current account password. Required only to change `secondaryEmail`; ignored otherwise.
+                  description: The current account password. Required to change `newPassword`, `notificationEmails` or `loginEmail`; ignored otherwise.
+                newPassword:
+                  type: string
+                  format: password
+                  minLength: 10
+                  description: The new password. 10 characters at least, **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character, different from the current one. Needs `password`.
+                logoutOtherDevices:
+                  type: boolean
+                  default: false
+                  description: |-
+                    With `newPassword`: `true` closes every other session of the account (their tokens stop working,
+                    each of those devices has to log in again). The calling session stays open. The settings,
+                    the password change and the sign-out happen together or not at all.
+                loginEmail:
+                  type: string
+                  format: email
+                  description: The new login address. Spaces around it are ignored and it is stored in lower case. Needs `password` (and `code` with two-factor authentication). Takes effect when the link mailed to it is used.
+                  example: marie.new@example.org
+                code:
+                  type: string
+                  description: The TOTP code. Required with `loginEmail` when two-factor authentication is on; ignored otherwise.
+                  example: "123456"
+                notificationEmails:
+                  type: string
+                  description: The addresses that also receive the cycles by email, separated by `;` (5 at most, each valid, 1024 characters in all; lower case, duplicates and empty items dropped). Send `""` to empty the list. Needs `password`.
+                  example: partner@example.org;mother@example.org
                 method:
                   type: string
                   enum: [billings, fertilityCare]
@@ -1707,7 +1578,7 @@ paths:
                   type: boolean
                   description: |-
                     Send the export of each finished cycle by email (PDF, CSV and NFP file, to the login
-                    address and to `secondaryEmail`). `true` by default for every account; `false` stops
+                    address and to `notificationEmails`). `true` by default for every account; `false` stops
                     these emails.
                 lastWriteClientUtc:
                   type: string
@@ -1718,7 +1589,14 @@ paths:
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
         "403":
-          $ref: '#/components/responses/CrossOriginRefused'
+          description: |-
+            `read_only_token` — the token is read-only.
+            `demo_account` — `newPassword`, `notificationEmails` or `loginEmail` on one of the two public demo accounts.
+            `cross_origin_refused` — a browser page of another origin sent this write (see section 3 of the introduction).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         "200":
           description: |-
             Request accepted. Read `fieldsUpdated` to see what really changed — it can be empty.
@@ -1735,11 +1613,17 @@ paths:
                         description: The account name after the update.
                       fieldsUpdated:
                         type: array
-                        description: Names of the settings that were really changed. Empty when nothing was.
+                        description: Names of the settings that were really changed (`password` when `newPassword` was set), empty when nothing was. `loginEmail` is never in it, because it changes when the link is used.
                         items:
                           type: string
-                          enum: [name, secondaryEmail, method, birthYear, timelineAscending, research, sponsor, autoMailExport]
+                          enum: [name, notificationEmails, method, birthYear, timelineAscending, research, sponsor, autoMailExport, password]
                         example: [method]
+                      loggedOutDevices:
+                        type: integer
+                        description: Number of other sessions closed. Only when `newPassword` was sent; `0` unless `logoutOtherDevices` was `true`.
+                      loginEmailLinkSent:
+                        type: boolean
+                        description: Only when `loginEmail` was sent. `false` means the mail with the link could not be sent.
                       lastWriteClientUtc:
                         type: string
                         format: date-time
@@ -1747,7 +1631,11 @@ paths:
         "400":
           description: |-
             `invalid_json` — the body is not a JSON object.
-            `missing_password` — `secondaryEmail` would change and `password` is absent, empty or not a string.
+            `missing_password` — `newPassword`, `notificationEmails` or `loginEmail` would change and `password` is absent, empty or not a string.
+            `invalid_notification_emails` — `notificationEmails` is not a string of at most 5 valid addresses separated by `;`.
+            `invalid_email` — `loginEmail` is not a valid address.
+            `email_unchanged` — `loginEmail` is already the login address.
+            `invalid_parameter` — `newPassword` is not a non-empty string, or `logoutOtherDevices` is present but is not a JSON boolean.
           content:
             application/json:
               schema:
@@ -1755,7 +1643,19 @@ paths:
         "401":
           description: |-
             `unauthorized` — no valid token.
-            `invalid_password` — `secondaryEmail` would change and the password is wrong. Nothing was changed.
+            `invalid_password` — `password` is wrong. Nothing was changed.
+            `totp_required` — `loginEmail` would change, the account has two-factor authentication on, and no `code` was sent.
+            `totp_invalid` — `code` is wrong or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "422":
+          description: |-
+            `password_too_short` — `newPassword` has fewer than 10 characters.
+            `password_too_long` — more than 72 bytes.
+            `password_invalid` — it holds a null character (`\u0000`).
+            `password_unchanged` — it is the same as the current password.
           content:
             application/json:
               schema:
@@ -3173,14 +3073,15 @@ components:
         userId:
           type: integer
           example: 42
-        email:
+        loginEmail:
           type: string
           format: email
           description: The login address.
-        secondaryEmail:
+        notificationEmails:
           type: string
           nullable: true
-          description: An optional second address, used to also receive charts by email.
+          description: The addresses that also receive the cycles, the reminders and the warnings by email, separated by `;`. Empty or `null` when there is none.
+          example: partner@example.org;mother@example.org
         method:
           type: string
           enum: [billings, fertilityCare]

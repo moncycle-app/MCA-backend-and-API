@@ -5,8 +5,8 @@ CREATE TABLE `user_account` (
   `name` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `nfp_method` smallint(5) unsigned NOT NULL DEFAULT 1,
   `age` smallint(5) unsigned NOT NULL,
-  `email1` varchar(255) COLLATE utf8mb4_bin NOT NULL,
-  `email2` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+  `login_email` varchar(255) COLLATE utf8mb4_bin NOT NULL,
+  `notification_emails` varchar(1024) COLLATE utf8mb4_bin DEFAULT NULL,
   `password` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `language` varchar(2) COLLATE utf8mb4_bin NOT NULL,
   `totp_state` tinyint(1) unsigned DEFAULT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE `user_account` (
   `email_token_expires_at` timestamp NULL DEFAULT NULL,
   `email_token_new_email` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
   PRIMARY KEY (`no_user_account`),
-  UNIQUE KEY `email1` (`email1`),
+  UNIQUE KEY `login_email` (`login_email`),
   UNIQUE KEY `email_token_hash` (`email_token_hash`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 

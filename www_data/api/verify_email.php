@@ -13,7 +13,7 @@ require_once "../lib/email_token.php";
 
 // The link of a mail, used: it proves an address, or sets a new password, or changes the primary address. It needs no session (the
 // person may open the mail on another device), and the token is the whole proof. The page of the link posts the token it finds in its
-// fragment (js/email_token.js).
+// fragment (js/verify_email.js).
 [$db] = api_start(false);
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {

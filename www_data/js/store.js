@@ -28,7 +28,7 @@
 const moncycle_store = {
 
 	// Bump it when what is kept in localStorage changes shape: the copy of the versions before is dropped.
-	schema : 2,
+	schema : 3,
 	// The public demo accounts: ACCOUNT_DEMO_IDS of constants.php, change both. Whoever is on one is no one who has an
 	// account yet: the sign-up and the sign-in pages do not send them back to the app.
 	demo_user_ids : [2, 3],
@@ -157,7 +157,7 @@ const moncycle_store = {
 		window.location.replace("/auth");
 	},
 	// 401 "unauthorized" is a session that is over. Another 401 is an answer of an endpoint to a
-	// wrong password or code (POST /api/password_change, DELETE /api/account): the session is fine.
+	// wrong password or code (POST /api/account with a password, DELETE /api/account): the session is fine.
 	is_unauthorized : function (jqXHR) {
 		if (jqXHR.status != 401) return false;
 		let code = ((jqXHR.responseJSON || {}).error || {}).code;

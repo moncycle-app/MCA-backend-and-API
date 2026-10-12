@@ -51,8 +51,8 @@
 				<!-- what the server is told about this sign-in: the name of the session (js/auth.js writes the domain in it) and that the browser keeps it in a cookie -->
 				<input type="hidden" name="name" id="i_token_name" value="WEB-APP" />
 				<input type="hidden" name="cookie" id="i_token_cookie" value="true" />
-			<label for="i_email1">E-mail:</label><br />
-			<input name="email1" id="i_email1" type="email" required placeholder="adresse mail de connexion"  value="" /><br />
+			<label for="i_login_email">E-mail:</label><br />
+			<input name="login_email" id="i_login_email" type="email" required placeholder="adresse mail de connexion"  value="" /><br />
 			<br />
 			<label for="i_password">Mot de passe:</label><br />
 			<input name="password" id="i_password" type="password" required placeholder="mot de passe moncycle.app"  value="" /><br />
@@ -76,8 +76,8 @@
 			<h2>Mot de passe perdu</h2>
 			<span id="password_reseted_msg" class="vert"></span>
 			<form method="post" action="api/recover_password" id="reset_form"><br />
-				<label for="r_email1">E-mail:</label><br />
-				<input name="email1" id="r_email1" type="email" required placeholder="adresse mail de connexion"  value="" /><br />
+				<label for="r_login_email">E-mail:</label><br />
+				<input name="login_email" id="r_login_email" type="email" required placeholder="adresse mail de connexion"  value="" /><br />
 				<br />
 				<label for="rc_captcha">Captcha:</label><br />
 				<input name="captcha" id="rc_captcha" type="text" maxlength="6" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." /><br />

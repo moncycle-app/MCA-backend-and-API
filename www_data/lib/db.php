@@ -148,21 +148,21 @@ function db_select_user_account_for_update($db, $no_user_account): bool {
 }
 
 function db_select_user_account_by_email($db, $email): ?array {
-	return db_row($db, "SELECT * FROM user_account WHERE email1 = :email1", ["email1" => $email]);
+	return db_row($db, "SELECT * FROM user_account WHERE login_email = :login_email", ["login_email" => $email]);
 }
 
 function db_select_user_account_exists($db, $email): bool {
-	return boolval(db_value($db, "SELECT COUNT(no_user_account) > 0 FROM user_account WHERE email1 = :email1", ["email1" => $email]));
+	return boolval(db_value($db, "SELECT COUNT(no_user_account) > 0 FROM user_account WHERE login_email = :login_email", ["login_email" => $email]));
 }
 
-// The new id, or null when the email already has an account: the unique key on email1 is what
+// The new id, or null when the email already has an account: the unique key on login_email is what
 // decides, so of two registrations racing for one address only one gets an id.
 function db_insert_user_account($db, $name, $nfp_method, $age, $email, $password_hash, $register_comment, $research): ?string {
 	try {
 		return db_insert($db,
-			"INSERT INTO user_account (name, nfp_method, age, email1, password, language, register_comment, research)
-			VALUES (:name, :nfp_method, :age, :email1, :password, :language, :register_comment, :research)",
-			["name" => $name, "nfp_method" => $nfp_method, "age" => $age, "email1" => $email, "password" => $password_hash, "language" => ACCOUNT_DEFAULT_LANGUAGE, "register_comment" => $register_comment, "research" => $research]
+			"INSERT INTO user_account (name, nfp_method, age, login_email, password, language, register_comment, research)
+			VALUES (:name, :nfp_method, :age, :login_email, :password, :language, :register_comment, :research)",
+			["name" => $name, "nfp_method" => $nfp_method, "age" => $age, "login_email" => $email, "password" => $password_hash, "language" => ACCOUNT_DEFAULT_LANGUAGE, "register_comment" => $register_comment, "research" => $research]
 		);
 	}
 	catch (\PDOException $error) {
@@ -205,17 +205,17 @@ function db_update_user_account_email_token_clear($db, $no_user_account, ?int $p
 // purpose, and reads the row again under the account's lock before it uses it.
 function db_select_user_account_by_email_token($db, string $token_hash): ?array {
 	return db_row($db,
-		"SELECT u.no_user_account, u.name, u.email1, u.email_verified_at, u.email_token_purpose, u.email_token_new_email,
+		"SELECT u.no_user_account, u.name, u.login_email, u.email_verified_at, u.email_token_purpose, u.email_token_new_email,
 		(u.email_token_expires_at <= NOW()) AS email_token_expired
 		FROM user_account AS u WHERE u.email_token_hash = :hash",
 		["hash" => $token_hash]
 	);
 }
 
-// Changes the primary address. False when another account has it: the unique key on email1 decides.
-function db_update_user_account_email1($db, $no_user_account, string $email): bool {
+// Changes the primary address. False when another account has it: the unique key on login_email decides.
+function db_update_user_account_login_email($db, $no_user_account, string $email): bool {
 	try {
-		db_exec($db, "UPDATE user_account SET email1 = :email1 WHERE no_user_account = :no_user_account", ["email1" => $email, "no_user_account" => $no_user_account]);
+		db_exec($db, "UPDATE user_account SET login_email = :login_email WHERE no_user_account = :no_user_account", ["login_email" => $email, "no_user_account" => $no_user_account]);
 		return true;
 	}
 	catch (\PDOException $error) {
@@ -227,7 +227,7 @@ function db_update_user_account_email1($db, $no_user_account, string $email): bo
 // The accounts whose address was never proved and that were made more than $days ago.
 function db_select_user_account_unverified_old($db, int $days): array {
 	return db_rows($db,
-		"SELECT u.no_user_account, u.email1 FROM user_account AS u
+		"SELECT u.no_user_account, u.login_email FROM user_account AS u
 		WHERE u.email_verified_at IS NULL AND u.inscription_date < NOW() - INTERVAL :days DAY
 		AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
 		ORDER BY u.no_user_account",
@@ -235,10 +235,10 @@ function db_select_user_account_unverified_old($db, int $days): array {
 	);
 }
 
-// $fields: name, email2, nfp_method, age, sponsor, timeline_asc, research, auto_mail_export (see account_apply_json())
+// $fields: name, notification_emails, nfp_method, age, sponsor, timeline_asc, research, auto_mail_export (see account_apply_json())
 function db_update_user_account_settings($db, $no_user_account, array $fields, $last_write_client_UTC) {
 	return db_exec($db,
-		"UPDATE user_account SET `name` = :name, email2 = :email2, nfp_method = :nfp_method, age = :age, sponsor = :sponsor,
+		"UPDATE user_account SET `name` = :name, notification_emails = :notification_emails, nfp_method = :nfp_method, age = :age, sponsor = :sponsor,
 		timeline_asc = :timeline_asc, research = :research, auto_mail_export = :auto_mail_export, last_write_client_UTC = :last_write_client_UTC
 		WHERE no_user_account = :no_user_account",
 		$fields + ["last_write_client_UTC" => $last_write_client_UTC, "no_user_account" => $no_user_account]
@@ -284,7 +284,7 @@ function db_select_user_account_auth_token($db, $auth_token_str): ?array {
 	return db_row($db,
 		"SELECT J.no_user_account, J.no_auth_token, J.auth_token_prefix AS prefix_auth_token, C.name AS name_user_account, J.contry_code, J.name AS name_auth_token,
 		J.scope AS scope_auth_token, (J.date_expire IS NOT NULL AND J.date_expire <= NOW()) AS expired_auth_token,
-		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.email1, C.email2,
+		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.login_email, C.notification_emails,
 		C.nb_connection_attempts, C.sponsor, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
 		C.last_password_change, C.register_comment, C.totp_secret, C.totp_state, C.research, C.timeline_asc, C.auto_mail_export, C.last_write_client_UTC
 		FROM auth_token AS J INNER JOIN user_account AS C ON J.no_user_account = C.no_user_account
@@ -388,8 +388,8 @@ function db_update_login_failure($db, $email) {
 	return db_exec($db,
 		"UPDATE user_account SET
 		nb_connection_attempts = IF(last_failed_attempt IS NULL OR last_failed_attempt < NOW() - INTERVAL :decay_minutes MINUTE, 1, nb_connection_attempts + 1),
-		last_failed_attempt = NOW() WHERE email1 = :email1",
-		["decay_minutes" => LOGIN_ATTEMPTS_DECAY_MINUTES, "email1" => $email]
+		last_failed_attempt = NOW() WHERE login_email = :login_email",
+		["decay_minutes" => LOGIN_ATTEMPTS_DECAY_MINUTES, "login_email" => $email]
 	);
 }
 
@@ -645,7 +645,7 @@ function db_select_cycle($db, $date, $no_user_account): ?string {
 // have not turned the automatic mail of a cycle off (auto_mail_export)
 function db_select_cycles_finished($db) {
 	return db_rows($db,
-		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.email1, c.email2
+		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.login_email, c.notification_emails
 		FROM day_timeline AS obs JOIN user_account AS c ON obs.no_user_account = c.no_user_account
 		WHERE obs.date_obs = CURDATE() - INTERVAL 2 DAY AND (obs.cycle_1st_day = 1 OR obs.pregnancy = 1) AND c.auto_mail_export = 1"
 	);
@@ -654,10 +654,10 @@ function db_select_cycles_finished($db) {
 // the accounts with no day written for 35 days, registered for more than that, not yet reminded
 function db_select_user_account_inactive($db) {
 	return db_rows($db,
-		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.email1, c.email2, c.inscription_date
+		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.login_email, c.notification_emails, c.inscription_date
 		FROM user_account AS c LEFT JOIN day_timeline AS o ON c.no_user_account = o.no_user_account
 		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0 AND c.email_verified_at IS NOT NULL
-		GROUP BY c.no_user_account, c.name, c.email1, c.email2, c.inscription_date
+		GROUP BY c.no_user_account, c.name, c.login_email, c.notification_emails, c.inscription_date
 		HAVING (DATE(last_day_written) < DATE(NOW()) - INTERVAL 35 DAY OR last_day_written IS NULL) AND c.inscription_date < DATE(NOW()) - INTERVAL 35 DAY
 		ORDER BY last_day_written DESC LIMIT 20"
 	);
@@ -669,7 +669,7 @@ function db_select_user_account_inactive($db) {
 // table (dt/de/at below) and LEFT JOINed once, instead of a correlated subquery re-scanning the
 // table for every user_account row. The demo accounts are left out, as they are from the stats.
 const DB_SQL_USER_ACCOUNT_LAST_ACTIVITY =
-	"SELECT u.no_user_account, u.name, u.email1, u.email2,
+	"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails,
 	GREATEST(u.inscription_date, COALESCE(u.last_auth_date, u.inscription_date), COALESCE(dt.last_activity, u.inscription_date),
 		COALESCE(de.last_activity, u.inscription_date), COALESCE(at.last_activity, u.inscription_date)) AS last_activity
 	FROM user_account u

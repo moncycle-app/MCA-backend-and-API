@@ -56,7 +56,7 @@ foreach (db_select_cycles_finished($db) as $account) {
 
 	$handled++;
 	if ($dry_run) {
-		echo "[dry run] would send the cycle of " . count($days) . " days to {$account["email1"]} (and {$account["email2"]})." . PHP_EOL;
+		echo "[dry run] would send the cycle of " . count($days) . " days to {$account["login_email"]} (and {$account["notification_emails"]})." . PHP_EOL;
 		continue;
 	}
 
@@ -77,7 +77,7 @@ foreach (db_select_cycles_finished($db) as $account) {
 	log_cron_count($sent ? "sent" : "ko");
 	if (!$sent) $failed++;
 
-	echo ($sent ? "cycle of " . count($days) . " days sent to " : "COULD NOT send the cycle of " . count($days) . " days to ") . "{$account["email1"]} (and {$account["email2"]})." . PHP_EOL;
+	echo ($sent ? "cycle of " . count($days) . " days sent to " : "COULD NOT send the cycle of " . count($days) . " days to ") . "{$account["login_email"]} (and {$account["notification_emails"]})." . PHP_EOL;
 }
 log_cron_step("cycle_mails", $handled, $failed);
 
@@ -88,14 +88,14 @@ foreach (db_select_user_account_inactive($db) as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
-		echo "[dry run] would send a reminder to {$account["email1"]} (and {$account["email2"]})" . PHP_EOL;
+		echo "[dry run] would send a reminder to {$account["login_email"]} (and {$account["notification_emails"]})" . PHP_EOL;
 		continue;
 	}
 	$sent = mail_send_reminder($account);
 	log_cron_count($sent ? "sent" : "ko");
 	if (!$sent) $failed++;
 	if ($sent) db_update_is_inactive($db, $account["no_user_account"], 1);
-	echo ($sent ? "reminder sent to " : "COULD NOT send a reminder to ") . "{$account["email1"]} (and {$account["email2"]})" . PHP_EOL;
+	echo ($sent ? "reminder sent to " : "COULD NOT send a reminder to ") . "{$account["login_email"]} (and {$account["notification_emails"]})" . PHP_EOL;
 }
 log_cron_step("reminders", $handled, $failed);
 
@@ -106,13 +106,13 @@ foreach (db_select_user_account_to_warn_before_deletion($db, ACCOUNT_INACTIVITY_
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
-		echo "[dry run] would send a deletion warning to {$account["email1"]} (and {$account["email2"]})" . PHP_EOL;
+		echo "[dry run] would send a deletion warning to {$account["login_email"]} (and {$account["notification_emails"]})" . PHP_EOL;
 		continue;
 	}
 	$sent = mail_send_deletion_warning($account, ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE);
 	log_cron_count($sent ? "sent" : "ko");
 	if (!$sent) $failed++;
-	echo ($sent ? "deletion warning sent to " : "COULD NOT send a deletion warning to ") . "{$account["email1"]} (and {$account["email2"]})" . PHP_EOL;
+	echo ($sent ? "deletion warning sent to " : "COULD NOT send a deletion warning to ") . "{$account["login_email"]} (and {$account["notification_emails"]})" . PHP_EOL;
 }
 log_cron_step("deletion_warnings", $handled, $failed);
 
@@ -121,12 +121,12 @@ foreach (db_select_user_account_to_delete($db, ACCOUNT_INACTIVITY_DELETE_YEARS) 
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
-		echo "[dry run] would delete account {$account["email1"]} (" . ACCOUNT_INACTIVITY_DELETE_YEARS . " years without activity, RGPD)" . PHP_EOL;
+		echo "[dry run] would delete account {$account["login_email"]} (" . ACCOUNT_INACTIVITY_DELETE_YEARS . " years without activity, RGPD)" . PHP_EOL;
 		continue;
 	}
 	data_delete_account($db, $account, "inactivity");
 	log_cron_count("del");
-	echo "account {$account["email1"]} deleted (" . ACCOUNT_INACTIVITY_DELETE_YEARS . " years without activity, RGPD)" . PHP_EOL;
+	echo "account {$account["login_email"]} deleted (" . ACCOUNT_INACTIVITY_DELETE_YEARS . " years without activity, RGPD)" . PHP_EOL;
 }
 log_cron_step("account_deletions", $handled);
 
@@ -137,12 +137,12 @@ foreach (db_select_user_account_unverified_old($db, ACCOUNT_UNVERIFIED_DELETE_DA
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
-		echo "[dry run] would delete account {$account["email1"]} (address not verified after " . ACCOUNT_UNVERIFIED_DELETE_DAYS . " days)" . PHP_EOL;
+		echo "[dry run] would delete account {$account["login_email"]} (address not verified after " . ACCOUNT_UNVERIFIED_DELETE_DAYS . " days)" . PHP_EOL;
 		continue;
 	}
 	data_delete_account($db, $account, "unverified");
 	log_cron_count("del");
-	echo "account {$account["email1"]} deleted (address not verified after " . ACCOUNT_UNVERIFIED_DELETE_DAYS . " days)" . PHP_EOL;
+	echo "account {$account["login_email"]} deleted (address not verified after " . ACCOUNT_UNVERIFIED_DELETE_DAYS . " days)" . PHP_EOL;
 }
 log_cron_step("unverified_deletions", $handled);
 

@@ -13,7 +13,7 @@
 // Only the SHA-256 of the token is kept. A link is single use and has a lifetime (EMAIL_TOKEN_LIFETIME_MINUTES); it is checked against
 // what it is for, so that the link of one action cannot do another.
 // The link points at a page of the app with the token in its fragment (never sent to a server, a log or a Referer), and the page
-// posts it to POST /api/email_token: a mail scanner that only fetches the link uses nothing up.
+// posts it to POST /api/verify_email: a mail scanner that only fetches the link uses nothing up.
 
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/log.php";
@@ -54,9 +54,9 @@ function email_token_use($db, mixed $token, int $purpose, callable $apply): arra
 	});
 }
 
-// POST /api/email_token: uses the link of a mail. $body: token, purpose ("verifyEmail", "resetPassword" or "changeEmail"), and for
+// POST /api/verify_email: uses the link of a mail. $body: token, purpose ("accountCreation", "resetPassword" or "changeEmail"), and for
 // "resetPassword" newPassword. Answers what the endpoint says:
-//   success: ["status" => 200, "data" => ["purpose" => ..., "email" => the address to sign in with from now on]]
+//   success: ["status" => 200, "data" => ["purpose" => ..., "loginEmail" => the address to sign in with from now on]]
 //   refusal: ["status" => 4xx, "code" => ..., "message" => ...]
 // The password is checked before the link is touched: a password that is refused does not use the link up. The mails that tell the
 // owner what happened go once the work is committed.
@@ -79,19 +79,19 @@ function email_token_complete($db, array $body): array {
 		if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {
 			db_update_password($db, $password_hash, $account["no_user_account"]);
 			db_update_user_account_email_verified($db, $account["no_user_account"]);   // whoever reads the mail has the address
-			return ["email" => $account["email1"]];
+			return ["loginEmail" => $account["login_email"]];
 		}
 		if ($purpose === EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL) {
 			// the address was free when the link was made; it may not be now
-			if (!db_update_user_account_email1($db, $account["no_user_account"], $account["email_token_new_email"])) return ["error" => "email_taken"];
-			return ["email" => $account["email_token_new_email"]];
+			if (!db_update_user_account_login_email($db, $account["no_user_account"], $account["email_token_new_email"])) return ["error" => "email_taken"];
+			return ["loginEmail" => $account["email_token_new_email"]];
 		}
 		db_update_user_account_email_verified($db, $account["no_user_account"]);
-		return ["email" => $account["email1"]];
+		return ["loginEmail" => $account["login_email"]];
 	});
 
 	if (isset($used["error"])) {
-		log_event("account.refused", ["act" => "email_token", "err" => $used["error"]]);
+		log_event("account.refused", ["act" => "verify_email", "err" => $used["error"]]);
 		return match ($used["error"]) {
 			"token_expired" => $refuse(400, "token_expired", "This link has expired: ask for a new one."),
 			"email_taken" => $refuse(409, "email_taken", "This address is used by another account."),
@@ -103,20 +103,20 @@ function email_token_complete($db, array $body): array {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {
 		log_event("account.password_reset");
-		mail_send_password_changed($account["email1"], $account["name"]);
+		mail_send_password_changed($account["login_email"], $account["name"]);
 	}
 	elseif ($purpose === EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL) {
 		log_event("account.email_changed");
-		mail_send_email_changed($account["email1"], $used["result"]["email"], $account["name"]);
+		mail_send_email_changed($account["login_email"], $used["result"]["loginEmail"], $account["name"]);
 	}
 	else {
 		log_event("account.email_verified");
 	}
 
-	return ["status" => 200, "data" => ["purpose" => EMAIL_TOKEN_PURPOSE_NAMES[$purpose], "email" => $used["result"]["email"]]];
+	return ["status" => 200, "data" => ["purpose" => EMAIL_TOKEN_PURPOSE_NAMES[$purpose], "loginEmail" => $used["result"]["loginEmail"]]];
 }
 
-// A change of the primary address, asked by a session that has given its password (the endpoint checks it, and the TOTP code when the
+// A change of the login address, asked by a session that has given its password (account_update() checks it, and the TOTP code when the
 // account has one): the link goes to the NEW address, which proves it, and the old one is told. Answers whether the link mail was
 // sent. An address another account has gets no link and no error (nobody can tell who has an account): its owner is told instead.
 function email_token_request_email_change($db, array $user_account, string $new_email): bool {
@@ -128,6 +128,6 @@ function email_token_request_email_change($db, array $user_account, string $new_
 	});
 
 	if (is_null($token)) return mail_send_email_change_taken($new_email);
-	mail_send_email_change_requested($user_account["email1"], $new_email, $user_account["name_user_account"]);
+	mail_send_email_change_requested($user_account["login_email"], $new_email, $user_account["name_user_account"]);
 	return mail_send_confirm_email($new_email, $user_account["name_user_account"], $token);
 }
