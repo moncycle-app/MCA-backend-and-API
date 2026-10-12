@@ -47,7 +47,9 @@ const COOKIE_AUTH_TOKEN_LEGACY = "MONCYCLEAPP_JETTON";
 // The values the COOKIE_SAMESITE setting takes (the attribute is these with a capital: Strict, Lax, None).
 const COOKIE_SAMESITE_VALUES = ["strict", "lax", "none"];
 
-const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MIN_LENGTH = 10;
+// bcrypt reads 72 bytes and silently drops the rest: a longer password is refused rather than half kept.
+const PASSWORD_MAX_BYTES = 72;
 // The hash of a password nobody knows (random, then forgotten), at the cost password_hash() uses. A login for an
 // address that has no account is checked against it, so that it takes as long as a wrong password does.
 const AUTH_DUMMY_PASSWORD_HASH = '$2y$12$fFAyg7vWBJagg2QJOymLY.Ndi.VRQtAJhChoNUW7XiAxek8JDKUju';
@@ -117,6 +119,31 @@ const AUTH_TOKEN_IDLE_DAYS = 40;
 // The address of a token as GET /api/token shows it: cut to its first 24 bits (IPv4) or 48 bits (IPv6). The database keeps it whole.
 const AUTH_TOKEN_IP_PREFIX_V4 = 24;
 const AUTH_TOKEN_IP_PREFIX_V6 = 48;
+
+// user_account.email_token_*: the one link by mail that an account can have pending (lib/email_token.php). It is a slot, not a list: a
+// new link overwrites the one before it. The token is 32 random bytes, base64url; only its SHA-256 is kept, with what the link is for
+// (the purpose), when it dies, and for a change of address the address it will change to.
+const EMAIL_TOKEN_BYTES = 32;
+const EMAIL_TOKEN_LIMIT_CHARS = 64;                 // a token a client sends that is longer than this is no token and is not looked up (the real one has 43)
+// user_account.email_token_purpose: what the link does once it is used.
+const EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL = 1;         // proves the address of a new account: the account becomes usable
+const EMAIL_TOKEN_PURPOSE_RESET_PASSWORD = 2;       // lets whoever reads the mail choose a new password (and proves the address too)
+const EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL = 3;         // proves the new primary address, which then replaces the old one
+// purpose => the string the JSON API (POST /api/email_token) and the link of the mail speak.
+const EMAIL_TOKEN_PURPOSE_NAMES = [
+	EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL => "verifyEmail",
+	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => "resetPassword",
+	EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL => "changeEmail",
+];
+// purpose => how long the link lives, in minutes. A reset is short because it hands over the account; a verification is long because
+// the person may read their mail days later.
+const EMAIL_TOKEN_LIFETIME_MINUTES = [
+	EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL => 3 * 24 * 60,
+	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => 60,
+	EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL => 24 * 60,
+];
+// An account whose address was never verified is erased by the cron after this many days (the address is free again).
+const ACCOUNT_UNVERIFIED_DELETE_DAYS = 7;
 
 // RGPD retention, re-evaluated on every cron run (so no "warning sent" flag exists): an account
 // with no activity (login, or any write tied to it) for this many years is erased...
@@ -253,6 +280,9 @@ const LOG_EVENTS = [
 	"auth.token_rejected" => "debug",
 	"account.registered" => "info",
 	"account.refused" => "warning",
+	"account.email_token_issued" => "info",
+	"account.email_verified" => "info",
+	"account.email_changed" => "info",
 	"account.password_reset" => "info",
 	"account.password_reset_unknown" => "warning",
 	"account.password_changed" => "info",

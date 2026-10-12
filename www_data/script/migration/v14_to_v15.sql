@@ -184,3 +184,18 @@ ALTER TABLE `auth_token`
 ADD `auth_token_prefix` varchar(5) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL AFTER `auth_token_str`,
 ADD UNIQUE `unique_user_account_and_prefix` (`no_user_account`, `auth_token_prefix`),
 ALGORITHM=INPLACE, LOCK=NONE;
+
+-- No password is sent by mail any more. An address is proved by a link (lib/email_token.php): the account is unusable until it is,
+-- and the same link slot serves the password reset and the change of the primary address. email_verified_at is NULL for an address
+-- that was never proved; email_token_* is the one pending link of the account (only the SHA-256 of the token is kept, what it is for,
+-- when it dies, and for a change of address the address it will change to). Every account that exists was reachable at its address:
+-- it is verified from the day it was made.
+ALTER TABLE `user_account`
+ADD `email_verified_at` timestamp NULL DEFAULT NULL,
+ADD `email_token_hash` char(64) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL,
+ADD `email_token_purpose` tinyint(1) unsigned NULL DEFAULT NULL,
+ADD `email_token_expires_at` timestamp NULL DEFAULT NULL,
+ADD `email_token_new_email` varchar(255) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL,
+ADD UNIQUE `email_token_hash` (`email_token_hash`),
+ALGORITHM=INPLACE, LOCK=NONE;
+UPDATE `user_account` SET `email_verified_at` = `inscription_date`;

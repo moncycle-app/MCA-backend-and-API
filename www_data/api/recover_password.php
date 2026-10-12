@@ -32,11 +32,10 @@ sec_exit_unless_captcha_ok($db, $attempt, $recovery["captcha"], "recover_passwor
 
 // The answer is the same whether or not the account exists, and takes as long, so that nobody
 // can use this to find out who has one. Logged before the sleep: a worker killed meanwhile must not lose it.
-// The new password is committed: the mail goes now, and only now.
+// The link is committed: the mail goes now, and only now. The password is not touched until the link is used.
 if (!is_null($recovery["account"])) {
 	log_context(["uid" => intval($recovery["account"]["no_user_account"])]);
-	log_event("account.password_reset");
-	mail_send_new_password($email, $recovery["password"]);
+	mail_send_reset_password($recovery["account"]["name"], $email, $recovery["token"]);
 	sleep(rand(1, 4));
 }
 else {

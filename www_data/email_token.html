@@ -1,0 +1,83 @@
+<!doctype html>
+<!--
+** moncycle.app
+**
+** licence Creative Commons CC BY-NC-SA
+**
+** https://www.moncycle.app
+** https://github.com/moncycle-app/backend-api-web-app
+-->
+<html lang="fr">
+	<head>
+		<meta charset="utf-8" />
+		<title>moncycle.app - lien reçu par mail</title>
+		<meta name="mobile-web-app-capable" content="yes" />
+		<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+		<meta name="apple-mobile-web-app-title" content="moncycle.app" />
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<link rel="apple-touch-icon" href="/img/moncycleapp512.jpg" />
+		<meta name="theme-color" media="(prefers-color-scheme: light)" content="white" />
+		<meta name="theme-color" media="(prefers-color-scheme: dark)" content="black" />
+		<meta name="apple-mobile-web-app-status-bar-style" media="(prefers-color-scheme: light)" content="light-content" />
+		<meta name="apple-mobile-web-app-status-bar-style" media="(prefers-color-scheme: dark)" content="dark-content" />
+		<meta name="description" content="Application de suivi de cycle pour les méthodes naturelles de régulation des naissances." />
+		<meta property="og:title" content="MONCYCLE.APP" />
+		<meta property="og:type" content="siteweb" />
+		<meta property="og:url" content="https://www.moncycle.app/" />
+		<meta property="og:image" content="/img/moncycleapp_apercu.jpg" />
+		<meta property="og:description" content="Application de suivi de cycle pour les méthodes naturelles de régulation des naissances." />
+		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
+		<script type="text/javascript" src="js/email_token.js" defer></script>
+		<link rel="stylesheet" href="css/commun.css" />
+		<link rel="stylesheet" href="css/account.css" />
+		<style>
+			.contennu {
+				max-width: 370px;
+			}
+		</style>
+	</head>
+	<body>
+		<center>
+			<h1>mon<span class="gradiant_logo">cycle</span>.app</h1>
+			<a href="auth"><button type="button" class="nav_button">Se connecter 🔑</button></a>
+		</center>
+
+		<!-- The link of a mail (js/email_token.js): the purpose and the token are in the fragment of the address. The form below carries them to the API. -->
+		<div class="contennu" id="et_form_box" style="display:none">
+			<h2 id="et_title"></h2>
+			<form action="api/email_token" method="post" id="f_email_token"><br />
+				<input type="hidden" name="purpose" id="i_purpose" value="" />
+				<input type="hidden" name="token" id="i_token" value="" />
+				<span id="et_text"></span><br />
+				<br />
+				<div id="et_password_block" style="display:none">
+					<label for="i_new_password">Nouveau mot de passe:</label><br />
+					<input name="new_password" id="i_new_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="Choisir un mot de passe." /><br />
+					<span class="label_info">Au moins 10 caractères (72 au plus).</span><br />
+					<br />
+					<label for="i_new_password_conf">Confirmer (re-saisir) le mot de passe:</label><br />
+					<input name="new_password_conf" id="i_new_password_conf" type="password" autocomplete="new-password" minlength="10" maxlength="72" placeholder="Entrer une 2ème fois le mot de passe." /><br />
+					<br />
+				</div>
+				<span class="rouge" id="et_error_msg"></span><br />
+				<input type="submit" id="but_et" value="" />
+			</form>
+		</div>
+		<div class="contennu vert" id="et_done" style="display:none">
+			<center>
+				<br /><br />
+				<b id="et_done_text"></b><br />
+				<br />
+				<a id="et_login_link" href="auth"><button type="button" class="nav_button">Se connecter 🔑</button></a>
+			</center>
+		</div>
+		<div class="contennu" id="et_invalid" style="display:none">
+			<center>
+				<br /><br />
+				<span class="rouge">Ce lien n'est pas valide.</span><br />
+				<br />
+				Il a peut-être déjà servi, expiré, ou été remplacé par un lien plus récent. Pour un mot de passe perdu, demandez-en un nouveau depuis la page de connexion.
+			</center>
+		</div>
+	</body>
+</html>

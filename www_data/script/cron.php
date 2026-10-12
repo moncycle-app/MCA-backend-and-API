@@ -130,6 +130,22 @@ foreach (db_select_user_account_to_delete($db, ACCOUNT_INACTIVITY_DELETE_YEARS) 
 }
 log_cron_step("account_deletions", $handled);
 
+// THE ACCOUNTS WHOSE ADDRESS WAS NEVER PROVED: nobody could sign in to them, and the address is held until they go
+
+$handled = 0;
+foreach (db_select_user_account_unverified_old($db, ACCOUNT_UNVERIFIED_DELETE_DAYS) as $account) {
+	log_context(["uid" => intval($account["no_user_account"])]);
+	$handled++;
+	if ($dry_run) {
+		echo "[dry run] would delete account {$account["email1"]} (address not verified after " . ACCOUNT_UNVERIFIED_DELETE_DAYS . " days)" . PHP_EOL;
+		continue;
+	}
+	data_delete_account($db, $account, "unverified");
+	log_cron_count("del");
+	echo "account {$account["email1"]} deleted (address not verified after " . ACCOUNT_UNVERIFIED_DELETE_DAYS . " days)" . PHP_EOL;
+}
+log_cron_step("unverified_deletions", $handled);
+
 // EXPIRED TOKENS
 
 log_context(["uid" => null]);

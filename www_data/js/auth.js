@@ -28,7 +28,7 @@ else {
 			token: $("#i_captcha_token"),
 			answer: $("#i_captcha"),
 			active: function() { return $("#captcha_wrapper").is(":visible"); },
-			error: function(message) { $("#message_err").text(message); },
+			error: moncycle_captcha.message_in($("#message_err")),
 		});
 		// the lost password always asks for one
 		const reset_captcha = moncycle_captcha.attach({
@@ -37,7 +37,7 @@ else {
 			image: $("#rc_captcha_img"),
 			token: $("#rc_captcha_token"),
 			answer: $("#rc_captcha"),
-			error: function(message) { $("#reset_error_msg").text(message); },
+			error: moncycle_captcha.message_in($("#reset_error_msg")),
 		});
 		// the session is named after the site it was opened on, as the browser knows it
 		$("#i_token_name").val("WEB-APP " + window.location.hostname);
@@ -73,6 +73,7 @@ else {
 					login_disabled : "La connexion est désactivée.",
 					missing_credentials : "E-mail et/ou mot de passe manquant.",
 					account_disabled : "Compte désactivé.",
+					email_not_verified : "Merci de vérifier votre adresse e-mail avant de vous connecter: cliquez sur le lien du mail reçu à l'inscription. Il a disparu? Utilisez « mot de passe perdu » ci-dessous pour en recevoir un nouveau.",
 					totp_required : "Bon mot de passe, mais un code TOTP est requis.",
 					totp_invalid : "Bon mot de passe, mais le code TOTP est incorrect.",
 					invalid_credentials : "Mauvais mot de passe ou compte inexistant.",
@@ -108,7 +109,7 @@ else {
 				if (ret.data && ret.data.sent) {
 					$("#reset_form").hide();
 					// the address is what was typed: a text node, never HTML
-						$("#password_reseted_msg").empty().append(document.createTextNode("📧 Nouveau mot de passe envoyé par mail à : "), $("<br>"), $("<b>").text(email), $("<br>"), $("<br>"), document.createTextNode("(si ce compte existe)"));
+						$("#password_reseted_msg").empty().append(document.createTextNode("📧 Un lien pour choisir un nouveau mot de passe a été envoyé par mail à : "), $("<br>"), $("<b>").text(email), $("<br>"), $("<br>"), document.createTextNode("(si ce compte existe)"));
 				}
 			}).fail(function(jqXHR){
 				$("#reset_but").val("Rénitialiser 🤐");

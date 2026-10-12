@@ -171,6 +171,70 @@ function db_insert_user_account($db, $name, $nfp_method, $age, $email, $password
 	}
 }
 
+// ---------------------------------------------------------------------------
+// The address of an account: whether it was proved, and the one link by mail it can have pending (lib/email_token.php)
+// ---------------------------------------------------------------------------
+
+// Marks the address as proved, now. An address that already was keeps the date it was proved on.
+function db_update_user_account_email_verified($db, $no_user_account): int {
+	return db_exec($db, "UPDATE user_account SET email_verified_at = COALESCE(email_verified_at, NOW()) WHERE no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
+}
+
+// Puts a link in the account's slot, whatever was there: $token_hash is the SHA-256 of the token, $lifetime_minutes counts on the DB
+// clock, $new_email is the address a change of address will change to (null for the other purposes).
+function db_update_user_account_email_token($db, $no_user_account, string $token_hash, int $purpose, int $lifetime_minutes, ?string $new_email): int {
+	return db_exec($db,
+		"UPDATE user_account SET email_token_hash = :hash, email_token_purpose = :purpose,
+		email_token_expires_at = NOW() + INTERVAL :lifetime MINUTE, email_token_new_email = :new_email
+		WHERE no_user_account = :no_user_account",
+		["hash" => $token_hash, "purpose" => $purpose, "lifetime" => $lifetime_minutes, "new_email" => $new_email, "no_user_account" => $no_user_account]
+	);
+}
+
+// Empties the slot. With $purpose, only when the link in it is for that purpose (a password changed from the account page ends a reset
+// link, and leaves a pending change of address alone).
+function db_update_user_account_email_token_clear($db, $no_user_account, ?int $purpose = null): int {
+	return db_exec($db,
+		"UPDATE user_account SET email_token_hash = NULL, email_token_purpose = NULL, email_token_expires_at = NULL, email_token_new_email = NULL
+		WHERE no_user_account = :no_user_account AND (:purpose1 IS NULL OR email_token_purpose = :purpose2)",
+		["no_user_account" => $no_user_account, "purpose1" => $purpose, "purpose2" => $purpose]
+	);
+}
+
+// The account whose slot holds this link (the SHA-256 of the token, unique), with whether it is past its time. The caller checks the
+// purpose, and reads the row again under the account's lock before it uses it.
+function db_select_user_account_by_email_token($db, string $token_hash): ?array {
+	return db_row($db,
+		"SELECT u.no_user_account, u.name, u.email1, u.email_verified_at, u.email_token_purpose, u.email_token_new_email,
+		(u.email_token_expires_at <= NOW()) AS email_token_expired
+		FROM user_account AS u WHERE u.email_token_hash = :hash",
+		["hash" => $token_hash]
+	);
+}
+
+// Changes the primary address. False when another account has it: the unique key on email1 decides.
+function db_update_user_account_email1($db, $no_user_account, string $email): bool {
+	try {
+		db_exec($db, "UPDATE user_account SET email1 = :email1 WHERE no_user_account = :no_user_account", ["email1" => $email, "no_user_account" => $no_user_account]);
+		return true;
+	}
+	catch (\PDOException $error) {
+		if (intval($error->errorInfo[1] ?? 0) === 1062) return false;   // MariaDB 1062: duplicate entry for a unique key
+		throw $error;
+	}
+}
+
+// The accounts whose address was never proved and that were made more than $days ago.
+function db_select_user_account_unverified_old($db, int $days): array {
+	return db_rows($db,
+		"SELECT u.no_user_account, u.email1 FROM user_account AS u
+		WHERE u.email_verified_at IS NULL AND u.inscription_date < NOW() - INTERVAL :days DAY
+		AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
+		ORDER BY u.no_user_account",
+		["days" => $days]
+	);
+}
+
 // $fields: name, email2, nfp_method, age, sponsor, timeline_asc, research, auto_mail_export (see account_apply_json())
 function db_update_user_account_settings($db, $no_user_account, array $fields, $last_write_client_UTC) {
 	return db_exec($db,
@@ -179,10 +243,6 @@ function db_update_user_account_settings($db, $no_user_account, array $fields, $
 		WHERE no_user_account = :no_user_account",
 		$fields + ["last_write_client_UTC" => $last_write_client_UTC, "no_user_account" => $no_user_account]
 	);
-}
-
-function db_update_password_by_email($db, $password_hash, $email) {
-	return db_exec($db, "UPDATE user_account SET password = :password, last_password_change = NOW() WHERE email1 = :email1", ["password" => $password_hash, "email1" => $email]);
 }
 
 function db_update_password($db, $password_hash, $no_user_account) {
@@ -596,7 +656,7 @@ function db_select_user_account_inactive($db) {
 	return db_rows($db,
 		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.email1, c.email2, c.inscription_date
 		FROM user_account AS c LEFT JOIN day_timeline AS o ON c.no_user_account = o.no_user_account
-		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0
+		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0 AND c.email_verified_at IS NOT NULL
 		GROUP BY c.no_user_account, c.name, c.email1, c.email2, c.inscription_date
 		HAVING (DATE(last_day_written) < DATE(NOW()) - INTERVAL 35 DAY OR last_day_written IS NULL) AND c.inscription_date < DATE(NOW()) - INTERVAL 35 DAY
 		ORDER BY last_day_written DESC LIMIT 20"
@@ -637,7 +697,7 @@ function db_select_user_account_to_delete($db, $years) {
 // ---------------------------------------------------------------------------
 
 function db_count_user_accounts($db) {
-	return db_value($db, "SELECT COUNT(no_user_account) FROM user_account");
+	return db_value($db, "SELECT COUNT(no_user_account) FROM user_account WHERE email_verified_at IS NOT NULL");
 }
 
 // accounts with a day in the last 35 days

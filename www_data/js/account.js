@@ -172,6 +172,19 @@ const moncycle_app_text = {
 	tokens_revoke : "Déconnecter",
 	tokens_prefix_title : "Début du jeton: il permet de distinguer les connexions d'une même application.",
 	tokens_none : "Aucune connexion.",
+
+	/* --- change of the primary address: what the server refuses (its own words are English) --- */
+	email_change_errors : {
+		invalid_password : "mot de passe incorrect",
+		totp_required : "un code d\u2019authentification multifacteur est nécessaire",
+		totp_invalid : "le code d\u2019authentification multifacteur est incorrect",
+		invalid_email : "l\u2019adresse e-mail n\u2019est pas valide",
+		email_unchanged : "c\u2019est déjà l\u2019adresse de votre compte",
+		missing_fields : "l\u2019adresse et le mot de passe sont nécessaires",
+		missing_password : "le mot de passe est nécessaire",
+		demo_account : "indisponible sur un compte de démo",
+		read_only_token : "cette connexion est en lecture seule",
+	},
 	tokens_confirm_revoke_all : "Déconnecter tous vos autres appareils et applications ?\n\nCet appareil reste connecté. Les autres devront se reconnecter.",
 	tokens_revoked : function (n) {
 		return ` ✅\u00A0${moncycle_app_text.count(n, "connexion supprimée", "connexions supprimées")}`;
@@ -633,6 +646,32 @@ $(document).ready(function(){
 		});
 	});
 
+	// CHANGEMENT DE L'ADRESSE PRINCIPALE: the link goes to the new address, the change happens when it is used (email_token.html)
+	$("#form_email_change").on("submit", function(event) {
+		event.preventDefault();
+		$("#email_change_ok").text('');
+		$("#email_change_msg").text('');
+		$("#but_email_change").prop("disabled", true);
+		var payload = {newEmail: $("#i_email_change_new").val(), password: $("#i_email_change_password").val()};
+		if ($("#i_email_change_code").val()) payload.code = parseInt($("#i_email_change_code").val());
+		$.ajax({type: "POST", url: "../api/email_change", contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
+			$("#but_email_change").prop("disabled", false);
+			$("#form_email_change input[type=password], #form_email_change input[type=number]").val('');
+			if (ret.data.sent) {
+				$("#email_change_ok").text('✅ lien envoyé');
+				$("#form_email_change input[type=email]").val('');
+			}
+			else {
+				$("#email_change_msg").text("❌ le mail n'a pas pu être envoyé, réessayez plus tard.");
+			}
+		}).fail(function(jqXHR){
+			console.error(jqXHR);
+			$("#but_email_change").prop("disabled", false);
+			const code = ((jqXHR.responseJSON || {}).error || {}).code;
+			moncycle_app_show_error($("#email_change_msg"), "erreur:", moncycle_app_text.email_change_errors[code] || moncycle_app_error_message(jqXHR).replace(/\.$/, ""), "❌ ", ".");
+		});
+	});
+
 	// MES CONNEXIONS (tokens): the list, the revocation of one or of every other, and the creation of a custom token.
 	// Everything the server says of a token (a name, a user agent) is the device's own word: text nodes only, never HTML.
 	const token_when = function (iso) {
@@ -707,7 +746,7 @@ $(document).ready(function(){
 		token: $("#i_token_new_captcha_token"),
 		answer: $("#i_token_new_captcha"),
 		active: function () { return $("#token_new_captcha_wrapper").is(":visible"); },
-		error: function (message) { $("#token_new_err").text(message); },
+		error: moncycle_captcha.message_in($("#token_new_err")),
 	});
 	$("#f_token_create").on("submit", function (event) {
 		event.preventDefault();

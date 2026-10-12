@@ -140,7 +140,7 @@
 			<br />
 			<input class="auto_save" value="1" type="checkbox" id="i_research" name="research"/> <label for="i_research">Autoriser des exports de la base de données avec des cycles anonymisés pour la research sur les méthodes naturelles.</label><br />
 			<br />
-			<label for="i_email1">E-mail:</label> <br /><span class="label_info">Identifiant de connexion et envoi des cycles (non modifiable).</span><br />
+			<label for="i_email1">E-mail:</label> <br /><span class="label_info">Identifiant de connexion et envoi des cycles (pour la changer, voir « Changer mon adresse e-mail » plus bas).</span><br />
 			<input id="i_email1" type="email" readonly name="email1" value="" /><br />
 			<br />
 			<label for="i_email2">2e e-mail:</label> <br /><span class="label_info">Permet de recevoir les cycles sur une deuxième addresse. Pour la changer, confirmez avec votre mot de passe: un mail prévient votre adresse de connexion.</span><br />
@@ -192,6 +192,26 @@
 
 
 
+			<h2>Changer mon adresse e-mail <span class="net_stat" id="email_change_ok"></span></h2>
+			<form id="form_email_change" action="api/email_change" method="post">
+			<br />
+			<span class="label_info">C'est l'adresse qui sert à se connecter et à retrouver un mot de passe perdu. Un lien de confirmation est envoyé à la <b>nouvelle</b> adresse et un mail prévient l'ancienne: le changement n'a lieu qu'une fois ce lien utilisé.</span><br />
+			<br />
+			<label for="i_email_change_new">Nouvelle adresse e-mail:</label><br />
+			<input type="email" id="i_email_change_new" name="new_email" maxlength="255" required /><br />
+			<br />
+			<label for="i_email_change_password">Mot de passe:</label><br />
+			<input type="password" id="i_email_change_password" name="password" autocomplete="current-password" required /><br />
+			<br />
+			<label for="i_email_change_code">Code:</label><br />
+			<input type="number" id="i_email_change_code" name="code" placeholder="authentification multifacteur (si activée)" /><br />
+			<br />
+			<input id="but_email_change" type="submit" value="📧 envoyer le lien" /><br />
+			<span id="email_change_msg" class="rouge"></span><br /></form>
+			<br /><br /><br />
+
+
+
 			<h2>Changer mon mot de passe <span class="net_stat" id="mdp_change_ok"></span></h2>
 			<form id="form_mdp_change" action="api/password_change" method="post">
 			<br />
@@ -199,7 +219,7 @@
 			<input type="password" id="i_old_pw" name="old_pw" required /><br />  
 			<br />
 			<label for="pw1">Nouveau mot de passe:</label><br />
-			<input type="password" name="pw1" id="i_pw1" required pattern="^(?=.*?[a-z])(?=.*?[0-9]).{7,}$" /><br />
+			<input type="password" name="pw1" id="i_pw1" required pattern="^(?=.*?[a-z])(?=.*?[0-9]).{10,}$" /><br />
 			<span class="label_info">Le mot de passe doit contenir au moins 10 caractères dont un chiffre et une majuscule.</span><br/>
 			<br />
 			<label for="pw2">Confirmer votre nouveau mot de passe:</label><br />

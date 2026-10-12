@@ -34,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	if (!in_array(intval($login["data"]["userId"]), ACCOUNT_DEMO_IDS, true)) {
 		$account = db_select_user_account($db, intval($login["data"]["userId"]));
 		$expires_at = is_null($options["expires_in_days"]) ? null : http_from_iso8601($token["expiresAt"] ?? null);
-		if (!is_null($account)) mail_send_new_login($account, $options["name"], AUTH_TOKEN_SCOPE_NAMES[$options["scope"]], sec_user_agent(), $expires_at);
+		if (!is_null($account)) mail_send_new_login($account, $options["name"], $login["data"]["prefix"], AUTH_TOKEN_SCOPE_NAMES[$options["scope"]], sec_user_agent(), $expires_at);
 	}
 
 	http_data($login["status"], array_merge($login["data"], $token));

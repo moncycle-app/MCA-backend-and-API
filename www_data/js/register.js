@@ -28,13 +28,17 @@ else {
 			image: $("#r_captcha"),
 			token: $("#i_captcha_token"),
 			answer: $("#i_captcha"),
-			error: function(message) { $("#register_error_msg").text(message); },
+			error: moncycle_captcha.message_in($("#register_error_msg")),
 		});
 		$("#f_registration").on("submit", function(event) {
 			event.preventDefault();
 			$("#register_error_msg").text("");
 			if ($("#i_email1").val() != $("#i_email1_conf").val()) {
 				$("#register_error_msg").text("L'addresse email et sa confirmation ne sont pas identique.");
+				return;
+			}
+			if ($("#i_password").val() != $("#i_password_conf").val()) {
+				$("#register_error_msg").text("Le mot de passe et sa confirmation ne sont pas identiques.");
 				return;
 			}
 			$("#but_register").prop("disabled", true);
@@ -47,6 +51,7 @@ else {
 			var payload = {
 				firstName: $("#i_firstname").val(),
 				email: $("#i_email1").val(),
+				password: $("#i_password").val(),
 				birthYear: parseInt($("#i_anaissance").val()),
 				captcha: $("#i_captcha").val(),
 				captchaToken: $("#i_captcha_token").val(),
@@ -57,12 +62,13 @@ else {
 			};
 			$.ajax({type : 'POST', "url" : "api/register", contentType: "application/json", "data" : JSON.stringify(payload)}).done(function(ret){
 				console.log(ret);
-				$("#success_name").text(ret.data.name);
-				$("#success_email").text(ret.data.email);
+				// the answer is the same for a new address and for one that has an account: the page says only what is sure
+				$("#success_email").text($("#i_email1").val());
+				$("#i_password, #i_password_conf").val("");
 				$("#register_form").hide();
 				$("#register_ok").show();
-				if (!ret.data.welcomeEmailSent) {
-					$("#register_error_msg").text("Le compte a bien été créé, mais le mail avec le mot de passe n'a pas été envoyé. Utilisez « mot de passe perdu » sur la page de connexion.");
+				if (!ret.data.sent) {
+					$("#register_error_msg").text("Le mail n'a pas pu être envoyé. Utilisez « mot de passe perdu » sur la page de connexion pour recevoir un nouveau lien.");
 				}
 			}).fail(function(jqXHR) {
 				console.error(jqXHR);
@@ -76,7 +82,10 @@ else {
 					captcha_expired: "Le captcha a expiré, recopiez le nouveau.",
 					captcha_unavailable: "Le captcha est indisponible pour le moment, réessayez plus tard.",
 					rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
-					account_exists: "Un compte existe déjà pour cette adresse email.",
+					invalid_parameter: "Le mot de passe est invalide.",
+					password_too_short: "Le mot de passe est trop court (10 caractères au moins).",
+					password_too_long: "Le mot de passe est trop long (72 octets au plus).",
+					password_invalid: "Le mot de passe contient un caractère interdit.",
 					invalid_birth_year: "La date de naissance n'est pas réaliste.",
 					invalid_first_name: "Le prénom est invalide ou trop long.",
 					invalid_discovered_comment: "Le commentaire est invalide ou trop long."

@@ -10,7 +10,6 @@
 require_once "../config.php";
 require_once "../lib/api.php";
 require_once "../lib/account.php";
-require_once "../lib/captcha.php";
 require_once "../lib/day_format.php";
 require_once "../lib/mail.php";
 
@@ -30,22 +29,21 @@ if (!REGISTRATION_ENABLED) {
 	http_error(403, "registration_disabled", "Account creation has been disabled.");
 }
 
-if (!isset($body["firstName"]) || !isset($body["email"]) || !isset($body["birthYear"])) {
-	http_error(400, "missing_fields", "'firstName', 'email' and 'birthYear' are required.");
+if (!isset($body["firstName"]) || !isset($body["email"]) || !isset($body["birthYear"]) || !isset($body["password"])) {
+	http_error(400, "missing_fields", "'firstName', 'email', 'password' and 'birthYear' are required.");
 }
 
 if (!filter_var($body["email"], FILTER_VALIDATE_EMAIL)) {
 	http_error(400, "invalid_email", "Provided email address is not valid.");
 }
 
-// the attempt is written before the captcha is looked at, and given back if it passes: only the failures count
-$attempt = sec_exit_unless_attempt_allowed($db, "register");
-$verdict = captcha_verify($db, "register", $body["email"], $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
-sec_exit_unless_captcha_ok($db, $attempt, $verdict, "register");
-
-if (db_select_user_account_exists($db, $body["email"])) {
-	log_event("account.refused", ["act" => "register", "err" => "account_exists"]);
-	http_error(409, "account_exists", "Account already exist.");
+// Everything that can be wrong with the fields is said before anything is looked up: no answer depends on whether the address has an account.
+if (!is_string($body["password"])) {
+	http_error(400, "invalid_parameter", "'password' must be a string.");
+}
+$problem = sec_password_problem($body["password"]);
+if (!is_null($problem)) {
+	http_error(422, $problem[0], $problem[1]);
 }
 
 if (!account_birth_year_valid(intval($body["birthYear"]))) {
@@ -65,27 +63,22 @@ if (isset($body["discoveredComment"])) {
 	}
 }
 
-// the password is generated, and only sent by mail
-$password = sec_random_password();
-$nfp_method = account_method_id_from_json($body);
-$new_account_no = db_insert_user_account(
-	$db, $first_name, $nfp_method, intval($body["birthYear"]), $body["email"], sec_hash($password),
-	$discovered_comment, boolval($body["okForResearch"] ?? false)
-);
+// the attempt is written before the captcha is looked at, and given back if it passes: only the failures count
+$attempt = sec_exit_unless_attempt_allowed($db, "register");
+$registration = account_register($db, [
+	"first_name" => $first_name, "email" => $body["email"], "password" => $body["password"], "birth_year" => intval($body["birthYear"]),
+	"nfp_method" => account_method_id_from_json($body), "comment" => $discovered_comment, "research" => boolval($body["okForResearch"] ?? false),
+], $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
+sec_exit_unless_captcha_ok($db, $attempt, $registration["captcha"], "register");
 
-// the address was taken between the check above and the insert: a second registration of the same
-// address sent at the same time
-if (is_null($new_account_no)) {
-	log_event("account.refused", ["act" => "register", "err" => "account_exists"]);
-	http_error(409, "account_exists", "Account already exist.");
+// The answer is the same whether the address was new or already had an account (the mail is not: a link to confirm the address, or a
+// link to choose a new password). The account is the same one in both cases, and a new one cannot be used until its address is proved.
+$account = $registration["account"];
+$sent = false;
+if (!is_null($account) && !is_null($registration["token"])) {
+	$sent = $registration["created"]
+		? mail_send_verify_email($account["name"], $account["email1"], $registration["token"])
+		: mail_send_account_exists($account["name"], $account["email1"], $registration["token"]);
 }
 
-log_context(["uid" => intval($new_account_no)]);
-log_event("account.registered", ["nfp" => $nfp_method]);
-
-http_data(201, [
-	"userId" => $new_account_no,
-	"email" => $body["email"],
-	"name" => $first_name,
-	"welcomeEmailSent" => mail_send_welcome($first_name, $body["email"], $password),
-]);
+http_data(202, ["sent" => $sent]);

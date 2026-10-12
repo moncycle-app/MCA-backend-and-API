@@ -25,8 +25,14 @@ CREATE TABLE `user_account` (
   `register_comment` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
   `last_write_client_UTC` timestamp NULL DEFAULT NULL,
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
+  `email_verified_at` timestamp NULL DEFAULT NULL,
+  `email_token_hash` char(64) COLLATE utf8mb4_bin DEFAULT NULL,
+  `email_token_purpose` tinyint(1) unsigned DEFAULT NULL,
+  `email_token_expires_at` timestamp NULL DEFAULT NULL,
+  `email_token_new_email` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
   PRIMARY KEY (`no_user_account`),
-  UNIQUE KEY `email1` (`email1`)
+  UNIQUE KEY `email1` (`email1`),
+  UNIQUE KEY `email_token_hash` (`email_token_hash`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `day_timeline` (

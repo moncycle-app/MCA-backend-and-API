@@ -38,6 +38,16 @@ function sec_hash($text) {
 	return password_hash($text, PASSWORD_BCRYPT);
 }
 
+// What is wrong with a password a client chose, as [error code, message] for a 422, or null when it can be used. One rule for the
+// sign-up, the reset by link and the change from the account page. bcrypt cannot hash a password holding a null byte (PHP throws) and
+// reads 72 bytes only: a longer one is refused rather than half kept.
+function sec_password_problem(string $password): ?array {
+	if (strlen($password) < PASSWORD_MIN_LENGTH) return ["password_too_short", "New password is too short (minimum " . PASSWORD_MIN_LENGTH . " characters)."];
+	if (strlen($password) > PASSWORD_MAX_BYTES) return ["password_too_long", "New password is too long (maximum " . PASSWORD_MAX_BYTES . " bytes)."];
+	if (str_contains($password, "\0")) return ["password_invalid", "New password must not contain a null character."];
+	return null;
+}
+
 // fast, non-salted hash used to store/look up auth tokens: unlike sec_hash(), it must be
 // deterministic so a token can be matched with a plain `WHERE = :hash` query. Safe here
 // because the token itself already carries 256 chars of entropy (see sec_random_password).
@@ -469,7 +479,7 @@ function sec_login($db, array $body, array $token_options = []): array {
 	if (empty($body["email"]) || empty($body["password"])) return $counted(400, "missing_credentials", "'email' and 'password' are required.");
 
 	// the account, the password, the code: what a login is once the captcha (if it is asked) is passed
-	$check_credentials = function () use ($db, $body, $token_options, $meta, $counted, &$user_account, &$account_locked, &$attempt) {
+	$check_credentials = function () use ($db, $body, $token_options, $meta, $counted, $refuse, &$user_account, &$account_locked, &$attempt) {
 		if (isset($user_account["user_enabled"]) && !sec_account_enabled($user_account)) return $counted(403, "account_disabled", "Account deactivated.");
 
 		// an address with no account is checked against a hash nobody can match, for the time a check takes
@@ -482,6 +492,13 @@ function sec_login($db, array $body, array $token_options = []): array {
 			return $account_locked
 				? $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true)
 				: $counted(401, "invalid_credentials", "Incorrect password or non-existent account.", true);
+		}
+
+		// An address nobody proved yet: said only to whoever knows the password, so that a sign-in tells nothing about an account it
+		// cannot open. The credentials were right, so it is no failure: nothing is counted, the attempt is given back.
+		if (is_null($user_account["email_verified_at"])) {
+			sec_attempt_release($db, $attempt);
+			return $refuse(403, "email_not_verified", "Verify your email address first: the link was sent to it when the account was created.", $meta);
 		}
 
 		$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
@@ -502,7 +519,7 @@ function sec_login($db, array $body, array $token_options = []): array {
 
 		// the failures this login ends, read before sec_auth_success() resets them
 		$attempts = sec_login_effective_attempts($user_account);
-		unset($user_account["password"], $user_account["totp_secret"]);
+		unset($user_account["password"], $user_account["totp_secret"], $user_account["email_token_hash"]);
 		$session = sec_auth_success($db, $user_account, $token_options);
 		sec_attempt_release($db, $attempt);
 		log_event("auth.login_succeeded", [

@@ -12,9 +12,10 @@ use PHPMailer\PHPMailer\PHPMailer;
 require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/log.php";
 
-// Sends one mail from the app. $kind says which of the seven it is (welcome, new_password, secondary_email,
-// new_login, cycle, reminder, deletion_warning); it is all the log keeps of it, with how many addresses and files:
-// never an address, a subject or a body (two of them hold a password). $to lists the addresses
+// Sends one mail from the app. $kind says which of the thirteen it is (verify_email, account_exists, reset_password,
+// password_changed, confirm_email, email_change_requested, email_change_taken, email_changed, secondary_email, new_login, cycle,
+// reminder, deletion_warning); it is all the log keeps of it, with how many addresses and files: never an address, a subject or a
+// body (several of them hold a link that opens an account). $to lists the addresses
 // (empty ones are skipped), $attachments is [file name => content]. True when the SMTP server took
 // it: the callers decide what a failure means, so nothing is thrown.
 function mail_send(string $kind, array $to, string $subject, string $html, string $text, array $attachments = []): bool {
@@ -77,38 +78,170 @@ function mail_why(string $because): string {
 
 // a link to a page of the app with the address filled in
 function mail_link(string $email, string $page, string $text): string {
-	return "<a style='color: #1e824c' href='" . APP_URL . $page . "?email1=" . urlencode($email) . "'>" . $text . "</a>";
+	return "<a style='color: #1e824c' href='" . rtrim(APP_URL, "/") . "/" . $page . "?email1=" . urlencode($email) . "'>" . $text . "</a>";
 }
 
-function mail_send_welcome(string $name, string $email, string $password): bool {
+// The address of a link that uses the slot of an account (lib/email_token.php): a page of the app (APP_URL), the purpose and the token in
+// the fragment, which no server, log or Referer ever sees.
+function mail_token_url(int $purpose, string $token): string {
+	return rtrim(APP_URL, "/") . "/email_token#purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
+}
+
+// The link in full, as its own text: shown that way it can be copied whole from any mail reader, whatever it does to a link with another
+// text in it. It breaks anywhere when it is too long for the line (word-break), and is meant to stand on a line of its own.
+function mail_token_link(int $purpose, string $token): string {
+	$url = htmlspecialchars(mail_token_url($purpose, $token));
+	return "<a style='color: #1e824c; word-break: break-all' href='{$url}'>{$url}</a>";
+}
+
+// how long a link lives, as the mails say it: "3 jours", "1 heure"
+function mail_token_lifetime(int $purpose): string {
+	$minutes = EMAIL_TOKEN_LIFETIME_MINUTES[$purpose];
+	if ($minutes % 1440 === 0) return ($minutes / 1440) . ($minutes > 1440 ? " jours" : " jour");
+	if ($minutes % 60 === 0) return ($minutes / 60) . ($minutes > 60 ? " heures" : " heure");
+	return $minutes . " minutes";
+}
+
+// The mail of a new account: the link that proves the address. Until it is used the account cannot be signed in to, and the cron
+// erases it after ACCOUNT_UNVERIFIED_DELETE_DAYS days.
+function mail_send_verify_email(string $name, string $email, string $token): bool {
 	$name = htmlspecialchars($name);
-	$login = mail_link($email, "auth", "connectez-vous");
+	$purpose = EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL;
+	$link = mail_token_link($purpose, $token);
+	$days = ACCOUNT_UNVERIFIED_DELETE_DAYS;
 	$content = <<<HTML
 	Bienvenue sur MONCYCLE.APP!<br />
 	<br />
-	Voici votre mot de passe temporaire: <b style='font-family: monospace;'>{$password}</b><br />
-	Ce mot de passe est à changer dans la page "👨‍💻 Mon compte". Pour protéger vos données, pensez à activer l'authentification multifacteur.<br />
+	Pour activer votre compte, confirmez votre adresse e-mail en ouvrant ce lien:<br />
+	{$link}<br />
 	<br />
-	{$login}<br />
+	Ce lien est valable {$days} jours. Sans confirmation, le compte est supprimé.<br />
+	<br />
+	Une fois connecté, pensez à activer l'authentification multifacteur pour protéger vos données.<br />
 	<br />
 	HTML;
-	return mail_send('welcome', [$email], 'Bienvenue et mot de passe',
-		mail_html("Bonjour {$name},", $content, mail_why("vous avez créé un compte sur MONCYCLE.APP")),
-		'Bienvenue sur MONCYCLE.APP! Votre mot de passe: ' . $password);
+	return mail_send('verify_email', [$email], 'Confirmez votre adresse e-mail',
+		mail_html("Bonjour {$name},", $content, mail_why("un compte a été créé sur MONCYCLE.APP avec cette adresse")),
+		"Bienvenue sur MONCYCLE.APP!\n\nPour activer votre compte, confirmez votre adresse e-mail en ouvrant ce lien:\n" . mail_token_url($purpose, $token));
 }
 
-function mail_send_new_password(string $email, string $password): bool {
-	$login = mail_link($email, "auth", "connectez-vous");
+// The answer to a sign-up with an address that already has an account: no account is made, and the owner may choose a new password.
+function mail_send_account_exists(string $name, string $email, string $token): bool {
+	$name = htmlspecialchars($name);
+	$purpose = EMAIL_TOKEN_PURPOSE_RESET_PASSWORD;
+	$link = mail_token_link($purpose, $token);
+	$lifetime = mail_token_lifetime($purpose);
 	$content = <<<HTML
-	Voici un nouveau mot de passe temporaire: <b style='font-family: monospace;'>{$password}</b><br />
-	Ce mot de passe est à changer dans la page "👨‍💻 Mon compte".<br />
+	Quelqu'un vient de demander la création d'un compte avec cette adresse, mais vous en avez déjà un.<br />
 	<br />
-	{$login}<br />
+	Si c'est vous et que vous avez perdu votre mot de passe, vous pouvez en choisir un nouveau en ouvrant ce lien (valable {$lifetime}):<br />
+	{$link}<br />
+	<br />
+	Sinon, ignorez ce message: votre compte et votre mot de passe n'ont pas changé.<br />
 	<br />
 	HTML;
-	return mail_send('new_password', [$email], 'Nouveau mot de passe',
+	return mail_send('account_exists', [$email], 'Vous avez déjà un compte',
+		mail_html("Bonjour {$name},", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
+		"Vous avez déjà un compte sur MONCYCLE.APP.\n\nPour choisir un nouveau mot de passe, ouvrez ce lien:\n" . mail_token_url($purpose, $token));
+}
+
+// The link that lets the owner choose a new password. The password in use stays valid until the link is used.
+function mail_send_reset_password(string $name, string $email, string $token): bool {
+	$name = htmlspecialchars($name);
+	$purpose = EMAIL_TOKEN_PURPOSE_RESET_PASSWORD;
+	$link = mail_token_link($purpose, $token);
+	$lifetime = mail_token_lifetime($purpose);
+	$content = <<<HTML
+	Vous avez demandé à changer votre mot de passe. Pour en choisir un nouveau, ouvrez ce lien:<br />
+	{$link}<br />
+	<br />
+	Ce lien est valable {$lifetime} et ne peut servir qu'une fois.<br />
+	<br />
+	Si ce n'est pas vous, ignorez ce message: votre mot de passe n'a pas changé.<br />
+	<br />
+	HTML;
+	return mail_send('reset_password', [$email], 'Choisissez un nouveau mot de passe',
+		mail_html("Bonjour {$name},", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
+		"Pour choisir un nouveau mot de passe, ouvrez ce lien:\n" . mail_token_url($purpose, $token));
+}
+
+// The notice that the password was just replaced (by a link, not from the account page): the sessions already open stay open, so this
+// mail is how the owner learns of it.
+function mail_send_password_changed(string $email, string $name): bool {
+	$name = htmlspecialchars($name);
+	$login = mail_link($email, "auth", "connectez-vous");
+	$content = <<<HTML
+	Le mot de passe de votre compte vient d'être changé.<br />
+	<br />
+	Si ce n'est pas vous, {$login}, changez votre mot de passe depuis la page "👨‍💻 Mon compte" et déconnectez vos autres appareils.<br />
+	<br />
+	HTML;
+	return mail_send('password_changed', [$email], 'Votre mot de passe a changé',
+		mail_html("Bonjour {$name},", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
+		'Le mot de passe de votre compte moncycle.app vient d\'être changé. Si ce n\'est pas vous, changez-le et déconnectez vos autres appareils.');
+}
+
+// The link that proves a new primary address: it goes to that address, and the change happens when it is used.
+function mail_send_confirm_email(string $email, string $name, string $token): bool {
+	$name = htmlspecialchars($name);
+	$purpose = EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL;
+	$link = mail_token_link($purpose, $token);
+	$lifetime = mail_token_lifetime($purpose);
+	$content = <<<HTML
+	Le compte de {$name} sur MONCYCLE.APP va utiliser cette adresse pour se connecter et recevoir ses cycles.<br />
+	<br />
+	Pour le confirmer, ouvrez ce lien (valable {$lifetime}):<br />
+	{$link}<br />
+	<br />
+	Sinon, ignorez ce message: rien ne sera changé.<br />
+	<br />
+	HTML;
+	return mail_send('confirm_email', [$email], 'Confirmez votre nouvelle adresse e-mail',
+		mail_html("Bonjour,", $content, mail_why("quelqu'un a demandé à utiliser cette adresse pour un compte MONCYCLE.APP")),
+		"Pour confirmer cette adresse comme adresse de connexion de votre compte moncycle.app, ouvrez ce lien:\n" . mail_token_url($purpose, $token));
+}
+
+// The notice to the current address that a change to $new_email was asked for. It happens only once the new address is confirmed.
+function mail_send_email_change_requested(string $email, string $new_email, string $name): bool {
+	$name = htmlspecialchars($name);
+	$new = htmlspecialchars($new_email);
+	$content = <<<HTML
+	Le changement de l'adresse de connexion de votre compte vers <b>{$new}</b> a été demandé. Il ne sera effectif qu'une fois la nouvelle adresse confirmée.<br />
+	<br />
+	Si ce n'est pas vous, demandez un nouveau mot de passe avec « mot de passe perdu » sur la page de connexion: cela annule la demande. Changez ensuite votre mot de passe.<br />
+	<br />
+	HTML;
+	return mail_send('email_change_requested', [$email], 'Changement de votre adresse de connexion demandé',
+		mail_html("Bonjour {$name},", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
+		'Le changement de votre adresse de connexion vers ' . $new_email . ' a été demandé. Si ce n\'est pas vous, utilisez « mot de passe perdu » pour l\'annuler.');
+}
+
+// To an address that already has an account, when someone asks to use it for another one: nothing is changed, and nobody is told which.
+function mail_send_email_change_taken(string $email): bool {
+	$content = <<<HTML
+	Quelqu'un a demandé à utiliser cette adresse comme adresse de connexion d'un autre compte, mais elle est déjà celle de votre compte.<br />
+	<br />
+	Rien n'a été modifié. Si ce n'est pas vous, ignorez ce message.<br />
+	<br />
+	HTML;
+	return mail_send('email_change_taken', [$email], 'Cette adresse est déjà utilisée',
 		mail_html("Bonjour,", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
-		'Nouveau mot de passe temporaire: ' . $password);
+		'Quelqu\'un a demandé à utiliser cette adresse pour un autre compte, mais elle est déjà celle de votre compte. Rien n\'a changé.');
+}
+
+// The notice, to the address the account just left, that the sign-in address is now $new_email.
+function mail_send_email_changed(string $email, string $new_email, string $name): bool {
+	$name = htmlspecialchars($name);
+	$new = htmlspecialchars($new_email);
+	$content = <<<HTML
+	L'adresse de connexion de votre compte est maintenant <b>{$new}</b>. Cette adresse-ci ne reçoit plus rien de votre compte.<br />
+	<br />
+	Si ce n'est pas vous, quelqu'un d'autre utilise votre compte: contactez-nous depuis <a style='color: #1e824c' href='https://www.moncycle.app'>moncycle.app</a>.<br />
+	<br />
+	HTML;
+	return mail_send('email_changed', [$email], 'L\'adresse de votre compte a changé',
+		mail_html("Bonjour {$name},", $content, mail_why("vous possédiez un compte sur MONCYCLE.APP avec cette adresse")),
+		'L\'adresse de connexion de votre compte moncycle.app est maintenant ' . $new_email . '.');
 }
 
 // The notice to the account's own address that its secondary address changed ("" = removed): the secondary
@@ -130,12 +263,14 @@ function mail_send_secondary_email_changed(string $email, string $new_email2): b
 // The notice to the account's own address that a token was made: every login makes one, a browser's session or a custom token
 // (POST /api/token). Whoever holds the password can make a custom token that outlives the session it was made from, and a
 // stolen password is first used as a login: the owner must be able to see both. The name and the user agent are the client's own
-// words (escaped); no address in it, a mail crosses servers in clear. $expires_at is the "Y-m-d H:i:s" UTC the token dies on, null
-// when the 40 days unused / 1 year rule applies.
-function mail_send_new_login(array $account, string $name, string $scope, ?string $user_agent, ?string $expires_at): bool {
+// words (escaped); no address in it, a mail crosses servers in clear. $prefix is the first characters of the token (not a secret: the
+// account page shows it), so the owner can tell which line of the list of connections this mail is about. $expires_at is the
+// "Y-m-d H:i:s" UTC the token dies on, null when the 40 days unused / 1 year rule applies.
+function mail_send_new_login(array $account, string $name, string $prefix, string $scope, ?string $user_agent, ?string $expires_at): bool {
 	$email = $account["email1"];
 	$account_name = htmlspecialchars($account["name"]);
 	$token_name = htmlspecialchars($name);
+	$token_prefix = htmlspecialchars($prefix);
 	$agent = is_null($user_agent) ? "inconnu" : htmlspecialchars(mb_substr($user_agent, 0, MAIL_USER_AGENT_CHARS));
 	$access = $scope === "readOnly" ? "lecture seule" : "lecture et écriture";
 	$until = is_null($expires_at) ? "" : "<br />Valable jusqu'au <b>" . gmdate("d/m/Y", strtotime($expires_at . " UTC")) . "</b>";
@@ -144,6 +279,7 @@ function mail_send_new_login(array $account, string $name, string $scope, ?strin
 	Une nouvelle connexion à votre compte vient d'avoir lieu.<br />
 	<br />
 	Nom: <b>{$token_name}</b><br />
+	Début du jeton: <b><code>{$token_prefix}</code></b><br />
 	Accès: {$access}{$until}<br />
 	Navigateur ou application: {$agent}<br />
 	<br />
@@ -152,7 +288,7 @@ function mail_send_new_login(array $account, string $name, string $scope, ?strin
 	HTML;
 	return mail_send('new_login', [$email], 'Nouvelle connexion à votre compte',
 		mail_html("Bonjour {$account_name},", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
-		"Une nouvelle connexion à votre compte moncycle.app vient d'avoir lieu ($name). Si ce n'est pas vous, changez votre mot de passe.");
+		"Une nouvelle connexion à votre compte moncycle.app vient d'avoir lieu ($name, début du jeton {$prefix}). Si ce n'est pas vous, changez votre mot de passe.");
 }
 
 // ---------------------------------------------------------------------------

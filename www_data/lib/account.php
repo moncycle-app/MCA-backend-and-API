@@ -13,7 +13,9 @@
 require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/email_token.php";
 require_once __DIR__ . "/http.php";
+require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/sec.php";
 
 // ---------------------------------------------------------------------------
@@ -62,31 +64,84 @@ function account_password_matches($db, array $user_account, mixed $password): bo
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/recover_password
+// POST /api/register, POST /api/recover_password
 // ---------------------------------------------------------------------------
 
-// Replaces the password of the account at $email with a new one, if the captcha of the request (purpose "recover") is
-// good. Answers ["captcha" => the verdict of captcha_verify(), "account" => the row or null, "password" => the new
-// password in the clear, or null when nothing was changed]. The mail is the caller's, and goes after this returns: the
-// new password is committed by then.
-// The captcha is tied to the stored password hash. The account is held from the check to the update, and the check is
-// made on what it holds now, so of requests that arrive together with one token the first changes the password and the
-// others no longer match: one reset per token. An address with no account is only checked (the same verdict, and no
-// way to tell from the outside).
+// Signs an address up: a new account that cannot be used until the address is proved, and the link that proves it. $new holds the
+// checked fields: first_name, email, password, birth_year, nfp_method, comment, research. An address that already has an account
+// (proved or not) is left exactly as it is, whatever the request says: its owner gets a link to choose a new password instead, so
+// nothing a stranger types can reach an account, and the answer is the same either way.
+// Answers ["captcha" => the verdict of captcha_verify(), "account" => ["no_user_account", "name", "email1"] or null, "token" => the
+// token for the mail or null, "created" => whether a new account was made]. The mail is the caller's, and goes after this returns.
+// The captcha is checked first (a refused one costs no hash), and again under the lock of an account that already exists: of requests
+// that arrive together with one token the first makes the link and the others find the account moved, one mail per captcha.
+function account_register($db, array $new, mixed $captcha_token, mixed $captcha_answer, string $ip): array {
+	$verdict = captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
+	if ($verdict !== "ok") return ["captcha" => $verdict, "account" => null, "token" => null, "created" => false];
+
+	// an address that has an account costs the same as one that has not
+	$password_hash = sec_hash($new["password"]);
+
+	// An insert that finds the address taken (a second registration of it sent at the same time as the first) keeps a share lock on
+	// the key until its transaction ends: two such requests that then asked for the row would each wait for the other's lock, and
+	// MariaDB would kill one (a deadlock, a 500). So that transaction ends there, with nothing written, and the request goes round
+	// once more as a request for an address that has an account, which holds the row by its id.
+	for ($round = 0; $round < 2; $round++) {
+		// read before the transaction begins, like account_recover_password(): a transaction's plain reads show the rows as they were
+		// at its first one, and the captcha is checked again under the lock, on what the account holds by then
+		$existing = db_select_user_account_by_email($db, $new["email"]);
+
+		$registered = db_transaction($db, function () use ($db, $new, $password_hash, $captcha_token, $captcha_answer, $ip, $existing) {
+			if (is_null($existing)) {
+				$no_user_account = db_insert_user_account(
+					$db, $new["first_name"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"]
+				);
+				if (is_null($no_user_account)) return null;   // taken since the read
+
+				log_context(["uid" => intval($no_user_account)]);
+				log_event("account.registered", ["nfp" => $new["nfp_method"]]);
+				return [
+					"captcha" => "ok", "created" => true, "account" => ["no_user_account" => $no_user_account, "name" => $new["first_name"], "email1" => $new["email"]],
+					"token" => email_token_issue($db, intval($no_user_account), EMAIL_TOKEN_PURPOSE_VERIFY_EMAIL),
+				];
+			}
+
+			db_select_user_account_for_update($db, $existing["no_user_account"]);
+			$verdict = captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
+			if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $existing, "token" => null, "created" => false];
+
+			log_context(["uid" => intval($existing["no_user_account"])]);
+			log_event("account.refused", ["act" => "register", "err" => "account_exists"]);
+			return [
+				"captcha" => "ok", "created" => false, "account" => $existing,
+				"token" => email_token_issue($db, intval($existing["no_user_account"]), EMAIL_TOKEN_PURPOSE_RESET_PASSWORD),
+			];
+		});
+		if (!is_null($registered)) return $registered;
+	}
+
+	return ["captcha" => "ok", "account" => null, "token" => null, "created" => false];   // taken and erased in turn: nothing to say
+}
+
+// Makes the link that lets the owner of the address at $email choose a new password, if the captcha of the request (purpose
+// "recover") is good. Nothing is changed but the account's slot: the password stays what it is until the link is used. Answers
+// ["captcha" => the verdict of captcha_verify(), "account" => the row or null, "token" => the token for the mail, or null when no
+// link was made]. The mail is the caller's, and goes after this returns: the link is committed by then.
+// The captcha is tied to the password and the pending link. The account is held from the check to the new link, and the check is
+// made on what it holds now, so of requests that arrive together with one token the first makes a link and the others no longer
+// match: one mail per token. An address with no account is only checked (the same verdict, and no way to tell from the outside).
 function account_recover_password($db, string $email, mixed $token, mixed $answer, string $ip): array {
 	$account = db_select_user_account_by_email($db, $email);
 	if (is_null($account)) {
-		return ["captcha" => captcha_verify($db, "recover", $email, $token, $answer, $ip), "account" => null, "password" => null];
+		return ["captcha" => captcha_verify($db, "recover", $email, $token, $answer, $ip), "account" => null, "token" => null];
 	}
 
 	return db_transaction($db, function () use ($db, $email, $token, $answer, $ip, $account) {
 		db_select_user_account_for_update($db, $account["no_user_account"]);
 		$verdict = captcha_verify($db, "recover", $email, $token, $answer, $ip);
-		if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $account, "password" => null];
+		if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $account, "token" => null];
 
-		$password = sec_random_password();
-		db_update_password_by_email($db, sec_hash($password), $email);
-		return ["captcha" => $verdict, "account" => $account, "password" => $password];
+		return ["captcha" => $verdict, "account" => $account, "token" => email_token_issue($db, intval($account["no_user_account"]), EMAIL_TOKEN_PURPOSE_RESET_PASSWORD)];
 	});
 }
 

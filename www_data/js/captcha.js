@@ -17,6 +17,9 @@ var moncycle_captcha = (function () {
 	const JPEG_DATA_URI = /^data:image\/jpeg;base64,[A-Za-z0-9+\/]+={0,2}$/;
 	const TOKEN = /^[0-9]{1,12}\.[0-9a-f]{64}$/;
 	const TYPING_PAUSE_MS = 500;
+	// An address worth asking a picture for: the browser's own check lets "marie@example" through, the server does not (a dot is
+	// needed in the domain), and asking for a picture of an address that is still being typed would only draw an error.
+	const COMPLETE_ADDRESS = /@[^@]*\.[^@.]+$/;
 
 	const load_errors = {
 		captcha_unavailable: "Le captcha est indisponible pour le moment, réessayez plus tard.",
@@ -29,7 +32,8 @@ var moncycle_captcha = (function () {
 	//   image    the <img> that shows the picture      token  the hidden input that holds the token
 	//   answer   the text input the visitor types in
 	//   active   (optional) a function: false while this captcha is not asked for (the sign-in form before an account needs one)
-	//   error    (optional) a function(message) told why a picture could not be loaded
+	//   error    (optional) a function(message) told why a picture could not be loaded, and called with "" when there is nothing more
+	//            to say (a picture loaded, or an address that is not complete): see message_in()
 	// It answers {reload(force), clear()}: reload() asks for a new challenge if the address is a valid one and differs from the
 	// one the picture was made for, reload(true) asks anyway (after an error, or a click on the picture).
 	function attach(options) {
@@ -49,8 +53,9 @@ var moncycle_captcha = (function () {
 			window.clearTimeout(timer);
 			const field = options.email[0];
 			const email = options.email.val().trim();
-			if ((options.active && !options.active()) || email === "" || !field.checkValidity()) {
+			if ((options.active && !options.active()) || email === "" || !field.checkValidity() || !COMPLETE_ADDRESS.test(email)) {
 				clear();
+				if (options.error) options.error("");
 				return;
 			}
 			if (!force && email === loaded_for) return;
@@ -69,6 +74,7 @@ var moncycle_captcha = (function () {
 					if (options.error) options.error("Le captcha n'a pas pu être chargé.");
 					return;
 				}
+				if (options.error) options.error("");
 				loaded_for = email;
 				options.image.attr("src", data.image).prop("hidden", false);
 				options.token.val(data.token);
@@ -77,7 +83,8 @@ var moncycle_captcha = (function () {
 				if (mine !== requested) return;
 				clear();
 				const code = ((jqXHR.responseJSON || {}).error || {}).code;
-				if (options.error) options.error(load_errors[code] || "Le captcha n'a pas pu être chargé.");
+				// an address the server finds incomplete is not a failure of the captcha: there is just no picture yet
+				if (options.error) options.error(code === "invalid_email" ? "" : load_errors[code] || "Le captcha n'a pas pu être chargé.");
 			});
 		};
 
@@ -92,5 +99,21 @@ var moncycle_captcha = (function () {
 		return {reload: reload, clear: clear};
 	}
 
-	return {attach: attach};
+	// The `error` option for a form that has a place for the message: it writes the message in `element` (as text, never as HTML), and
+	// an empty message takes it off again, but only if it is still the one written here (a refusal of the form itself that came since
+	// is left alone).
+	function message_in(element) {
+		let mine = "";
+		return function (message) {
+			if (message === "") {
+				if (mine !== "" && element.text() === mine) element.text("");
+				mine = "";
+				return;
+			}
+			mine = message;
+			element.text(message);
+		};
+	}
+
+	return {attach: attach, message_in: message_in};
 })();

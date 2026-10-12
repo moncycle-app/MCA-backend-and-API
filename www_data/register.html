@@ -45,11 +45,11 @@
 		<div class="contennu vert" id="register_ok" style="display:none">
 			<center>
 				<br /><br />
-				<b>Félicitation <span id="success_name"></span>! 🍾🥂</b><br />
-				Vous avez maintenant une application pour suivre votre cycle.
-				<br /><br /><br />
-				Votre mot de passe a été envoyé à l'addresse : <b><span id="success_email"></span></b><br />
-				Pensez bien à le changer dans la rubrique <b>mon compte</b> une fois connecté.
+				<b>Presque terminé! 📧</b><br />
+				Un e-mail a été envoyé à l'adresse : <b><span id="success_email"></span></b>
+				<br /><br />
+				Cliquez sur le lien qu'il contient pour confirmer votre adresse et activer votre compte, puis connectez-vous avec le mot de passe que vous venez de choisir.<br />
+				<span class="label_info">Pas de message? Regardez dans vos courriers indésirables. Si vous aviez déjà un compte avec cette adresse, le message contient un lien pour choisir un nouveau mot de passe.</span>
 			</center>
 		</div>
 		<div class="contennu" id="register_form">
@@ -71,6 +71,13 @@
 			<br />
 			<label for="i_email1_conf">Confirmer (re-saisir) votre e-mail:</label><br />
 			<input name="email1_conf" id="i_email1_conf" type="email" maxlength="255" required placeholder="Entrer une 2ème fois votre adresse mail." /><br />
+			<br />
+			<label for="i_password">Mot de passe:</label><br />
+			<input name="password" id="i_password" type="password" autocomplete="new-password" minlength="10" maxlength="72" required placeholder="Choisir un mot de passe." /><br />
+			<span class="label_info">Au moins 10 caractères (72 au plus). Un mot de passe que vous n'utilisez nulle part ailleurs.</span><br />
+			<br />
+			<label for="i_password_conf">Confirmer (re-saisir) votre mot de passe:</label><br />
+			<input name="password_conf" id="i_password_conf" type="password" autocomplete="new-password" minlength="10" maxlength="72" required placeholder="Entrer une 2ème fois le mot de passe." /><br />
 			<br />
 			<label for="i_anaissance">Année de naissance:</label><br />
 			<select name="birth_year" id="i_anaissance" required placeholder="">

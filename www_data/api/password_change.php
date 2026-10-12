@@ -30,13 +30,9 @@ $logout_other_devices = ($body["logoutOtherDevices"] ?? false) === true;
 
 $user_account = db_select_user_account_by_email($db, $user_account["email1"]) ?? [];
 
-if (strlen($body["newPassword"]) < PASSWORD_MIN_LENGTH) {
-	http_error(422, "password_too_short", "New password is too short (minimum " . PASSWORD_MIN_LENGTH . " characters).");
-}
-
-// bcrypt cannot hash a password holding a null byte (PHP throws)
-if (str_contains($body["newPassword"], "\0")) {
-	http_error(422, "password_invalid", "New password must not contain a null character.");
+$problem = sec_password_problem($body["newPassword"]);
+if (!is_null($problem)) {
+	http_error(422, $problem[0], $problem[1]);
 }
 
 if (isset($user_account["password"]) && password_verify($body["newPassword"], $user_account["password"])) {
@@ -50,6 +46,8 @@ if (!isset($user_account["password"]) || !password_verify($body["oldPassword"], 
 
 $logged_out_devices = db_transaction($db, function () use ($db, $body, $user_account, $no_auth_token, $logout_other_devices) {
 	db_update_password($db, sec_hash($body["newPassword"]), $user_account["no_user_account"]);
+	// a link to choose a password, still in the mailbox, is no use any more; a pending change of address is left alone
+	db_update_user_account_email_token_clear($db, $user_account["no_user_account"], EMAIL_TOKEN_PURPOSE_RESET_PASSWORD);
 	return $logout_other_devices ? db_delete_auth_tokens_other($db, $user_account["no_user_account"], $no_auth_token) : 0;
 });
 

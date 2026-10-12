@@ -56,17 +56,15 @@ function captcha_ip_scope(string $ip): string {
 
 // What the token is tied to besides the visitor and the phrase, read from the account at $email (the same read whether
 // it exists or not, so that issuing a challenge tells nothing about it):
-//   register: "" (the unique key of the address decides who gets it)
-//   recover:  the SHA-256 of the stored password hash (a reset, or any other change of the password, ends the token)
+//   register, recover: the SHA-256 of the stored password hash and of the link pending in the account's slot (a link made, used or
+//             replaced, or any change of the password, ends the token: one mail per captcha, whether the address has an account or not)
 //   login:    "nb_connection_attempts:last_failed_attempt" as stored (a failed login, or a success, ends the token)
 // "" for an address with no account.
 function captcha_state($db, string $purpose, string $email): string {
-	if ($purpose === "register") return "";
-
 	$account = db_select_user_account_by_email($db, $email);
 	if (is_null($account)) return "";
-	if ($purpose === "recover") return hash("sha256", $account["password"]);
-	return $account["nb_connection_attempts"] . ":" . $account["last_failed_attempt"];
+	if ($purpose === "login") return $account["nb_connection_attempts"] . ":" . $account["last_failed_attempt"];
+	return hash("sha256", $account["password"] . "|" . ($account["email_token_hash"] ?? ""));
 }
 
 // The MAC (64 hex characters) of a challenge. The phrase is normalised here, so that the one made at issue and the
