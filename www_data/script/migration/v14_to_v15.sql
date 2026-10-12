@@ -176,3 +176,11 @@ UPDATE `auth_token`
 SET `user_agent` = NULLIF(TRIM(SUBSTRING(`name`, LOCATE(' | ', `name`) + 3)), ''), `name` = 'Session'
 WHERE LOCATE(' | ', `name`) > 0;
 UPDATE `auth_token` SET `contry_code` = NULL;
+
+-- The first 5 characters of the token as its client holds it (GET /api/token shows them, DELETE /api/token names a token by them),
+-- unique per account. A NULL is allowed by the key: v14_to_v15.php fills them while it hashes the tokens, the only moment the
+-- plain tokens are still here.
+ALTER TABLE `auth_token`
+ADD `auth_token_prefix` varchar(5) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL AFTER `auth_token_str`,
+ADD UNIQUE `unique_user_account_and_prefix` (`no_user_account`, `auth_token_prefix`),
+ALGORITHM=INPLACE, LOCK=NONE;

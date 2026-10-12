@@ -229,53 +229,60 @@
 			</form>
 			<br /><br /><br />
 
-			<h3>Créer un jeton d'accès</h3>
+			<h2>Créer un jeton d'accès</h2>
 			<p>
 				Un jeton permet à une application ou à un script d'accéder à votre compte sans votre mot de passe, en l'envoyant dans l'en-tête
 				<code>Authorization: Bearer</code>. Il est affiché <b>une seule fois</b>, à la création. Choisissez « lecture seule » pour un script qui ne fait
 				que lire vos données. Pour créer un jeton, confirmez avec votre mot de passe.
 			</p>
-			<form id="f_token_create" action="api/token" method="post"><br />
+			<form id="f_token_create" action="api/token" method="post">
 				<input type="hidden" name="email" id="i_token_new_email" value="" />
 				<input type="hidden" name="cookie" value="false" />
-				<label for="i_token_new_name">Nom:</label><br />
-				<input type="text" id="i_token_new_name" name="name" maxlength="256" required placeholder="par exemple: script de sauvegarde" /><br />
-				<br />
-				<label for="i_token_new_scope">Accès:</label><br />
-				<select id="i_token_new_scope" name="scope" style="width: auto">
-					<option value="readOnly">lecture seule</option>
-					<option value="readWrite">lecture et écriture</option>
-				</select><br />
-				<br />
-				<label for="i_token_new_days">Valable:</label><br />
-				<select id="i_token_new_days" name="expiresInDays" style="width: auto">
-					<option value="30">30 jours</option>
-					<option value="90">90 jours</option>
-					<option value="365">1 an</option>
-				</select><br />
-				<br />
-				<label for="i_token_new_password">Mot de passe:</label><br />
-				<input type="password" id="i_token_new_password" name="password" autocomplete="current-password" required placeholder="mot de passe moncycle.app" /><br />
-				<br />
-				<div id="token_new_code_wrapper" style="display:none">
-					<label for="i_token_new_code">Code:</label><br />
-					<input type="number" id="i_token_new_code" name="code" placeholder="authentification multifacteur" /><br />
-					<br />
+				<div class="field">
+					<label for="i_token_new_name">Nom:</label>
+					<input type="text" id="i_token_new_name" name="name" maxlength="256" required placeholder="par exemple: script de sauvegarde" />
 				</div>
-				<div id="token_new_captcha_wrapper" style="display:none">
-					<label for="i_token_new_captcha">Captcha:</label><br />
-					<input name="captcha" id="i_token_new_captcha" type="text" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." /><br />
+				<div class="field_row">
+					<div class="field">
+						<label for="i_token_new_scope">Accès:</label>
+						<select id="i_token_new_scope" name="scope">
+							<option value="readOnly">lecture seule</option>
+							<option value="readWrite">lecture et écriture</option>
+						</select>
+					</div>
+					<div class="field">
+						<label for="i_token_new_days">Valable:</label>
+						<select id="i_token_new_days" name="expiresInDays">
+							<option value="30">30 jours</option>
+							<option value="90">90 jours</option>
+							<option value="365">1 an</option>
+						</select>
+					</div>
+				</div>
+				<div class="field">
+					<label for="i_token_new_password">Mot de passe:</label>
+					<input type="password" id="i_token_new_password" name="password" autocomplete="current-password" required placeholder="mot de passe moncycle.app" />
+				</div>
+				<div class="field" id="token_new_code_wrapper" style="display:none">
+					<label for="i_token_new_code">Code:</label>
+					<input type="number" id="i_token_new_code" name="code" placeholder="authentification multifacteur" />
+				</div>
+				<div class="field" id="token_new_captcha_wrapper" style="display:none">
+					<label for="i_token_new_captcha">Captcha:</label>
+					<input name="captcha" id="i_token_new_captcha" type="text" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." />
 					<img class="captcha" id="i_token_new_captcha_img" hidden title="Cliquer pour obtenir une autre image" alt="captcha" />
-					<input type="hidden" name="captchaToken" id="i_token_new_captcha_token" value="" /><br />
-					<br />
+					<input type="hidden" name="captchaToken" id="i_token_new_captcha_token" value="" />
 				</div>
 				<input type="submit" id="but_token_create" value="🔑 Créer le jeton" />
 			</form>
 			<span class="rouge" id="token_new_err"></span>
 			<div id="token_new_result" style="display:none">
 				<p class="vert">✅ Jeton créé. Copiez-le maintenant: il ne sera plus affiché.</p>
-				<input type="text" id="i_token_new_value" readonly />
-				<button type="button" id="but_token_copy">📎 COPIER</button> <span class="vert" id="token_copy_ok"></span>
+				<div class="token_copy">
+					<input type="text" id="i_token_new_value" readonly />
+					<button type="button" id="but_token_copy">📎 COPIER</button>
+				</div>
+				<span class="vert" id="token_copy_ok"></span>
 			</div>
 			<br /><br /><br />
 			</div>

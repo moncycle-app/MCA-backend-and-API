@@ -222,13 +222,113 @@ form {
 	}
 }
 
+/* --- Mes connexions: one card per token, then the form that makes one ---------- */
+
+#tokens_section p {
+	line-height: 1.5;
+}
+
 .token_row {
-	padding: 10px 0;
-	border-bottom: 1px solid rgba(128, 128, 128, .3);
+	margin-bottom: 10px;
+	padding: 12px 14px;
+	border: 1px solid rgba(128, 128, 128, .3);
+	border-radius: 8px;
 	overflow-wrap: anywhere;
 }
 
+.token_title {
+	margin-bottom: 6px;
+}
+
+.token_detail {
+	line-height: 1.5;
+}
+
+/* the first characters of a token: a small chip next to its name */
+.token_prefix {
+	margin-left: 6px;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background-color: #f0f0f0;
+	font-size: .85em;
+	cursor: help;
+}
+
+@media (prefers-color-scheme: dark) {
+	.token_prefix {
+		background-color: #191919;
+	}
+}
+
+.token_row form {
+	display: block;
+	margin-top: 10px;
+}
+
+.token_row button {
+	margin-bottom: 0;
+}
+
+#f_tokens_revoke_all {
+	display: block;
+	margin-top: 16px;
+}
+
+#f_token_create {
+	display: block;
+	margin-top: 20px;
+}
+
+#f_token_create .field {
+	margin-bottom: 16px;
+}
+
+#f_token_create .field_row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 20px;
+}
+
+#f_token_create label {
+	display: block;
+	margin-bottom: 5px;
+}
+
+#f_token_create input[type=text],
+#f_token_create input[type=number],
+#f_token_create input[type=password] {
+	width: 100%;
+	box-sizing: border-box;
+}
+
+#f_token_create select {
+	width: auto;
+}
+
+#token_new_err {
+	display: block;
+	margin-top: 10px;
+}
+
+#token_new_err:empty,
+#token_copy_ok:empty {
+	display: none;
+}
+
+.token_copy {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
 #i_token_new_value {
+	flex: 1 1 0;
+	min-width: 0;
 	font-family: monospace;
-	width: 90%;
+	width: auto;
+}
+
+#token_copy_ok {
+	display: block;
+	margin-top: 8px;
 }

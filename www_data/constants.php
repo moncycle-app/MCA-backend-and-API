@@ -92,6 +92,11 @@ const HTTP_SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 const AUTH_TOKEN_LIMIT_NAME_CHARS = 256;            // auth_token.name varchar(256)
 const AUTH_TOKEN_LIMIT_USER_AGENT_CHARS = 255;      // auth_token.user_agent and user_agent_use varchar(255), cut to fit
 const AUTH_TOKEN_DEFAULT_NAME = "API";              // the name of a token whose client gave none
+// The first characters of the token as its client holds it, kept next to its hash (the token itself is kept nowhere). GET /api/token
+// shows them, to tell the tokens of one app apart, and DELETE /api/token names a token by them. They are unique per account (a key
+// of auth_token): a sign-in whose token would repeat one of the account's makes another token, up to this many times.
+const AUTH_TOKEN_PREFIX_CHARS = 5;                  // auth_token.auth_token_prefix varchar(5)
+const AUTH_TOKEN_PREFIX_TRIES = 10;
 // auth_token.scope: what the token may do. A read-only token reads (GET, HEAD, OPTIONS) and may end its own session.
 const AUTH_TOKEN_SCOPE_READ_ONLY = 1;
 const AUTH_TOKEN_SCOPE_READ_WRITE = 2;

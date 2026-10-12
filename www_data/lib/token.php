@@ -70,10 +70,11 @@ function token_expires_at(array $row): ?string {
 }
 
 // One row of db_select_auth_tokens_listing() in the JSON API's shape. The hash is not in it, and the token itself is kept nowhere:
-// it was shown once, when it was made. The addresses are cut (token_ip_network()).
+// it was shown once, when it was made; what is shown is its first characters ("prefix"), which name it for DELETE /api/token (null
+// for a token of before v15 that started like another of its account). The addresses are cut (token_ip_network()). No database id.
 function token_to_json(array $row, int $current_no_auth_token): array {
 	return [
-		"id" => intval($row["no_auth_token"]),
+		"prefix" => $row["auth_token_prefix"],
 		"name" => $row["name"],
 		"scope" => AUTH_TOKEN_SCOPE_NAMES[intval($row["scope"])] ?? AUTH_TOKEN_SCOPE_NAMES[AUTH_TOKEN_SCOPE_READ_WRITE],
 		"current" => intval($row["no_auth_token"]) === $current_no_auth_token,
@@ -93,12 +94,17 @@ function token_list($db, array $user_account): array {
 	return array_map(fn($row) => token_to_json($row, $current), db_select_auth_tokens_listing($db, $user_account["no_user_account"]));
 }
 
-// The JSON of one token of the account (the one just made, so the caller's own), null when it is not there.
-function token_find($db, int $no_user_account, int $no_auth_token): ?array {
+// The JSON of one token of the account, by its prefix (the one just made, so the caller's own), null when it is not there.
+function token_find($db, int $no_user_account, string $prefix): ?array {
 	foreach (db_select_auth_tokens_listing($db, $no_user_account) as $row) {
-		if (intval($row["no_auth_token"]) === $no_auth_token) return token_to_json($row, $no_auth_token);
+		if ($row["auth_token_prefix"] === $prefix) return token_to_json($row, intval($row["no_auth_token"]));
 	}
 	return null;
+}
+
+// Is this what a client may send to name a token: exactly AUTH_TOKEN_PREFIX_CHARS characters of the alphabet tokens are made of?
+function token_prefix_is_valid(mixed $prefix): bool {
+	return is_string($prefix) && preg_match('/\A[A-Za-z0-9]{' . AUTH_TOKEN_PREFIX_CHARS . '}\z/', $prefix) === 1;
 }
 
 // The demo accounts are shared by every visitor (their password is on the sign-in page): their tokens are the visitors' sessions, and
@@ -107,18 +113,18 @@ function token_exit_if_demo(array $user_account): void {
 	if (sec_session_is_demo($user_account)) http_error(403, "demo_account", "Not available on a demo account.");
 }
 
-// DELETE /api/token with a body: {"id": N} revokes that token, {"all": true} every token but the caller's own. Answers how many
-// were revoked. A token of another account is "not found", as one that does not exist. A read-only token may end its own session
-// and nothing else. The caller's own token going (by its id) is a logout: the cookie goes with it.
+// DELETE /api/token with a body: {"prefix": "abcde"} revokes the token that starts with these characters, {"all": true} every token but
+// the caller's own. Answers how many were revoked. A token of another account is "not found", as one that does not exist. A read-only
+// token may end its own session and nothing else. The caller's own token going (by its prefix) is a logout: the cookie goes with it.
 function token_revoke($db, array $user_account, array $body): int {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$current = intval($user_account["no_auth_token"]);
-	$has_id = array_key_exists("id", $body);
+	$has_prefix = array_key_exists("prefix", $body);
 	$has_all = array_key_exists("all", $body);
 
-	if ($has_id === $has_all) http_error(400, "invalid_parameter", "Send either 'id' (a token) or 'all': true (every other token).");
+	if ($has_prefix === $has_all) http_error(400, "invalid_parameter", "Send either 'prefix' (a token) or 'all': true (every other token).");
 	if ($has_all && $body["all"] !== true) http_error(400, "invalid_parameter", "'all' must be true.");
-	if ($has_id && !is_int($body["id"])) http_error(400, "invalid_parameter", "'id' must be a whole number.");
+	if ($has_prefix && !token_prefix_is_valid($body["prefix"])) http_error(400, "invalid_parameter", "'prefix' must be the first " . AUTH_TOKEN_PREFIX_CHARS . " characters of the token.");
 
 	if ($has_all) {
 		sec_exit_if_token_read_only($user_account);
@@ -126,11 +132,12 @@ function token_revoke($db, array $user_account, array $body): int {
 		return db_delete_auth_tokens_other($db, $no_user_account, $current);
 	}
 
-	if ($body["id"] !== $current) {
+	$own = $body["prefix"] === $user_account["prefix_auth_token"];
+	if (!$own) {
 		sec_exit_if_token_read_only($user_account);
 		token_exit_if_demo($user_account);
 	}
-	if (db_delete_auth_token($db, $body["id"], $no_user_account) === 0) http_error(404, "not_found", "'id' does not match a token of this account.");
-	if ($body["id"] === $current) sec_clear_token_cookie();
+	if (db_delete_auth_token_by_prefix($db, $no_user_account, $body["prefix"]) === 0) http_error(404, "not_found", "'prefix' does not match a token of this account.");
+	if ($own) sec_clear_token_cookie();
 	return 1;
 }

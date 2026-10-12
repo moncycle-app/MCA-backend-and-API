@@ -121,8 +121,9 @@ info:
       its use, and from that moment it opens nothing. The next call with it answers `401`: sign in again.
       The cookie is set for 5 years (the same day as the token, with `expiresInDays`), so it can outlive its token.
     - There is no refresh step.
-    - `DELETE /token` destroys **one** token (the one you used); `DELETE /token` with `{"all": true}` destroys
-      every other one, and `GET /token` lists them (name, scope, dates, user agent, network).
+    - `DELETE /token` destroys **one** token (the one you used); `DELETE /token` with `{"prefix": "abcde"}` destroys
+      the token that starts with these 5 characters, with `{"all": true}` every other one, and `GET /token` lists them
+      (prefix, name, scope, dates, user agent, network).
     - A token has a **scope**: `readWrite`, or `readOnly` (it reads, and can end its own session).
       Nothing else limits a token: there are no roles, and a read-write token can do everything its account can.
     - One account can hold many valid tokens at the same time (one per device), with no limit.
@@ -171,7 +172,7 @@ info:
     curl -s -X POST http://localhost:8003/api/token \
       -H 'Content-Type: application/json' \
       -d '{"email":"marie@example.org","password":"<from the email>","name":"my script"}'
-    # -> 201 {"data":{"id":12,"token":"abc...256 chars...","userId":42,"totpUsed":false,"name":"my script","scope":"readWrite",...}}
+    # -> 201 {"data":{"prefix":"abcde","token":"abc...256 chars...","userId":42,"totpUsed":false,"name":"my script","scope":"readWrite",...}}
     ```
 
     ## 5. Daily use, step by step
@@ -942,7 +943,9 @@ paths:
       description: |-
         Every token of the account that still opens something, the newest first: the browsers and
         apps signed in, and the tokens made for scripts. **The token itself is never shown** (only its
-        hash is kept); `id` is what `DELETE /token` takes.
+        hash is kept); what is shown is its first 5 characters, `prefix`: they tell the tokens of one app
+        apart, and `DELETE /token` takes them. A `prefix` is unique within the account, and it is no secret
+        (the other 251 characters are the secret).
 
         What is shown of each is what the server saw, and what the client said:
 
@@ -989,12 +992,13 @@ paths:
 
         **With a body** (`Content-Type: application/json`), one of:
 
-        - `{"id": 12}` — revokes that token. Another account's token, or one that does not exist, is a
-          `404` `not_found` (nobody can probe other accounts' ids). Revoking your own `id` is a logout.
+        - `{"prefix": "abcde"}` — revokes the token that starts with these 5 characters (`prefix` in `GET /token`,
+          or in the answer of `POST /token`). Another account's token, or one that does not exist, is a
+          `404` `not_found` (a prefix is looked up in your own account only). Revoking your own `prefix` is a logout.
         - `{"all": true}` — revokes **every token but the one you are using**. This is what to do when a device is lost or a
           token leaked; `POST /password_change` with `logoutOtherDevices` does the same with the password.
 
-        A read-only token may revoke only itself. The demo accounts' tokens cannot be revoked by `id` or `all`
+        A read-only token may revoke only itself. The demo accounts' tokens cannot be revoked by `prefix` or `all`
         (`403` `demo_account`): they belong to every visitor.
       requestBody:
         required: false
@@ -1025,7 +1029,7 @@ paths:
                         description: How many tokens were revoked.
                         example: 3
         "400":
-          description: "`invalid_parameter` — the body has neither `id` nor `all`, has both, `id` is not a whole number, or `all` is not `true`. `invalid_json` — see section 2."
+          description: "`invalid_parameter` — the body has neither `prefix` nor `all`, has both, `prefix` is not exactly 5 letters or digits, or `all` is not `true`. `invalid_json` — see section 2."
           content:
             application/json:
               schema:
@@ -1043,7 +1047,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "404":
-          description: "`not_found` — `id` is not a token of this account."
+          description: "`not_found` — `prefix` is not the start of a token of this account."
           content:
             application/json:
               schema:
@@ -2886,12 +2890,13 @@ components:
 
     TokenRevokeRequest:
       type: object
-      description: Exactly one of `id` and `all`.
+      description: Exactly one of `prefix` and `all`.
       properties:
-        id:
-          type: integer
-          description: The token to revoke (`id` in `GET /token`). Your own is a logout.
-          example: 12
+        prefix:
+          type: string
+          pattern: '^[A-Za-z0-9]{5}$'
+          description: The token to revoke, by its first 5 characters (`prefix` in `GET /token`). Your own is a logout.
+          example: aB3x9
         all:
           type: boolean
           enum: [true]
@@ -2901,9 +2906,14 @@ components:
       type: object
       description: A token of the account, as `GET /token` and `POST /token` show it. The token itself is not part of it.
       properties:
-        id:
-          type: integer
-          example: 12
+        prefix:
+          type: string
+          nullable: true
+          description: |-
+            The first 5 characters of the token: they tell the tokens of one app apart, and `DELETE /token` names a token by them.
+            Unique within the account. `null` only for a token made before v15 that started like another one of its account
+            (it can only be revoked with `all`).
+          example: aB3x9
         name:
           type: string
           description: What the client called it. The client's word, not a proof.

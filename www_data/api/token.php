@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	$login = sec_login($db, $body, $options);
 	if (!isset($login["data"])) http_error($login["status"], $login["code"], $login["message"], $login["meta"]);
 
-	$token = token_find($db, intval($login["data"]["userId"]), $login["data"]["id"]) ?? [];
+	$token = token_find($db, intval($login["data"]["userId"]), $login["data"]["prefix"]) ?? [];
 
 	// every login is told to its owner, the demo accounts' visitors (their password is public) excepted
 	if (!in_array(intval($login["data"]["userId"]), ACCOUNT_DEMO_IDS, true)) {
@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 		http_no_content();
 	}
 
-	// a body: {"id": N} one token, {"all": true} every other one
+	// a body: {"prefix": "abcde"} one token, {"all": true} every other one
 	sec_exit_if_logged_out($user_account);
 	$revoked = token_revoke($db, $user_account, http_json_body());
 	log_event("auth.token_revoked", ["out" => $revoked]);

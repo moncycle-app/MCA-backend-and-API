@@ -356,8 +356,10 @@ try {
     // `captcha` column) were deleted by the SQL file above, with the column. Re-running this
     // script is safe: a row already hashed has strlen 64 (sha256 hex), not 256
     // (sec_random_password(256) output), so it gets skipped on a second pass.
+    // This is also the only moment the plain token is here to take its first characters from (auth_token_prefix, unique per
+    // account: GET /api/token shows it, DELETE /api/token names a token by it).
     $statement_select_tokens = $db->prepare("SELECT no_auth_token, auth_token_str FROM `auth_token`");
-    $statement_hash_token = $db->prepare("UPDATE `auth_token` SET `auth_token_str` = :hashed_token WHERE `no_auth_token` = :no_auth_token");
+    $statement_hash_token = $db->prepare("UPDATE `auth_token` SET `auth_token_str` = :hashed_token, `auth_token_prefix` = :prefix WHERE `no_auth_token` = :no_auth_token");
 
     $statement_select_tokens->execute();
     $tokens_to_migrate = $statement_select_tokens->fetchAll(PDO::FETCH_ASSOC);
@@ -374,7 +376,18 @@ try {
 
         $statement_hash_token->bindValue(":hashed_token", sec_hash_token($token_row["auth_token_str"]), PDO::PARAM_STR);
         $statement_hash_token->bindValue(":no_auth_token", $token_row["no_auth_token"], PDO::PARAM_INT);
-        $statement_hash_token->execute();
+        $statement_hash_token->bindValue(":prefix", substr($token_row["auth_token_str"], 0, AUTH_TOKEN_PREFIX_CHARS), PDO::PARAM_STR);
+        try {
+            $statement_hash_token->execute();
+        } catch (PDOException $th) {
+            // two tokens of one account that start alike (1 in 900 million a pair): the second one keeps no prefix, so the account page
+            // cannot revoke it by itself ("Déconnecter tous mes autres appareils" still does)
+            if (intval($th->errorInfo[1] ?? 0) !== 1062) throw $th;
+            print("REVIEW auth_token " . $token_row["no_auth_token"] . " starts like another token of its account: it has no prefix");
+            print(PHP_EOL);
+            $statement_hash_token->bindValue(":prefix", null, PDO::PARAM_NULL);
+            $statement_hash_token->execute();
+        }
     }
 
     print("DONE !");

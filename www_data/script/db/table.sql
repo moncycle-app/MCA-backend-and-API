@@ -69,9 +69,11 @@ CREATE TABLE `auth_token` (
   `ip_address` varchar(45) COLLATE utf8mb4_bin DEFAULT NULL,
   `ip_address_use` varchar(45) COLLATE utf8mb4_bin DEFAULT NULL,
   `auth_token_str` varchar(512) COLLATE utf8mb4_bin NOT NULL,
+  `auth_token_prefix` varchar(5) COLLATE utf8mb4_bin DEFAULT NULL,
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
   PRIMARY KEY (`no_auth_token`),
   UNIQUE KEY `auth_token_str` (`auth_token_str`),
+  UNIQUE KEY `unique_user_account_and_prefix` (`no_user_account`,`auth_token_prefix`),
   KEY `no_user_account` (`no_user_account`),
   CONSTRAINT `day_timeline_ibfk_2` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

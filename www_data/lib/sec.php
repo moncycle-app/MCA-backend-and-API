@@ -161,13 +161,19 @@ function sec_user_agent(): ?string {
 // user agent). $options: "name", "scope" (AUTH_TOKEN_SCOPE_*), "expires_in_days" (null: the cron's rule), "cookie" (set the cookie of
 // the token: a browser's session; a custom token made on the account page must not replace the cookie it is made from, so it
 // does not). A cookie session replaces the one the browser held, which nobody holds any more: that row goes, or the list of
-// tokens would fill with sessions nobody can use. The new session is the one the rest of the request's log names.
+// tokens would fill with sessions nobody can use. The new session is the one the rest of the request's log names. The token's first
+// characters (AUTH_TOKEN_PREFIX_CHARS) are kept in the clear and are unique per account: a token that would repeat one is made again.
 function sec_auth_success($db, $user_account, array $options = []) {
-	$auth_token = sec_random_password(256);
 	$scope = $options["scope"] ?? AUTH_TOKEN_SCOPE_READ_WRITE;
 	$expires_in_days = $options["expires_in_days"] ?? null;
 
-	$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $options["name"] ?? AUTH_TOKEN_DEFAULT_NAME, $scope, $expires_in_days, sec_user_agent(), sec_client_ip(), sec_hash_token($auth_token));
+	$no_auth_token = null;
+	for ($try = 0; is_null($no_auth_token); $try++) {
+		if ($try === AUTH_TOKEN_PREFIX_TRIES) throw new \RuntimeException("no free token prefix after $try tries");
+		$auth_token = sec_random_password(256);
+		$prefix = substr($auth_token, 0, AUTH_TOKEN_PREFIX_CHARS);
+		$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $options["name"] ?? AUTH_TOKEN_DEFAULT_NAME, $scope, $expires_in_days, sec_user_agent(), sec_client_ip(), sec_hash_token($auth_token), $prefix);
+	}
 	log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($no_auth_token)]);
 	db_update_user_account_logged_in($db, $user_account["no_user_account"]);
 	if ($options["cookie"] ?? false) {
@@ -175,7 +181,7 @@ function sec_auth_success($db, $user_account, array $options = []) {
 		sec_set_token_cookie($auth_token, is_null($expires_in_days) ? '+5 years' : "+$expires_in_days days");
 	}
 
-	return ["token" => $auth_token, "id" => intval($no_auth_token)];
+	return ["token" => $auth_token, "prefix" => $prefix];
 }
 
 function sec_obfuscate($str) {
@@ -507,7 +513,7 @@ function sec_login($db, array $body, array $token_options = []): array {
 		]);
 
 		return ["status" => 201, "data" => array_merge([
-			"id" => $session["id"],
+			"prefix" => $session["prefix"],
 			"token" => $session["token"],
 			"userId" => $user_account["no_user_account"],
 			"totpUsed" => $totp_active,

@@ -170,6 +170,7 @@ const moncycle_app_text = {
 		return `Expire le ${when}`;
 	},
 	tokens_revoke : "Déconnecter",
+	tokens_prefix_title : "Début du jeton: il permet de distinguer les connexions d'une même application.",
 	tokens_none : "Aucune connexion.",
 	tokens_confirm_revoke_all : "Déconnecter tous vos autres appareils et applications ?\n\nCet appareil reste connecté. Les autres devront se reconnecter.",
 	tokens_revoked : function (n) {
@@ -644,19 +645,23 @@ $(document).ready(function(){
 			const row = $("<div>").addClass("token_row");
 			const title = $("<b>").text(token.name);
 			const scope = $("<span>").addClass("label_info").text(" — " + moncycle_app_text.tokens_scope[token.scope]);
-			row.append(title, scope);
-			if (token.current) row.append($("<b>").addClass("vert").text(" (" + moncycle_app_text.tokens_current + ")"));
+			const head = $("<div>").addClass("token_title").append(title);
+			// the first characters of the token (null for an old one that started like another): what tells two connections of one app apart
+			if (token.prefix) head.append($("<code>").addClass("token_prefix").attr("title", moncycle_app_text.tokens_prefix_title).text(token.prefix + "…"));
+			head.append(scope);
+			if (token.current) head.append($("<b>").addClass("vert").text(" (" + moncycle_app_text.tokens_current + ")"));
+			row.append(head);
 			const details = [
 				moncycle_app_text.tokens_created(token_when(token.createdAt), token.createdIp, token.createdUserAgent),
 				moncycle_app_text.tokens_last_used(token_when(token.lastUsedAt), token.lastUsedIp, token.lastUsedUserAgent),
 			];
 			if (token.expiresAt) details.push(moncycle_app_text.tokens_expires(token_when(token.expiresAt)));
-			details.forEach(function (line) { row.append($("<br>"), $("<span>").addClass("label_info").text(line)); });
-			if (!token.current) {
+			details.forEach(function (line) { row.append($("<div>").addClass("label_info token_detail").text(line)); });
+			if (!token.current && token.prefix) {
 				const form = $("<form>").addClass("f_token_revoke").attr({action: "api/token", method: "delete"});
-				form.append($("<input>").attr({type: "hidden", name: "id"}).val(token.id));
+				form.append($("<input>").attr({type: "hidden", name: "prefix"}).val(token.prefix));
 				form.append($("<button>").attr("type", "submit").addClass("rouge").text("🗑️ " + moncycle_app_text.tokens_revoke));
-				row.append($("<br>"), form);
+				row.append(form);
 			}
 			container.append(row);
 		});
@@ -686,7 +691,7 @@ $(document).ready(function(){
 	};
 	$("#tokens_container").on("submit", ".f_token_revoke", function (event) {
 		event.preventDefault();
-		tokens_revoke({id: parseInt($(this).find("input[name=id]").val())});
+		tokens_revoke({prefix: $(this).find("input[name=prefix]").val()});
 	});
 	$("#f_tokens_revoke_all").on("submit", function (event) {
 		event.preventDefault();
