@@ -28,7 +28,7 @@ To self-host your own instance of Moncycle.app, you can use:
 - [YunoHost](https://install-app.yunohost.org/?app=moncycle)  
 - [Docker](https://hub.docker.com/r/jeanio/moncycle.app)  
 
-> **Note for Docker users:** The first launch of the container makes the schema ([www_data/script/db/table.sql](www_data/script/db/table.sql), and the demo accounts if `DEMO_ENABLED`) in a database that has no table; you only create the empty database and its user. The container also runs the daily cron itself (see [Security](#security)).  
+> **Note for Docker users:** The first launch of the container makes the schema ([www_data/script/db/schema.sql](www_data/script/db/schema.sql), and the demo accounts if `DEMO_ENABLED`) in a database that has no table; you only create the empty database and its user. The container also runs the daily cron itself (see [Security](#security)).  
 
 ---
 
@@ -36,7 +36,7 @@ To self-host your own instance of Moncycle.app, you can use:
 
 A running instance, with Docker, in five steps:
 
-1. **Database.** Create an empty MariaDB 11.1 database and a user for it (all privileges on that database). Nothing to load: the first start of the container makes the schema (`www_data/script/db/table.sql`), and the demo accounts (`demo.sql`) if `DEMO_ENABLED` is on, when the database has no table, waits up to a minute for the database to answer, and leaves a database that has tables as it is. Outside Docker, load it yourself: `mariadb -u <user> -p <database> < www_data/script/db/table.sql`.
+1. **Database.** Create an empty MariaDB 11.1 database and a user for it (all privileges on that database). Nothing to load: the first start of the container makes the schema (`www_data/script/db/schema.sql`), and the demo accounts (`demo.sql`) if `DEMO_ENABLED` is on, when the database has no table, waits up to a minute for the database to answer, and leaves a database that has tables as it is. Outside Docker, load it yourself: `mariadb -u <user> -p <database> < www_data/script/db/schema.sql`.
 2. **Compose file.** Copy [docker-compose.exemple.yml](docker-compose.exemple.yml) and set `APP_URL` (with a trailing `/`), the `DB_*` and `SMTP_*` variables and the two secret files (`db_password`, `smtp_password`). SMTP is required: the password of a new account is sent by mail. All the settings are in [Docker Environment Variables](#docker-environment-variables).
 3. **Start it.** `docker compose up -d`, then `curl -fsS http://127.0.0.1:8080/api/health_check` must answer `{"data":{"status":"ok"}}`.
 4. **Reverse proxy.** The container serves plain HTTP on `127.0.0.1:8080`: put TLS in front, and set `TRUSTED_PROXIES` to the proxy's address, or every visitor is one address to the login throttling. See [Security](#security) and [Deployments](#deployments).

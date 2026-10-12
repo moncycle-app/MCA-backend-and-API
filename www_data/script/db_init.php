@@ -11,7 +11,7 @@ require_once "../config.php";
 require_once "../lib/data.php";
 
 // php db_init.php [--wait=SECONDS]. The first launch of the Docker image (server_conf/docker-entrypoint.sh): a
-// database with no table gets the schema (script/db/table.sql) and, when DEMO_ENABLED, the demo accounts
+// database with no table gets the schema (script/db/schema.sql) and, when DEMO_ENABLED, the demo accounts
 // (script/db/demo.sql); one that has tables is not touched.
 // --wait: how long to keep trying while the database does not answer, as it may still be starting (default 0).
 // Exit status: 0 the schema is there (made now, or before) or nothing was asked (maintenance), 1 the database
@@ -54,7 +54,7 @@ while (is_null($db)) {
 
 try {
 	echo data_init_database($db)
-		? "db_init: the database was empty, the schema is made (table.sql)" . (DEMO_ENABLED ? " and the demo accounts (demo.sql)." : ".") . PHP_EOL
+		? "db_init: the database was empty, the schema is made (schema.sql)" . (DEMO_ENABLED ? " and the demo accounts (demo.sql)." : ".") . PHP_EOL
 		: "db_init: the database has tables, left as it is." . PHP_EOL;
 }
 catch (\Throwable $e) {

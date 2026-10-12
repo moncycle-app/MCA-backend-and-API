@@ -161,7 +161,7 @@ const ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE = 10;
 // ===========================================================================
 
 // The schema: loaded once, by script/db_init.php, into a database that has no table.
-const DB_SCRIPT_TABLES = __DIR__ . "/script/db/table.sql";
+const DB_SCRIPT_TABLES = __DIR__ . "/script/db/schema.sql";
 // The two demo accounts and their days (dated from today): loaded by script/demo_reset.php every hour when DEMO_ENABLED.
 const DB_SCRIPT_DEMO = __DIR__ . "/script/db/demo.sql";
 

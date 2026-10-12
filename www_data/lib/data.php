@@ -168,7 +168,7 @@ function data_read_sql_file(string $path): string {
 	return $sql;
 }
 
-// The first launch: a database with no table gets the schema (script/db/table.sql), and the demo accounts
+// The first launch: a database with no table gets the schema (script/db/schema.sql), and the demo accounts
 // (script/db/demo.sql) when DEMO_ENABLED. One that has tables is left as it is, whatever it holds. Answers whether the
 // schema was made. A schema is DDL, which MariaDB commits as it goes: it cannot be rolled back, and a failure after the
 // first table leaves a database that is no longer empty (script/demo_reset.php then loads the demo accounts at its next run).
