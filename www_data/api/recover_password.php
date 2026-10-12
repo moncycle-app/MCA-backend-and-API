@@ -25,15 +25,18 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 	http_error(400, "invalid_email", "Provided email address is not valid.");
 }
 
+// the attempt is written before the captcha is looked at, and given back if it passes: only the failures count
+$attempt = sec_exit_unless_attempt_allowed($db, "recover_password");
+$recovery = account_recover_password($db, $email, $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
+sec_exit_unless_captcha_ok($db, $attempt, $recovery["captcha"], "recover_password");
+
 // The answer is the same whether or not the account exists, and takes as long, so that nobody
 // can use this to find out who has one. Logged before the sleep: a worker killed meanwhile must not lose it.
-$account = db_select_user_account_by_email($db, $email);
-if (!is_null($account)) {
-	$password = sec_random_password();
-	db_update_password_by_email($db, sec_hash($password), $email);
-	log_context(["uid" => intval($account["no_user_account"])]);
+// The new password is committed: the mail goes now, and only now.
+if (!is_null($recovery["account"])) {
+	log_context(["uid" => intval($recovery["account"]["no_user_account"])]);
 	log_event("account.password_reset");
-	mail_send_new_password($email, $password);
+	mail_send_new_password($email, $recovery["password"]);
 	sleep(rand(1, 4));
 }
 else {

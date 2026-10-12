@@ -19,6 +19,26 @@ if (parseInt(localStorage.auth)>0) {
 else {
 	moncycle_store.clear_storage();
 	$(document).ready(function(){
+		// the sign-in asks for a captcha once the account has failed too often (the server says so with captchaRequired); the
+		// token is tied to the account's counters, so a new one is made after every refused attempt
+		const login_captcha = moncycle_captcha.attach({
+			purpose: "login",
+			email: $("#i_email1"),
+			image: $("#l_captcha"),
+			token: $("#i_captcha_token"),
+			answer: $("#i_captcha"),
+			active: function() { return $("#captcha_wrapper").is(":visible"); },
+			error: function(message) { $("#message_err").text(message); },
+		});
+		// the lost password always asks for one
+		const reset_captcha = moncycle_captcha.attach({
+			purpose: "recover",
+			email: $("#r_email1"),
+			image: $("#rc_captcha_img"),
+			token: $("#rc_captcha_token"),
+			answer: $("#rc_captcha"),
+			error: function(message) { $("#reset_error_msg").text(message); },
+		});
 		$("#connexion_form").on("submit", function(event) {
 			event.preventDefault();
 			$("#connexion_but").prop("disabled", true);
@@ -28,7 +48,10 @@ else {
 				password: $("#i_password").val(),
 			};
 			if ($("#i_code").val()) payload.code = parseInt($("#i_code").val());
-			if ($("#captcha_wrapper").is(":visible")) payload.captcha = $("#i_captcha").val();
+			if ($("#captcha_wrapper").is(":visible")) {
+				payload.captcha = $("#i_captcha").val();
+				payload.captchaToken = $("#i_captcha_token").val();
+			}
 			$.ajax({
 				type: "POST",
 				url: "api/login",
@@ -50,29 +73,30 @@ else {
 					totp_invalid : "Bon mot de passe, mais le code TOTP est incorrect.",
 					invalid_credentials : "Mauvais mot de passe ou compte inexistant.",
 					captcha_required : "Captcha manquant ou incorrect.",
+					captcha_expired : "Le captcha a expiré, recopiez le nouveau.",
+					captcha_unavailable : "Le captcha est indisponible pour le moment, réessayez plus tard.",
 					account_locked : "Compte temporairement bloqué après trop de tentatives échouées, réessayez plus tard.",
 					rate_limited : "Trop de tentatives depuis ce réseau, réessayez plus tard."
 				};
 				if ((err.details || {}).captchaRequired) $("#captcha_wrapper").show();
 				$("#message_err").empty().append(document.createTextNode(return_codes[err.code] || err.message || "Erreur inconnue."), $("<br>"));
 
-				// the captcha is single-use server-side, refresh it whenever it was shown for this attempt
-				if ($("#captcha_wrapper").is(":visible")) {
-					$("#l_captcha").attr("src", "api/captcha.php?v=" + new Date().getTime());
-					$("#i_captcha").val('');
-				}
+				// the token is tied to the account's counters, which this attempt may have moved: a new one, whenever the
+				// captcha is shown (and the first one, when this answer is the one that asks for it)
+				login_captcha.reload(true);
 			});
 		});
 		$("#reset_form").on("submit", function(event) {
 			event.preventDefault();
 			$("#reset_but").prop("disabled", true);
 			$("#reset_but").val("Rénitialiser ⏳");
+			$("#reset_error_msg").text("");
 			var email = $("#r_email1").val();
 			$.ajax({
 				type: "POST",
 				url: "api/recover_password",
 				contentType: "application/json",
-				data: JSON.stringify({email: email}),
+				data: JSON.stringify({email: email, captcha: $("#rc_captcha").val(), captchaToken: $("#rc_captcha_token").val()}),
 			}).done(function(ret){
 				console.log(ret);
 				$("#reset_but").val("Rénitialiser 🤐");
@@ -86,17 +110,24 @@ else {
 				$("#reset_but").val("Rénitialiser 🤐");
 				$("#reset_but").prop("disabled", false);
 				console.error(jqXHR);
+				var err = (jqXHR.responseJSON || {}).error || {};
+				const return_codes = {
+					missing_email : "L'adresse e-mail est manquante.",
+					invalid_email : "L'adresse e-mail n'est pas valide.",
+					captcha_invalid : "Erreur dans la saisie du captcha.",
+					captcha_expired : "Le captcha a expiré, recopiez le nouveau.",
+					captcha_unavailable : "Le captcha est indisponible pour le moment, réessayez plus tard.",
+					rate_limited : "Trop de tentatives depuis ce réseau, réessayez plus tard."
+				};
+				$("#reset_error_msg").text(return_codes[err.code] || err.message || "Erreur inconnue.");
+				// a captcha that was refused is not asked again with the same answer
+				if (err.code === "captcha_invalid" || err.code === "captcha_expired") reset_captcha.reload(true);
 			});
 		});
 		// The address of the link in a mail. A "+" that reaches the page as itself (a mail reader or a link checker that
 		// decodes %2B) is read as a space by URLSearchParams, and an address never holds a space: it is a "+".
 		const email1 = (new URLSearchParams(window.location.search)).get("email1");
 		$("#i_email1").val(email1 === null ? "" : email1.trim().replace(/ /g, "+"));
-		// a new picture, for one that is hard to read
-		$("#l_captcha").on("click", function() {
-			$("#l_captcha").attr("src", "api/captcha.php?v=" + new Date().getTime());
-			$("#i_captcha").val('');
-		});
 		$("#but_demo_bill").on("click", function(event) {
 			event.preventDefault();
 			$("#i_email1").val("demo.bill@moncycle.app");

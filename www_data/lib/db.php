@@ -182,7 +182,7 @@ function db_update_user_account_settings($db, $no_user_account, array $fields, $
 }
 
 function db_update_password_by_email($db, $password_hash, $email) {
-	return db_exec($db, "UPDATE user_account SET password = :password, last_password_change = NULL WHERE email1 = :email1", ["password" => $password_hash, "email1" => $email]);
+	return db_exec($db, "UPDATE user_account SET password = :password, last_password_change = NOW() WHERE email1 = :email1", ["password" => $password_hash, "email1" => $email]);
 }
 
 function db_update_password($db, $password_hash, $no_user_account) {
@@ -216,7 +216,7 @@ function db_update_user_account_totp_state($db, $totp_state, $no_user_account) {
 }
 
 // ---------------------------------------------------------------------------
-// Sessions, captcha, login attempts
+// Sessions, login attempts
 // ---------------------------------------------------------------------------
 
 // The account behind a token (the SHA-256 of what the client holds), with the session's own columns.
@@ -262,12 +262,10 @@ function db_delete_auth_tokens_other($db, $no_user_account, $no_auth_token_kept)
 	return db_exec($db, "DELETE FROM auth_token WHERE no_user_account = :no_user_account AND no_auth_token <> :no_auth_token", ["no_user_account" => $no_user_account, "no_auth_token" => $no_auth_token_kept]);
 }
 
-// sessions not used for 40 days, or older than a year (those that expire: a captcha's does), and the
-// captchas of visitors who never logged in (no account), whose cookie lasts 2 days. One condition for
-// the purge and for the count of the cron's dry run, which must agree.
+// sessions not used for 40 days, or older than a year (those that expire). One condition for the purge and
+// for the count of the cron's dry run, which must agree.
 function db_sql_old_auth_token(): string {
-	return "((date_creation < CURDATE() - INTERVAL 365 DAY OR date_use < CURDATE() - INTERVAL 40 DAY) AND expire > 0)
-		OR (no_user_account IS NULL AND date_creation < NOW() - INTERVAL 2 DAY)";
+	return "((date_creation < CURDATE() - INTERVAL 365 DAY OR date_use < CURDATE() - INTERVAL 40 DAY) AND expire > 0)";
 }
 
 function db_delete_old_auth_token($db) {
@@ -276,20 +274,6 @@ function db_delete_old_auth_token($db) {
 
 function db_count_old_auth_token($db): int {
 	return intval(db_value($db, "SELECT COUNT(*) FROM auth_token WHERE " . db_sql_old_auth_token()));
-}
-
-function db_select_auth_token_captcha($db, $auth_token_str): ?array {
-	return db_row($db, "SELECT captcha, no_auth_token FROM auth_token WHERE auth_token_str = :auth_token_str LIMIT 1", ["auth_token_str" => $auth_token_str]);
-}
-
-function db_update_auth_token_captcha($db, $auth_token_str, $captcha) {
-	return db_exec($db, "UPDATE auth_token SET date_use = NOW(), captcha = :captcha WHERE auth_token_str = :auth_token_str", ["captcha" => $captcha, "auth_token_str" => $auth_token_str]);
-}
-
-// Burns the captcha answer of a token. True for one caller only: requests racing for the same answer
-// all read it, and the row lock makes every one but the first find it already gone.
-function db_update_auth_token_captcha_burn($db, $auth_token_str): bool {
-	return db_exec($db, "UPDATE auth_token SET captcha = NULL WHERE auth_token_str = :auth_token_str AND captcha IS NOT NULL", ["auth_token_str" => $auth_token_str]) > 0;
 }
 
 function db_update_user_account_logged_in($db, $no_user_account) {
@@ -307,8 +291,13 @@ function db_update_login_failure($db, $email) {
 	);
 }
 
-function db_insert_login_attempt_ip($db, $ip_address) {
-	return db_exec($db, "INSERT INTO login_attempt_ip (ip_address) VALUES (:ip_address)", ["ip_address" => $ip_address]);
+// The id of the new row: sec_attempt_reserve() gives it back if the attempt is one too many.
+function db_insert_login_attempt_ip($db, $ip_address): string {
+	return db_insert($db, "INSERT INTO login_attempt_ip (ip_address) VALUES (:ip_address)", ["ip_address" => $ip_address]);
+}
+
+function db_delete_login_attempt_ip($db, $no_login_attempt_ip) {
+	return db_exec($db, "DELETE FROM login_attempt_ip WHERE no_login_attempt_ip = :no_login_attempt_ip", ["no_login_attempt_ip" => $no_login_attempt_ip]);
 }
 
 // number of failed login attempts recorded from this IP in the last 15 minutes, across all accounts

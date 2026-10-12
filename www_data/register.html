@@ -30,6 +30,7 @@
 		<link rel="stylesheet" href="css/account.css" />
 		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
 		<script type="text/javascript" src="js/store.js" defer></script>
+		<script type="text/javascript" src="js/captcha.js" defer></script>
 		<script type="text/javascript" src="js/register.js" defer></script>
 	</head>
 	<body>
@@ -78,8 +79,9 @@
 			<br />
 			<label for="i_captcha">Captcha:</label><br />
 			<input name="captcha" id="i_captcha" type="text" maxlength="6" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." /><br />
-			<img src="api/captcha.php" class="captcha" id="r_captcha" title="Cliquer pour obtenir une autre image" alt="captcha" /><br />
-			<span class="label_info">Majuscules ou minuscules, peu importe. Image difficile à lire ? Cliquez dessus pour en obtenir une autre.</span><br />
+			<img class="captcha" id="r_captcha" hidden title="Cliquer pour obtenir une autre image" alt="captcha" />
+			<input type="hidden" name="captchaToken" id="i_captcha_token" value="" /><br />
+			<span class="label_info">L'image s'affiche une fois l'e-mail saisi. Majuscules ou minuscules, peu importe. Image difficile à lire ? Cliquez dessus pour en obtenir une autre.</span><br />
 			<br />
 			<label for="i_comment">Comment avez-vous découvert moncycle.app? Un commentaire?</label><br />
 			<textarea required id="i_comment" name="discovered_comment" maxlength="255" placeholder="Dites nous tout!"></textarea>

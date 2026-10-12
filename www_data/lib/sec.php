@@ -8,14 +8,13 @@
 */
 
 use OTPHP\TOTP;
-use Gregwar\Captcha\CaptchaBuilder;
-use Gregwar\Captcha\PhraseBuilder;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 
 require_once __DIR__ . "/../vendor/autoload.php";
+require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
@@ -249,71 +248,6 @@ function sec_totp_code_valid(array $user_account, $code): bool {
 }
 
 // ---------------------------------------------------------------------------
-// Captcha: the answer is stored on the visitor's token, burnt as soon as it is read
-// ---------------------------------------------------------------------------
-
-// The picture and its phrase, from the CAPTCHA_* constants. The library's own defaults (a wave distortion, and
-// an alphabet of both cases with i, l, o, 0, 1...) make a picture that few visitors read: this one is medium.
-function sec_captcha_build(): CaptchaBuilder {
-	$captcha = new CaptchaBuilder(null, new PhraseBuilder(CAPTCHA_LENGTH, CAPTCHA_CHARSET));
-	$captcha->setDistortion(false)->setMaxBehindLines(2)->setMaxFrontLines(1)->setMaxAngle(6)->setMaxOffset(3);
-	return $captcha->build(CAPTCHA_WIDTH, CAPTCHA_HEIGHT);
-}
-
-// Stores the answer of the captcha shown to the visitor, giving them a token to hang it on when
-// they have none (or one that has been purged).
-function sec_captcha_issue($db, string $phrase): void {
-	$cookie_token = sec_cookie_token();
-	$known = $cookie_token !== "" && !is_null(db_select_auth_token_captcha($db, $cookie_token));
-
-	// A visitor logged in keeps their session: its cookie is not replaced by a captcha's, which would end
-	// the session in this browser. They have no use for a captcha, login and register refuse a logged-in caller.
-	// (A session is stored hashed, a captcha's token as it is: that is why $known above is false for one.)
-	// A demo session is the exception: whoever is on it and asks for a captcha is signing up, and the cookie of the
-	// captcha replaces the demo's (register does not refuse a demo session either, sec_session_is_demo()).
-	if (!$known && $cookie_token !== "") {
-		$session = db_select_user_account_auth_token($db, sec_hash_token($cookie_token));
-		if (!is_null($session) && !sec_session_is_demo($session)) return;
-	}
-
-	if (!$known) {
-		$cookie_token = sec_random_password(64);
-		db_insert_auth_token($db, NULL, sec_device_name("CAPTCHA"), "FR", $cookie_token, 3);
-		sec_set_token_cookie($cookie_token, '+2 days');
-	}
-
-	// SECURITY: keyed by auth_token_str (the cookie value), not no_auth_token, otherwise this
-	// silently updates 0 rows and the image shown never matches what is stored
-	db_update_auth_token_captcha($db, $cookie_token, $phrase);
-}
-
-// The answer stored for this visitor, or null; it can be read once.
-function sec_captcha_take($db): ?string {
-	if (sec_cookie_token() === "") return null;
-
-	$stored = db_select_auth_token_captcha($db, sec_cookie_token());
-	if (is_null($stored)) return null;
-
-	db_update_auth_token_use($db, $stored["no_auth_token"]);
-	// SECURITY: this prevents captcha re-use. Reading the answer is not enough: requests sent together
-	// with one captcha all read it above, and the burn is what says which of them has it.
-	return db_update_auth_token_captcha_burn($db, sec_cookie_token()) ? $stored["captcha"] : null;
-}
-
-// Does the answer read the picture? Case and spaces do not count: a phone capitalises the first letter, and a
-// space slips in; neither is a mistake in the reading. (The phrase is lower-cased too: one made with an older
-// alphabet, which had capitals, may still wait for its answer.)
-function sec_captcha_matches(?string $expected, $answer): bool {
-	if (!is_string($answer) && !is_int($answer)) return false;
-	$answer = strtolower(preg_replace('/\s+/', '', (string) $answer));
-	return !is_null($expected) && $answer !== "" && hash_equals(strtolower($expected), $answer);
-}
-
-function sec_captcha_verify($db, $answer): bool {
-	return sec_captcha_matches(sec_captcha_take($db), $answer);
-}
-
-// ---------------------------------------------------------------------------
 // Login and its brute-force defence
 // ---------------------------------------------------------------------------
 
@@ -364,6 +298,58 @@ function sec_client_ip() {
 	return $peer;
 }
 
+// Reserves one attempt against this address, counted in the window of db_count_login_attempt_ip(). Counting first
+// and acting after lets a burst through (the requests that come together all count the same number), so the attempt is
+// written first and the count then says whether it fits; one past LOGIN_IP_MAX_ATTEMPTS gives its row back. Of the
+// requests that write, the k-th to commit finds at least k rows, so no more pass than the limit leaves. An address
+// already at the limit is refused before anything is written: a refused request must not use up an id of the table.
+// Answers the id of the row (kept when the attempt fails, given back by sec_attempt_release() when it does not count),
+// 0 when addresses are not limited (LOGIN_IP_MAX_ATTEMPTS is 0: nothing is written), null when this one is over.
+function sec_attempt_reserve($db, string $ip): ?int {
+	if (LOGIN_IP_MAX_ATTEMPTS <= 0) return 0;
+	if (db_count_login_attempt_ip($db, $ip) >= LOGIN_IP_MAX_ATTEMPTS) return null;
+
+	$no_login_attempt_ip = intval(db_insert_login_attempt_ip($db, $ip));
+	if (db_count_login_attempt_ip($db, $ip) > LOGIN_IP_MAX_ATTEMPTS) {
+		db_delete_login_attempt_ip($db, $no_login_attempt_ip);
+		return null;
+	}
+	return $no_login_attempt_ip;
+}
+
+// Gives back an attempt of sec_attempt_reserve(): only the failures count against an address.
+function sec_attempt_release($db, int $attempt): void {
+	if ($attempt > 0) db_delete_login_attempt_ip($db, $attempt);
+}
+
+// The start of an endpoint that a captcha guards (register, recover_password): ends the request with a 503 when the
+// captcha is closed and with a 429 when the address has used its attempts; otherwise reserves one and answers it, for
+// sec_exit_unless_captcha_ok() to keep or give back. $act is the name the refusals are logged under.
+function sec_exit_unless_attempt_allowed($db, string $act): int {
+	if (!captcha_ready()) {
+		log_event("account.refused", ["act" => $act, "err" => "captcha_unavailable"]);
+		http_error(503, "captcha_unavailable", "The captcha is not available.");
+	}
+	$attempt = sec_attempt_reserve($db, sec_client_ip());
+	if (is_null($attempt)) {
+		log_event("account.refused", ["act" => $act, "err" => "rate_limited"]);
+		http_error(429, "rate_limited", "Too many attempts from this network, please try again later.");
+	}
+	return $attempt;
+}
+
+// The end of it, with the verdict of captcha_verify(): a captcha that passes gives its attempt back; any other ends
+// the request with a 403 (`captcha_expired` or `captcha_invalid`) and the attempt stays against the address.
+function sec_exit_unless_captcha_ok($db, int $attempt, string $verdict, string $act): void {
+	if ($verdict === "ok") {
+		sec_attempt_release($db, $attempt);
+		return;
+	}
+	$code = $verdict === "expired" ? "captcha_expired" : "captcha_invalid";
+	log_event("account.refused", ["act" => $act, "err" => $code]);
+	http_error(403, $code, $verdict === "expired" ? "The captcha has expired." : "Error in captcha input.");
+}
+
 // number of recent failed login attempts on this account, ignoring attempts older than
 // LOGIN_ATTEMPTS_DECAY_MINUTES so a stale streak doesn't linger forever. The login settings are
 // in the config file, and each one at 0 turns its feature off: a decay of 0 counts no attempt
@@ -388,9 +374,16 @@ function sec_login_account_locked($user_account) {
 
 // The outcome of a login attempt, for the endpoint to answer with:
 //   success: ["status" => 200, "data" => [...]]
-//   refusal: ["status" => 4xx, "code" => ..., "message" => ..., "meta" => [...]]
-// Every refusal but a malformed body and a rate-limited IP is also counted against the IP, and a
-// wrong password or TOTP code against the account (the captcha and lockout thresholds).
+//   refusal: ["status" => 4xx/503, "code" => ..., "message" => ..., "meta" => [...]]
+// Every refusal but a malformed body, a rate-limited IP and a closed captcha is also counted against the IP, and a
+// wrong password or TOTP code against the account (the captcha and lockout thresholds). The IP is counted by a row
+// that sec_attempt_reserve() writes before the checks and the login gives back when it succeeds.
+// An account that must answer a captcha (captchaRequired) is checked with its row locked, from the captcha to the end:
+// the token is tied to the account's counters, which every outcome that tests a password changes, so of the requests
+// that arrive together with one token the first takes it and the others find the counters moved: one password is tried
+// per token. (The answer of an account that is deactivated changes no counter: that token can be tried again, and only
+// ever gets `account_disabled`. And a login that succeeds ends the failures: a request that reads the account after
+// it finds one that asks for no captcha, and signs in on its password alone like any login.)
 // Every outcome is logged: the refusals as `auth.login_failed`, with the account when the address
 // has one and its count of failed attempts, this one included when it was counted against it.
 // The address in $body["email"] is read as it is: the endpoint has already normalised it
@@ -421,63 +414,97 @@ function sec_login($db, array $body): array {
 	$captcha_required = sec_login_captcha_required($user_account);
 	$meta = $captcha_required ? ["captchaRequired" => true] : [];
 
-	// a refusal counted against the IP, and against the account when it is a wrong credential
-	$counted = function (int $status, string $code, string $message, bool $wrong_credential = false) use ($db, $client_ip, $body, $meta, $refuse) {
+	// the row this login reserved against the address: 0 until it has (login_disabled is counted without one)
+	$attempt = 0;
+
+	// a refusal counted against the IP (its reserved row stays), and against the account when it is a wrong credential
+	$counted = function (int $status, string $code, string $message, bool $wrong_credential = false) use ($db, $client_ip, $body, $meta, $refuse, &$attempt) {
 		if ($wrong_credential) db_update_login_failure($db, $body["email"]);
-		db_insert_login_attempt_ip($db, $client_ip);
+		if ($attempt === 0) db_insert_login_attempt_ip($db, $client_ip);
 		return $refuse($status, $code, $message, $meta, $wrong_credential);
 	};
 
 	if (!LOGIN_ENABLED) return $counted(403, "login_disabled", "Login is disabled.");
 
-	// already throttled: not counted again, or a blocked IP could grow this table forever
-	if (LOGIN_IP_MAX_ATTEMPTS > 0 && db_count_login_attempt_ip($db, $client_ip) >= LOGIN_IP_MAX_ATTEMPTS) {
+	// no key to check the captcha with: the server is at fault, nothing is counted against anyone
+	if ($captcha_required && !captcha_ready()) return $refuse(503, "captcha_unavailable", "The captcha is not available.", $meta);
+
+	// already throttled: nothing is written, or a blocked IP could grow this table forever
+	$attempt = sec_attempt_reserve($db, $client_ip);
+	if (is_null($attempt)) {
 		return $refuse(429, "rate_limited", "Too many attempts from this network, please try again later.", $meta);
 	}
 
 	if (empty($body["email"]) || empty($body["password"])) return $counted(400, "missing_credentials", "'email' and 'password' are required.");
 
-	if ($captcha_required && !sec_captcha_verify($db, $body["captcha"] ?? "")) return $counted(403, "captcha_required", "Missing or incorrect captcha.");
+	// the account, the password, the code: what a login is once the captcha (if it is asked) is passed
+	$check_credentials = function () use ($db, $body, $meta, $counted, &$user_account, &$account_locked, &$attempt) {
+		if (isset($user_account["user_enabled"]) && !sec_account_enabled($user_account)) return $counted(403, "account_disabled", "Account deactivated.");
 
-	if (isset($user_account["user_enabled"]) && !sec_account_enabled($user_account)) return $counted(403, "account_disabled", "Account deactivated.");
+		// an address with no account is checked against a hash nobody can match, for the time a check takes
+		$password_ok = password_verify($body["password"], $user_account["password"] ?? AUTH_DUMMY_PASSWORD_HASH) && isset($user_account["password"]);
 
-	// an address with no account is checked against a hash nobody can match, for the time a check takes
-	$password_ok = password_verify($body["password"], $user_account["password"] ?? AUTH_DUMMY_PASSWORD_HASH) && isset($user_account["password"]);
+		// hard lockout only kicks in on a WRONG password: the account owner can still log in with the
+		// correct credentials, so this can't be abused to lock a victim out (an account with a TOTP code
+		// is the exception, see below)
+		if (!$password_ok) {
+			return $account_locked
+				? $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true)
+				: $counted(401, "invalid_credentials", "Incorrect password or non-existent account.", true);
+		}
 
-	// hard lockout only kicks in on a WRONG password: the account owner can still log in with the
-	// correct credentials, so this can't be abused to lock a victim out (an account with a TOTP code
-	// is the exception, see below)
-	if (!$password_ok) {
-		return $account_locked
-			? $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true)
-			: $counted(401, "invalid_credentials", "Incorrect password or non-existent account.", true);
-	}
+		$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
+		$code = $body["code"] ?? "";
+		if (!is_string($code) && !is_int($code)) $code = "";
+		// With the password right, the code is the only thing left to guess: the wrong ones are counted on the
+		// account (below), and past the lockout threshold the code is no longer looked at, the right one included.
+		// The password alone can then keep a TOTP account locked: the price of a code that cannot be guessed.
+		if ($totp_active && $account_locked) {
+			return $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true);
+		}
+		if ($totp_active && !sec_totp_code_valid($user_account, $code)) {
+			// wrong or missing code: one outcome either way
+			$given = strlen((string) $code) > 0 && intval(preg_replace('/\s+/', '', (string) $code)) > 0;
+			return $counted(401, $given ? "totp_invalid" : "totp_required",
+				$given ? "Correct password, but the TOTP code is incorrect." : "Correct password, but a TOTP code is required.", true);
+		}
 
-	$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
-	$code = $body["code"] ?? "";
-	if (!is_string($code) && !is_int($code)) $code = "";
-	// With the password right, the code is the only thing left to guess: the wrong ones are counted on the
-	// account (below), and past the lockout threshold the code is no longer looked at, the right one included.
-	// The password alone can then keep a TOTP account locked: the price of a code that cannot be guessed.
-	if ($totp_active && $account_locked) {
-		return $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true);
-	}
-	if ($totp_active && !sec_totp_code_valid($user_account, $code)) {
-		// wrong or missing code: one outcome either way
-		$given = strlen((string) $code) > 0 && intval(preg_replace('/\s+/', '', (string) $code)) > 0;
-		return $counted(401, $given ? "totp_invalid" : "totp_required",
-			$given ? "Correct password, but the TOTP code is incorrect." : "Correct password, but a TOTP code is required.", true);
-	}
+		// the failures this login ends, read before sec_auth_success() resets them
+		$attempts = sec_login_effective_attempts($user_account);
+		unset($user_account["password"], $user_account["totp_secret"]);
+		$token = sec_auth_success($db, $user_account);
+		sec_attempt_release($db, $attempt);
+		log_event("auth.login_succeeded", ["att" => $attempts, "totp" => $totp_active]);
 
-	// the failures this login ends, read before sec_auth_success() resets them
-	$attempts = sec_login_effective_attempts($user_account);
-	unset($user_account["password"], $user_account["totp_secret"]);
-	$token = sec_auth_success($db, $user_account);
-	log_event("auth.login_succeeded", ["att" => $attempts, "totp" => $totp_active]);
+		return ["status" => 200, "data" => array_merge([
+			"token" => $token,
+			"userId" => $user_account["no_user_account"],
+			"totpUsed" => $totp_active,
+		], $meta)];
+	};
 
-	return ["status" => 200, "data" => array_merge([
-		"token" => $token,
-		"userId" => $user_account["no_user_account"],
-		"totpUsed" => $totp_active,
-	], $meta)];
+	if (!$captcha_required) return $check_credentials();
+
+	// A wrong or missing captcha: one refusal, or "expired" for a token that is past its time. It is counted against the
+	// IP only, not the account: the counters are what the token is tied to.
+	$captcha_refused = fn(string $verdict) => $verdict === "expired"
+		? $counted(403, "captcha_expired", "The captcha has expired.")
+		: $counted(403, "captcha_required", "Missing or incorrect captcha.");
+	$captcha_verdict = fn() => captcha_verify($db, "login", $body["email"], $body["captchaToken"] ?? null, $body["captcha"] ?? "", $client_ip);
+
+	// checked first without a lock, so that a request that cannot pass (a wrong answer is the usual one) never holds
+	// the account: only a valid token takes it
+	$verdict = $captcha_verdict();
+	if ($verdict !== "ok") return $captcha_refused($verdict);
+
+	return db_transaction($db, function () use ($db, $captcha_verdict, $captcha_refused, $check_credentials, &$user_account, &$account_locked) {
+		// the row is held until the end of the login, bcrypt included, and read again under the lock: a request that
+		// came with the same token has finished by now, and the counters it moved no longer match
+		$no_user_account = $user_account["no_user_account"];
+		$user_account = db_select_user_account_for_update($db, $no_user_account) ? (db_select_user_account($db, $no_user_account) ?? []) : [];
+		$account_locked = sec_login_account_locked($user_account);
+
+		$verdict = $captcha_verdict();
+		return $verdict === "ok" ? $check_credentials() : $captcha_refused($verdict);
+	});
 }

@@ -119,13 +119,21 @@ ALTER TABLE `description` CHANGE `last_write_db` `last_write_db` TIMESTAMP NULL 
 ALTER TABLE `user_account` ADD `last_write_db` TIMESTAMP NULL  DEFAULT CURRENT_TIMESTAMP  ON UPDATE CURRENT_TIMESTAMP;
 ALTER TABLE `auth_token` ADD `last_write_db` TIMESTAMP NULL  DEFAULT CURRENT_TIMESTAMP  ON UPDATE CURRENT_TIMESTAMP;
 
+-- The captcha is a signed challenge now (lib/captcha.php) and is kept nowhere: the rows that held one (no account, expire 3)
+-- go with the column of the answer, and every token belongs to an account.
+DELETE FROM `auth_token` WHERE `no_user_account` IS NULL;
+ALTER TABLE `auth_token`
+DROP `captcha`,
+MODIFY `no_user_account` mediumint(8) unsigned NOT NULL,
+ALGORITHM=INPLACE, LOCK=SHARED;
+
 ALTER TABLE `user_account` ADD `last_write_client_UTC` timestamp NULL AFTER `register_comment`;
 
 ALTER TABLE `user_account`
 ADD `last_failed_attempt` timestamp NULL DEFAULT NULL AFTER `nb_connection_attempts`;
 
 CREATE TABLE `login_attempt_ip` (
-  `no_login_attempt_ip` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `no_login_attempt_ip` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `ip_address` varchar(45) COLLATE utf8mb4_bin NOT NULL,
   `date_attempt` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`no_login_attempt_ip`),

@@ -10,6 +10,7 @@
 require_once "../config.php";
 require_once "../lib/api.php";
 require_once "../lib/account.php";
+require_once "../lib/captcha.php";
 require_once "../lib/day_format.php";
 require_once "../lib/mail.php";
 
@@ -19,8 +20,7 @@ $body = http_json_body();
 // the address is stored as it is looked up: trimmed, in lower case (anything but a string is refused below)
 if (is_string($body["email"] ?? null)) $body["email"] = account_email_normalise($body["email"]);
 
-// someone on a demo account is no one who has an account: they can sign up (their demo session ends with the
-// captcha they asked for, which replaces its cookie)
+// someone on a demo account is no one who has an account: they can sign up
 if (!is_null($user_account) && !sec_session_is_demo($user_account)) {
 	http_error(409, "already_authenticated", "Account already logged in.", ["userId" => $user_account["no_user_account"]]);
 }
@@ -30,9 +30,6 @@ if (!REGISTRATION_ENABLED) {
 	http_error(403, "registration_disabled", "Account creation has been disabled.");
 }
 
-// the captcha answer is burnt as soon as it is read, whatever happens next
-$captcha = sec_captcha_take($db);
-
 if (!isset($body["firstName"]) || !isset($body["email"]) || !isset($body["birthYear"])) {
 	http_error(400, "missing_fields", "'firstName', 'email' and 'birthYear' are required.");
 }
@@ -41,10 +38,10 @@ if (!filter_var($body["email"], FILTER_VALIDATE_EMAIL)) {
 	http_error(400, "invalid_email", "Provided email address is not valid.");
 }
 
-if (!sec_captcha_matches($captcha, $body["captcha"] ?? "")) {
-	log_event("account.refused", ["act" => "register", "err" => "captcha_invalid"]);
-	http_error(403, "captcha_invalid", "Error in captcha input.");
-}
+// the attempt is written before the captcha is looked at, and given back if it passes: only the failures count
+$attempt = sec_exit_unless_attempt_allowed($db, "register");
+$verdict = captcha_verify($db, "register", $body["email"], $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
+sec_exit_unless_captcha_ok($db, $attempt, $verdict, "register");
 
 if (db_select_user_account_exists($db, $body["email"])) {
 	log_event("account.refused", ["act" => "register", "err" => "account_exists"]);

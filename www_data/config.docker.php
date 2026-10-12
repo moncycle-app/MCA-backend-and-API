@@ -91,6 +91,12 @@ define("LOGIN_LOCKOUT_THRESHOLD", env_int("LOGIN_LOCKOUT_THRESHOLD", 15));
 // Failed attempts from one IP, in the window of db_count_login_attempt_ip(), before HTTP 429 (0: no limit).
 define("LOGIN_IP_MAX_ATTEMPTS", env_int("LOGIN_IP_MAX_ATTEMPTS", 30));
 
+// The key that signs the captcha challenges (lib/captcha.php): at least 32 characters, random, secret. Empty or shorter:
+// the captcha is closed, and register, recover_password and the login of an account that must answer one refuse with
+// 503 captcha_unavailable. The Docker image makes one at start-up when none is given; a restart then only voids the
+// challenges in flight, and several instances behind one address must share the same value.
+define("CAPTCHA_SECRET", env_string("CAPTCHA_SECRET"));
+
 // Logs (lib/log.php, README "Logs"). A value that is not one of the allowed ones takes the default:
 // a typo never turns the log off.
 // The least severe level written: off, error, warning, info, debug.

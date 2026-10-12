@@ -21,12 +21,15 @@ else {
 		for (let yy = year-100; yy < year; yy+=5) {
 			$("#i_anaissance").append(`<option value="${yy}">entre ${yy} et ${yy+4}</option>`);
 		}
-		// a new picture, for one that is hard to read or that was refused (each answer is good once)
-		let reload_captcha = function() {
-			$("#r_captcha").attr("src", "api/captcha.php?v=" + new Date().getTime());
-			$("#i_captcha").val('');
-		}
-		$("#r_captcha").on("click", reload_captcha);
+		// the picture and its token are asked for once the address is typed (a click on the picture asks for another)
+		const register_captcha = moncycle_captcha.attach({
+			purpose: "register",
+			email: $("#i_email1"),
+			image: $("#r_captcha"),
+			token: $("#i_captcha_token"),
+			answer: $("#i_captcha"),
+			error: function(message) { $("#register_error_msg").text(message); },
+		});
 		$("#f_registration").on("submit", function(event) {
 			event.preventDefault();
 			$("#register_error_msg").text("");
@@ -39,7 +42,6 @@ else {
 			let reactivate_form = function() {
 				$("#but_register").prop("disabled", false);
 				$("#but_register").val("Créer mon compte 🥳");
-				reload_captcha();
 			}
 			var method = $('input[name="method"]:checked').val() == "3" ? "fertilityCare" : "billings";
 			var payload = {
@@ -47,6 +49,7 @@ else {
 				email: $("#i_email1").val(),
 				birthYear: parseInt($("#i_anaissance").val()),
 				captcha: $("#i_captcha").val(),
+				captchaToken: $("#i_captcha_token").val(),
 				method: method,
 				temperatureTracking: $("#m_temp").is(':checked'),
 				discoveredComment: $("#i_comment").val(),
@@ -70,6 +73,9 @@ else {
 					missing_fields: "Données manquantes pour créer le compte.",
 					invalid_email: "L'adresse email renseignée n'est pas valide.",
 					captcha_invalid: "Erreur dans la saisie du captcha.",
+					captcha_expired: "Le captcha a expiré, recopiez le nouveau.",
+					captcha_unavailable: "Le captcha est indisponible pour le moment, réessayez plus tard.",
+					rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
 					account_exists: "Un compte existe déjà pour cette adresse email.",
 					invalid_birth_year: "La date de naissance n'est pas réaliste.",
 					invalid_first_name: "Le prénom est invalide ou trop long.",
@@ -77,6 +83,8 @@ else {
 				};
 				$("#register_error_msg").text(return_codes[err.code] || err.message || "Erreur inconnue.");
 				reactivate_form();
+				// a captcha that was refused is not asked again with the same answer
+				if (err.code === "captcha_invalid" || err.code === "captcha_expired") register_captcha.reload(true);
 			});
 		});
 	});

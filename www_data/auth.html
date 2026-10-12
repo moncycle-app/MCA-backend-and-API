@@ -28,6 +28,7 @@
 		<meta property="og:description" content="Application de suivi de cycle pour les méthodes naturelles de régulation des naissances." />
 		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
 		<script type="text/javascript" src="js/store.js" defer></script>
+		<script type="text/javascript" src="js/captcha.js" defer></script>
 		<script type="text/javascript" src="js/auth.js" defer></script>
 		<link rel="stylesheet" href="css/commun.css" />
 		<link rel="stylesheet" href="css/account.css" />
@@ -59,7 +60,8 @@
 			<div id="captcha_wrapper" style="display:none">
 				<label for="i_captcha">Captcha:</label><br />
 				<input name="captcha" id="i_captcha" type="text" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." /><br />
-				<img src="api/captcha.php" class="captcha" id="l_captcha" title="Cliquer pour obtenir une autre image" alt="captcha" /><br />
+				<img class="captcha" id="l_captcha" hidden title="Cliquer pour obtenir une autre image" alt="captcha" />
+				<input type="hidden" name="captchaToken" id="i_captcha_token" value="" /><br />
 				<span class="label_info">Majuscules ou minuscules, peu importe. Image difficile à lire ? Cliquez dessus pour en obtenir une autre.</span><br />
 				<br />
 			</div>
@@ -74,6 +76,13 @@
 				<label for="r_email1">E-mail:</label><br />
 				<input name="email1" id="r_email1" type="email" required placeholder="adresse mail de connexion"  value="" /><br />
 				<br />
+				<label for="rc_captcha">Captcha:</label><br />
+				<input name="captcha" id="rc_captcha" type="text" maxlength="6" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." /><br />
+				<img class="captcha" id="rc_captcha_img" hidden title="Cliquer pour obtenir une autre image" alt="captcha" />
+				<input type="hidden" name="captchaToken" id="rc_captcha_token" value="" /><br />
+				<span class="label_info">L'image s'affiche une fois l'e-mail saisi. Majuscules ou minuscules, peu importe. Image difficile à lire ? Cliquez dessus pour en obtenir une autre.</span><br />
+				<br />
+				<span class="rouge" id="reset_error_msg"></span><br />
 				<input type="submit" value="Rénitialiser 🤐" id="reset_but"/></form>
 				<br /><br /><br />
 			</form>

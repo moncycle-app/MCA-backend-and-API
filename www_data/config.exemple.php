@@ -77,6 +77,11 @@ define("LOGIN_LOCKOUT_THRESHOLD", 15);
 // Failed attempts from one IP, in the window of db_count_login_attempt_ip(), before HTTP 429 (0: no limit).
 define("LOGIN_IP_MAX_ATTEMPTS", 30);
 
+// The key that signs the captcha challenges (lib/captcha.php): at least 32 characters, random, secret. Empty or shorter:
+// the captcha is closed, and register, recover_password and the login of an account that must answer one refuse with
+// 503 captcha_unavailable. Several instances behind one address must share the same value.
+define("CAPTCHA_SECRET", "");
+
 // Logs (lib/log.php, README "Logs").
 // The least severe level written: off, error, warning, info, debug.
 define("LOG_LEVEL", "info");

@@ -56,14 +56,13 @@ CREATE TABLE `day_timeline` (
 
 CREATE TABLE `auth_token` (
   `no_auth_token` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `no_user_account` mediumint(8) unsigned DEFAULT NULL,
+  `no_user_account` mediumint(8) unsigned NOT NULL,
   `name` varchar(256) COLLATE utf8mb4_bin NOT NULL,
   `expire` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `contry_code` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL,
   `date_creation` timestamp NOT NULL DEFAULT current_timestamp(),
   `date_use` timestamp NULL DEFAULT NULL,
   `auth_token_str` varchar(512) COLLATE utf8mb4_bin NOT NULL,
-  `captcha` varchar(16) COLLATE utf8mb4_bin DEFAULT NULL,
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
   PRIMARY KEY (`no_auth_token`),
   UNIQUE KEY `auth_token_str` (`auth_token_str`),
@@ -72,7 +71,7 @@ CREATE TABLE `auth_token` (
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `login_attempt_ip` (
-  `no_login_attempt_ip` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `no_login_attempt_ip` int(10) unsigned NOT NULL AUTO_INCREMENT,
   `ip_address` varchar(45) COLLATE utf8mb4_bin NOT NULL,
   `date_attempt` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`no_login_attempt_ip`),

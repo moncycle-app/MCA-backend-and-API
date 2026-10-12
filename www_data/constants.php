@@ -52,13 +52,24 @@ const PASSWORD_MIN_LENGTH = 8;
 // address that has no account is checked against it, so that it takes as long as a wrong password does.
 const AUTH_DUMMY_PASSWORD_HASH = '$2y$12$fFAyg7vWBJagg2QJOymLY.Ndi.VRQtAJhChoNUW7XiAxek8JDKUju';
 
-// The captcha picture (lib/sec.php). Medium on purpose: the characters are not distorted and there are a few
+// The captcha picture (lib/captcha.php). Medium on purpose: the characters are not distorted and there are a few
 // lines, and the alphabet leaves out the glyphs that look alike (o 0, i l j 1, s 5, z 2, b 6 8, g q 9, u v, c e).
 // What the visitor types is matched without regard to case.
 const CAPTCHA_CHARSET = "adefhkmnprtwxy3467";
-const CAPTCHA_LENGTH = 5;
+const CAPTCHA_LENGTH = 6;
 const CAPTCHA_WIDTH = 180;
 const CAPTCHA_HEIGHT = 60;
+
+// The captcha is a signed challenge, kept nowhere (lib/captcha.php): a token "<exp>.<mac>" that holds its own expiry.
+// CAPTCHA_SECRET (config.php) signs it; one shorter than CAPTCHA_SECRET_MIN_CHARS counts as none and the captcha is closed (503).
+const CAPTCHA_VALID_SECONDS = 300;
+const CAPTCHA_ANSWER_MAX_BYTES = 64;   // a longer answer is no reading of a picture of CAPTCHA_LENGTH characters
+const CAPTCHA_SECRET_MIN_CHARS = 32;
+// The token is bound to the visitor's network: the address cut to its first 24 bits (IPv4) or 64 bits (IPv6).
+const CAPTCHA_IP_PREFIX_V4 = 24;
+const CAPTCHA_IP_PREFIX_V6 = 64;
+// What a captcha is asked for: register, recover_password, and login once the account has failed LOGIN_CAPTCHA_THRESHOLD times.
+const CAPTCHA_PURPOSES = ["register", "recover", "login"];
 
 const ACCOUNT_DEFAULT_LANGUAGE = "FR";    // user_account.language of a new account, until the user can choose
 // The two public demo accounts (script/db/demo.sql): never reminded, never warned, never erased, left out of the statistics (lib/db.php).

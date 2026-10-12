@@ -8,18 +8,34 @@
 */
 
 require_once "../config.php";
-require_once "../lib/db.php";
-require_once "../lib/log.php";
-require_once "../lib/sec.php";
+require_once "../lib/api.php";
+require_once "../lib/account.php";
+require_once "../lib/captcha.php";
 
-log_start(sec_client_ip());
-http_exit_if_maintenance();
-$captcha = sec_captcha_build();
+[$db] = api_start(false);
 
-sec_captcha_issue(db_open(), $captcha->getPhrase());
+if ($_SERVER['REQUEST_METHOD'] !== "POST") {
+	http_error(405, "method_not_allowed", "Supported method: POST.");
+}
+
+$body = http_json_body();
+$purpose = $body["purpose"] ?? null;
+if (!is_string($purpose) || !in_array($purpose, CAPTCHA_PURPOSES, true)) {
+	http_error(400, "invalid_purpose", "'purpose' must be one of: " . implode(", ", CAPTCHA_PURPOSES) . ".");
+}
+
+$email = account_email_normalise($body["email"] ?? null);
+if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+	http_error(400, "invalid_email", "Provided email address is not valid.");
+}
+
+if (!captcha_ready()) {
+	http_error(503, "captcha_unavailable", "The captcha is not available.");
+}
+
+// the same answer, from the same reads, whether the address has an account or not
+$challenge = captcha_issue($db, $purpose, $email, sec_client_ip());
 log_event("auth.captcha_issued");
 
-header('Content-type: image/jpeg');
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
-$captcha->output();
-exit;
+http_data(200, $challenge);

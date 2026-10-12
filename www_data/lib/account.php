@@ -10,6 +10,7 @@
 // The user_account row as the code and the JSON API see it: its method, and what a
 // POST /api/account body changes.
 
+require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
@@ -58,6 +59,35 @@ function account_password_matches($db, array $user_account, mixed $password): bo
 	if (!is_string($password) || $password === "") return false;
 	$full_account = db_select_user_account_by_email($db, $user_account["email1"]) ?? [];
 	return isset($full_account["password"]) && password_verify($password, $full_account["password"]);
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/recover_password
+// ---------------------------------------------------------------------------
+
+// Replaces the password of the account at $email with a new one, if the captcha of the request (purpose "recover") is
+// good. Answers ["captcha" => the verdict of captcha_verify(), "account" => the row or null, "password" => the new
+// password in the clear, or null when nothing was changed]. The mail is the caller's, and goes after this returns: the
+// new password is committed by then.
+// The captcha is tied to the stored password hash. The account is held from the check to the update, and the check is
+// made on what it holds now, so of requests that arrive together with one token the first changes the password and the
+// others no longer match: one reset per token. An address with no account is only checked (the same verdict, and no
+// way to tell from the outside).
+function account_recover_password($db, string $email, mixed $token, mixed $answer, string $ip): array {
+	$account = db_select_user_account_by_email($db, $email);
+	if (is_null($account)) {
+		return ["captcha" => captcha_verify($db, "recover", $email, $token, $answer, $ip), "account" => null, "password" => null];
+	}
+
+	return db_transaction($db, function () use ($db, $email, $token, $answer, $ip, $account) {
+		db_select_user_account_for_update($db, $account["no_user_account"]);
+		$verdict = captcha_verify($db, "recover", $email, $token, $answer, $ip);
+		if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $account, "password" => null];
+
+		$password = sec_random_password();
+		db_update_password_by_email($db, sec_hash($password), $email);
+		return ["captcha" => $verdict, "account" => $account, "password" => $password];
+	});
 }
 
 // ---------------------------------------------------------------------------

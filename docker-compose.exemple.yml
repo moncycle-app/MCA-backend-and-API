@@ -22,6 +22,10 @@ services:
       SMTP_MAIL: smtp_email_and_mogin_id
       SMTP_PASSWORD_FILE: /run/secrets/smtp_password
       PHP_CACHE: 1
+      # The key that signs the captcha (32 characters or more, random: `openssl rand -base64 48`). Left unset, the container
+      # makes one at start-up: enough for one container, whose restart then voids the captchas in flight. Several
+      # instances behind one address, or a restart that must not void them, need the same value (README, "Security")
+      # CAPTCHA_SECRET: 'A-RANDOM-STRING-OF-AT-LEAST-32-CHARACTERS'
       # The container runs the daily job (script/cron.php, 3:30 in TZ) itself. Set it to 'false' if you run the cron
       # from the host instead: both would send every mail twice (README, "Security")
       # CRON_ENABLED: 'true'

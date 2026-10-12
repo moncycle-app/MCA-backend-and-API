@@ -40,6 +40,10 @@ form {
 	cursor: pointer;
 }
 
+.captcha[hidden] {
+	display: none;
+}
+
 .register_commente {
 	text-decoration: none;
 }

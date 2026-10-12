@@ -17,7 +17,9 @@ $body = http_json_body();
 // the address is looked up as it is stored: trimmed, in lower case (sec_login reads it from the body)
 if (is_string($body["email"] ?? null)) $body["email"] = account_email_normalise($body["email"]);
 
-if (!is_null($user_account)) {
+// whoever is on a demo account is a visitor (its password is on the sign-in page): they can sign in as someone else,
+// and the new session replaces the demo's cookie
+if (!is_null($user_account) && !sec_session_is_demo($user_account)) {
 	http_data(200, ["userId" => $user_account["no_user_account"], "alreadyAuthenticated" => true]);
 }
 
