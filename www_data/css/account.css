@@ -221,3 +221,14 @@ form {
 		background-color: #191919;
 	}
 }
+
+.token_row {
+	padding: 10px 0;
+	border-bottom: 1px solid rgba(128, 128, 128, .3);
+	overflow-wrap: anywhere;
+}
+
+#i_token_new_value {
+	font-family: monospace;
+	width: 90%;
+}

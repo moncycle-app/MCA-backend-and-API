@@ -30,13 +30,14 @@
 		<link rel="stylesheet" href="css/account.css" />
 		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
 		<script type="text/javascript" src="js/store.js" defer></script>
+		<script type="text/javascript" src="js/captcha.js" defer></script>
 		<script type="text/javascript" src="js/account.js" defer></script>
 	</head>
 	<body>
 		<center>
 			<h1>mon<span class="gradiant_logo">cycle</span>.app</h1>
 			<div id="name">Mon compte</div>
-			<a href="/"><button type="button" class="nav_button">👈 Revenir aux cycles</button></a> <a href="api/logout" id="but_logout"><button type="button" id="mon_user_account" class="nav_button rouge">🔑 Déconnexion</button></a>
+			<a href="/"><button type="button" class="nav_button">👈 Revenir aux cycles</button></a> <form id="f_logout" action="api/token" method="delete"><button type="submit" id="but_logout" class="nav_button rouge">🔑 Déconnexion</button></form>
 			<p id="merci_don" style="display:none">🎖️ Merci pour votre don sur <a href="https://fr.tipeee.com/moncycleapp" target="_blank">Tipeee</a>.</p>
 			<p id="warning_demo" style="font-weight:bold; display:none">&#x1F6A8; Vous visualisez actuellement le compte de démonstration.<br /><br /><a style="color:#fbca0b" href='/register'><button type='button'>&#x1F680; créer votre compte</button></a></p>
 		</center>
@@ -210,6 +211,74 @@
 			<input id="but_mdp_change" type="submit" value="💾 enregistrer" /><br />
 			<span id="mdp_ret_msg" class="rouge"></span><br /></form>
 			<br /><br /><br />
+
+
+
+			<div id="tokens_section">
+			<h2>Mes connexions <span class="net_stat" id="tokens_net_stat"></span></h2>
+			<p>
+				Chaque navigateur ou application connecté à votre compte a sa propre connexion. Si vous ne reconnaissez pas l'une d'elles, déconnectez-la
+				et changez votre mot de passe. Le nom et le navigateur sont ceux que l'appareil déclare: ils aident à s'y retrouver, mais ne prouvent rien.
+				Les adresses sont tronquées à leur réseau, et la dernière utilisation n'est mise à jour que toutes les 5 minutes.
+			</p>
+			<div id="tokens_container"><center>⏳</center></div>
+			<span class="rouge" id="tokens_err"></span>
+			<form id="f_tokens_revoke_all" action="api/token" method="delete">
+				<input type="hidden" name="all" value="true" />
+				<button type="submit" class="rouge" id="but_tokens_revoke_all">🗑️ Déconnecter tous mes autres appareils</button>
+			</form>
+			<br /><br /><br />
+
+			<h3>Créer un jeton d'accès</h3>
+			<p>
+				Un jeton permet à une application ou à un script d'accéder à votre compte sans votre mot de passe, en l'envoyant dans l'en-tête
+				<code>Authorization: Bearer</code>. Il est affiché <b>une seule fois</b>, à la création. Choisissez « lecture seule » pour un script qui ne fait
+				que lire vos données. Pour créer un jeton, confirmez avec votre mot de passe.
+			</p>
+			<form id="f_token_create" action="api/token" method="post"><br />
+				<input type="hidden" name="email" id="i_token_new_email" value="" />
+				<input type="hidden" name="cookie" value="false" />
+				<label for="i_token_new_name">Nom:</label><br />
+				<input type="text" id="i_token_new_name" name="name" maxlength="256" required placeholder="par exemple: script de sauvegarde" /><br />
+				<br />
+				<label for="i_token_new_scope">Accès:</label><br />
+				<select id="i_token_new_scope" name="scope" style="width: auto">
+					<option value="readOnly">lecture seule</option>
+					<option value="readWrite">lecture et écriture</option>
+				</select><br />
+				<br />
+				<label for="i_token_new_days">Valable:</label><br />
+				<select id="i_token_new_days" name="expiresInDays" style="width: auto">
+					<option value="30">30 jours</option>
+					<option value="90">90 jours</option>
+					<option value="365">1 an</option>
+				</select><br />
+				<br />
+				<label for="i_token_new_password">Mot de passe:</label><br />
+				<input type="password" id="i_token_new_password" name="password" autocomplete="current-password" required placeholder="mot de passe moncycle.app" /><br />
+				<br />
+				<div id="token_new_code_wrapper" style="display:none">
+					<label for="i_token_new_code">Code:</label><br />
+					<input type="number" id="i_token_new_code" name="code" placeholder="authentification multifacteur" /><br />
+					<br />
+				</div>
+				<div id="token_new_captcha_wrapper" style="display:none">
+					<label for="i_token_new_captcha">Captcha:</label><br />
+					<input name="captcha" id="i_token_new_captcha" type="text" maxlength="6" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrer les lettres ou chiffres affichés ci-dessous." /><br />
+					<img class="captcha" id="i_token_new_captcha_img" hidden title="Cliquer pour obtenir une autre image" alt="captcha" />
+					<input type="hidden" name="captchaToken" id="i_token_new_captcha_token" value="" /><br />
+					<br />
+				</div>
+				<input type="submit" id="but_token_create" value="🔑 Créer le jeton" />
+			</form>
+			<span class="rouge" id="token_new_err"></span>
+			<div id="token_new_result" style="display:none">
+				<p class="vert">✅ Jeton créé. Copiez-le maintenant: il ne sera plus affiché.</p>
+				<input type="text" id="i_token_new_value" readonly />
+				<button type="button" id="but_token_copy">📎 COPIER</button> <span class="vert" id="token_copy_ok"></span>
+			</div>
+			<br /><br /><br />
+			</div>
 
 
 

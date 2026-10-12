@@ -159,3 +159,20 @@ UPDATE `user_account` SET `email1` = LOWER(`email1`), `email2` = LOWER(`email2`)
 
 -- key_value had no primary key (the visit counters and the numbers of /api/pub_stat are rows of it)
 ALTER TABLE `key_value` ADD PRIMARY KEY (`key`), ALGORITHM=INPLACE, LOCK=NONE;
+
+-- A token is a session (the browser's) or a custom token: it has a name of its own, a scope (1 read only, 2 read and write),
+-- an expiry date (NULL: the 40 days unused / 1 year rule of the cron), and what the server saw of its client when it was made
+-- and at its last use (the address is kept whole; GET /api/token shows it cut). Until now the name held "AUTH | <user agent>":
+-- the user agent moves to its own column, and the name becomes a plain "Session". The country code was never known (always 'FR'): left empty.
+ALTER TABLE `auth_token`
+ADD `scope` tinyint(1) unsigned NOT NULL DEFAULT 2 AFTER `name`,
+ADD `date_expire` timestamp NULL DEFAULT NULL AFTER `expire`,
+ADD `user_agent` varchar(255) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL AFTER `date_use`,
+ADD `user_agent_use` varchar(255) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL AFTER `user_agent`,
+ADD `ip_address` varchar(45) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL AFTER `user_agent_use`,
+ADD `ip_address_use` varchar(45) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL AFTER `ip_address`,
+ALGORITHM=INSTANT, LOCK=NONE;
+UPDATE `auth_token`
+SET `user_agent` = NULLIF(TRIM(SUBSTRING(`name`, LOCATE(' | ', `name`) + 3)), ''), `name` = 'Session'
+WHERE LOCATE(' | ', `name`) > 0;
+UPDATE `auth_token` SET `contry_code` = NULL;

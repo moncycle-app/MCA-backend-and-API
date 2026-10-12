@@ -12,8 +12,8 @@ use PHPMailer\PHPMailer\PHPMailer;
 require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/log.php";
 
-// Sends one mail from the app. $kind says which of the six it is (welcome, new_password, secondary_email,
-// cycle, reminder, deletion_warning); it is all the log keeps of it, with how many addresses and files:
+// Sends one mail from the app. $kind says which of the seven it is (welcome, new_password, secondary_email,
+// new_login, cycle, reminder, deletion_warning); it is all the log keeps of it, with how many addresses and files:
 // never an address, a subject or a body (two of them hold a password). $to lists the addresses
 // (empty ones are skipped), $attachments is [file name => content]. True when the SMTP server took
 // it: the callers decide what a failure means, so nothing is thrown.
@@ -125,6 +125,34 @@ function mail_send_secondary_email_changed(string $email, string $new_email2): b
 	return mail_send('secondary_email', [$email], 'La deuxième adresse de votre compte a changé',
 		mail_html("Bonjour,", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
 		$new_email2 === "" ? 'La deuxième adresse de votre compte a été supprimée.' : 'La deuxième adresse de votre compte est maintenant ' . $new_email2 . '.');
+}
+
+// The notice to the account's own address that a token was made: every login makes one, a browser's session or a custom token
+// (POST /api/token). Whoever holds the password can make a custom token that outlives the session it was made from, and a
+// stolen password is first used as a login: the owner must be able to see both. The name and the user agent are the client's own
+// words (escaped); no address in it, a mail crosses servers in clear. $expires_at is the "Y-m-d H:i:s" UTC the token dies on, null
+// when the 40 days unused / 1 year rule applies.
+function mail_send_new_login(array $account, string $name, string $scope, ?string $user_agent, ?string $expires_at): bool {
+	$email = $account["email1"];
+	$account_name = htmlspecialchars($account["name"]);
+	$token_name = htmlspecialchars($name);
+	$agent = is_null($user_agent) ? "inconnu" : htmlspecialchars(mb_substr($user_agent, 0, MAIL_USER_AGENT_CHARS));
+	$access = $scope === "readOnly" ? "lecture seule" : "lecture et écriture";
+	$until = is_null($expires_at) ? "" : "<br />Valable jusqu'au <b>" . gmdate("d/m/Y", strtotime($expires_at . " UTC")) . "</b>";
+	$login = mail_link($email, "auth", "connectez-vous");
+	$content = <<<HTML
+	Une nouvelle connexion à votre compte vient d'avoir lieu.<br />
+	<br />
+	Nom: <b>{$token_name}</b><br />
+	Accès: {$access}{$until}<br />
+	Navigateur ou application: {$agent}<br />
+	<br />
+	Si c'est vous, il n'y a rien à faire. Sinon, {$login}, changez votre mot de passe depuis la page "👨‍💻 Mon compte" et cochez "Déconnecter tous mes autres appareils": la liste de vos connexions s'y trouve aussi.<br />
+	<br />
+	HTML;
+	return mail_send('new_login', [$email], 'Nouvelle connexion à votre compte',
+		mail_html("Bonjour {$account_name},", $content, mail_why("vous possédez un compte sur MONCYCLE.APP")),
+		"Une nouvelle connexion à votre compte moncycle.app vient d'avoir lieu ($name). Si ce n'est pas vous, changez votre mot de passe.");
 }
 
 // ---------------------------------------------------------------------------

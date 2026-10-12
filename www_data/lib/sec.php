@@ -82,7 +82,8 @@ function sec_clear_token_cookie(): void {
 }
 
 // The account of the token the request carries (cookie, or "Authorization: Bearer"), or null. The
-// account and the session it finds are the ones every line of the request's log carries.
+// account and the session it finds are the ones every line of the request's log carries. A token past its
+// expiry date (POST /api/token, "expiresInDays") opens nothing, whether or not the cron has erased it yet.
 function sec_auth_token($db) {
 	$auth_token = $_COOKIE[COOKIE_AUTH_TOKEN_LEGACY] ?? ""; // legacy, to be removed in a few release
 	if (!is_string($auth_token)) $auth_token = "";
@@ -91,12 +92,13 @@ function sec_auth_token($db) {
 	if (isset($head["Authorization"]) && str_contains($head["Authorization"], "Bearer ")) $auth_token = explode(' ', trim($head["Authorization"]), 2)[1];
 	if (strlen($auth_token) > 0) {
 		$user_account = db_select_user_account_auth_token($db, sec_hash_token($auth_token));
-		if (!is_null($user_account) && sec_account_enabled($user_account)) {
-			db_update_auth_token_use($db, $user_account["no_auth_token"]);
+		if (!is_null($user_account) && !boolval($user_account["expired_auth_token"]) && sec_account_enabled($user_account)) {
+			db_update_auth_token_use($db, $user_account["no_auth_token"], sec_client_ip(), sec_user_agent());
 			log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($user_account["no_auth_token"])]);
 			return $user_account;
 		}
-		log_event("auth.token_rejected", ["why" => is_null($user_account) ? "unknown" : "disabled", "uid" => $user_account["no_user_account"] ?? null]);
+		$why = is_null($user_account) ? "unknown" : (boolval($user_account["expired_auth_token"]) ? "expired" : "disabled");
+		log_event("auth.token_rejected", ["why" => $why, "uid" => $user_account["no_user_account"] ?? null]);
 	}
 	return null;
 }
@@ -108,6 +110,18 @@ function sec_exit_if_logged_out($user_account) {
 		echo json_encode(["error" => ["code" => "unauthorized", "message" => "Authentication required."]]);
 		exit;
 	}
+}
+
+// Is the token of the request a read-only one? (POST /api/token, "scope".)
+function sec_token_is_read_only(array $user_account): bool {
+	return intval($user_account["scope_auth_token"] ?? AUTH_TOKEN_SCOPE_READ_WRITE) === AUTH_TOKEN_SCOPE_READ_ONLY;
+}
+
+// Ends the request with a 403 when the token is read-only. api_start() calls it for every method that is not safe (HTTP_SAFE_METHODS);
+// an endpoint calls it itself for a GET that changes something (GET /api/totp starts a set-up).
+function sec_exit_if_token_read_only(array $user_account): void {
+	if (!sec_token_is_read_only($user_account)) return;
+	http_error(403, "read_only_token", "This token is read-only.");
 }
 
 // Is the caller logged in as one of the public demo accounts? Its password is written on the sign-in page, so it is
@@ -132,26 +146,36 @@ function sec_redirect_if_logged_out($user_account) {
 	}
 }
 
-// The name a session is stored under: what it is for, then the browser's user agent. A header can
-// be 8 KB and is not always UTF-8, a column is 256 characters of it: the agent is made valid and
-// cut to fit, on a character boundary.
-function sec_device_name(string $kind): string {
-	$user_agent = mb_scrub($_SERVER['HTTP_USER_AGENT'] ?? '');
-	if (strlen($user_agent) > AUTH_TOKEN_USER_AGENT_BYTES) $user_agent = mb_strcut($user_agent, 0, AUTH_TOKEN_USER_AGENT_BYTES) . " ...";
-	return "$kind | $user_agent";
+// The user agent the server received, for the token to keep: made valid UTF-8, stripped of every control and invisible character
+// (a header can be 8 KB, is not always UTF-8 and is the client's own: the account page shows it, and a right-to-left override must
+// not reorder the line around it) and cut to what the column holds. null when the client sent none.
+function sec_user_agent(): ?string {
+	$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
+	if (!is_string($user_agent)) return null;
+	$user_agent = preg_replace('/\p{C}+/u', '', mb_scrub(substr($user_agent, 0, 4 * AUTH_TOKEN_LIMIT_USER_AGENT_CHARS))) ?? '';
+	$user_agent = mb_substr($user_agent, 0, AUTH_TOKEN_LIMIT_USER_AGENT_CHARS);
+	return $user_agent === '' ? null : $user_agent;
 }
 
-// Opens a session: stores a new token for the account, sets its cookie, and returns it. The new
-// session is the one the rest of the request's log names.
-function sec_auth_success($db, $user_account, $device=null) {
+// Opens a session: stores a new token for the account and returns it, with what the server saw of the client (its address, its
+// user agent). $options: "name", "scope" (AUTH_TOKEN_SCOPE_*), "expires_in_days" (null: the cron's rule), "cookie" (set the cookie of
+// the token: a browser's session; a custom token made on the account page must not replace the cookie it is made from, so it
+// does not). A cookie session replaces the one the browser held, which nobody holds any more: that row goes, or the list of
+// tokens would fill with sessions nobody can use. The new session is the one the rest of the request's log names.
+function sec_auth_success($db, $user_account, array $options = []) {
 	$auth_token = sec_random_password(256);
+	$scope = $options["scope"] ?? AUTH_TOKEN_SCOPE_READ_WRITE;
+	$expires_in_days = $options["expires_in_days"] ?? null;
 
-	$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $device ?? sec_device_name("AUTH"), "FR", sec_hash_token($auth_token));
+	$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $options["name"] ?? AUTH_TOKEN_DEFAULT_NAME, $scope, $expires_in_days, sec_user_agent(), sec_client_ip(), sec_hash_token($auth_token));
 	log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($no_auth_token)]);
 	db_update_user_account_logged_in($db, $user_account["no_user_account"]);
-	sec_set_token_cookie($auth_token, '+5 years');
+	if ($options["cookie"] ?? false) {
+		if (sec_cookie_token() !== "") db_delete_auth_token_by_str($db, sec_hash_token(sec_cookie_token()));
+		sec_set_token_cookie($auth_token, is_null($expires_in_days) ? '+5 years' : "+$expires_in_days days");
+	}
 
-	return $auth_token;
+	return ["token" => $auth_token, "id" => intval($no_auth_token)];
 }
 
 function sec_obfuscate($str) {
@@ -387,8 +411,9 @@ function sec_login_account_locked($user_account) {
 // Every outcome is logged: the refusals as `auth.login_failed`, with the account when the address
 // has one and its count of failed attempts, this one included when it was counted against it.
 // The address in $body["email"] is read as it is: the endpoint has already normalised it
-// (account_email_normalise(), api/login.php), which is how it is stored.
-function sec_login($db, array $body): array {
+// (account_email_normalise(), api/token.php), which is how it is stored.
+// $token_options is what sec_auth_success() takes (name, scope, expires_in_days, cookie), checked by the endpoint (token_parse_options()).
+function sec_login($db, array $body, array $token_options = []): array {
 	$user_account = [];
 
 	$refuse = function (int $status, string $code, string $message, array $meta = [], bool $counted_on_account = false) use (&$user_account) {
@@ -438,7 +463,7 @@ function sec_login($db, array $body): array {
 	if (empty($body["email"]) || empty($body["password"])) return $counted(400, "missing_credentials", "'email' and 'password' are required.");
 
 	// the account, the password, the code: what a login is once the captcha (if it is asked) is passed
-	$check_credentials = function () use ($db, $body, $meta, $counted, &$user_account, &$account_locked, &$attempt) {
+	$check_credentials = function () use ($db, $body, $token_options, $meta, $counted, &$user_account, &$account_locked, &$attempt) {
 		if (isset($user_account["user_enabled"]) && !sec_account_enabled($user_account)) return $counted(403, "account_disabled", "Account deactivated.");
 
 		// an address with no account is checked against a hash nobody can match, for the time a check takes
@@ -472,12 +497,18 @@ function sec_login($db, array $body): array {
 		// the failures this login ends, read before sec_auth_success() resets them
 		$attempts = sec_login_effective_attempts($user_account);
 		unset($user_account["password"], $user_account["totp_secret"]);
-		$token = sec_auth_success($db, $user_account);
+		$session = sec_auth_success($db, $user_account, $token_options);
 		sec_attempt_release($db, $attempt);
-		log_event("auth.login_succeeded", ["att" => $attempts, "totp" => $totp_active]);
+		log_event("auth.login_succeeded", [
+			"att" => $attempts,
+			"totp" => $totp_active,
+			"scope" => AUTH_TOKEN_SCOPE_NAMES[$token_options["scope"] ?? AUTH_TOKEN_SCOPE_READ_WRITE],
+			"cookie" => boolval($token_options["cookie"] ?? false),
+		]);
 
-		return ["status" => 200, "data" => array_merge([
-			"token" => $token,
+		return ["status" => 201, "data" => array_merge([
+			"id" => $session["id"],
+			"token" => $session["token"],
 			"userId" => $user_account["no_user_account"],
 			"totpUsed" => $totp_active,
 		], $meta)];

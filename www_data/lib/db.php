@@ -223,6 +223,7 @@ function db_update_user_account_totp_state($db, $totp_state, $no_user_account) {
 function db_select_user_account_auth_token($db, $auth_token_str): ?array {
 	return db_row($db,
 		"SELECT J.no_user_account, J.no_auth_token, C.name AS name_user_account, J.contry_code, J.name AS name_auth_token,
+		J.scope AS scope_auth_token, (J.date_expire IS NOT NULL AND J.date_expire <= NOW()) AS expired_auth_token,
 		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.email1, C.email2,
 		C.nb_connection_attempts, C.sponsor, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
 		C.last_password_change, C.register_comment, C.totp_secret, C.totp_state, C.research, C.timeline_asc, C.auto_mail_export, C.last_write_client_UTC
@@ -236,20 +237,42 @@ function db_select_auth_tokens($db, $no_user_account) {
 	return db_rows($db, "SELECT * FROM auth_token WHERE no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
 }
 
-function db_insert_auth_token($db, $no_user_account, $name, $contry_code, $auth_token_str, $expire = 2) {
-	return db_insert($db,
-		"INSERT INTO auth_token (no_user_account, name, contry_code, auth_token_str, expire)
-		VALUES (:no_user_account, :name, :contry_code, :auth_token_str, :expire)",
-		["no_user_account" => $no_user_account, "name" => $name, "contry_code" => $contry_code, "auth_token_str" => $auth_token_str, "expire" => $expire]
+// What GET /api/token shows of the account's tokens, the newest first: everything but the hash. A token whose expiry date
+// has passed is not listed (it opens nothing, and the cron has not erased it yet).
+function db_select_auth_tokens_listing($db, $no_user_account): array {
+	return db_rows($db,
+		"SELECT J.no_auth_token, J.name, J.scope, J.expire, J.date_expire, J.date_creation, J.date_use,
+		J.user_agent, J.user_agent_use, J.ip_address, J.ip_address_use
+		FROM auth_token AS J
+		WHERE J.no_user_account = :no_user_account AND (J.date_expire IS NULL OR J.date_expire > NOW())
+		ORDER BY J.date_creation DESC, J.no_auth_token DESC",
+		["no_user_account" => $no_user_account]
 	);
 }
 
-// Stamps the session as used. Every authenticated request calls it, and what reads date_use counts in days
-// (the purge below, the cron's 40 days of inactivity), so a session is written at most every 5 minutes.
-function db_update_auth_token_use($db, $no_auth_token) {
+// A new token. $expires_in_days null: the rule of the cron (expire 2: 40 days unused, or a year old; INTERVAL NULL DAY is NULL);
+// a number of days: it dies on that day whatever its use (date_expire; expire 0, no idle rule). The country is not known: the
+// column stays empty.
+function db_insert_auth_token($db, $no_user_account, $name, $scope, $expires_in_days, $user_agent, $ip_address, $auth_token_str) {
+	return db_insert($db,
+		"INSERT INTO auth_token (no_user_account, name, scope, expire, date_expire, user_agent, ip_address, auth_token_str)
+		VALUES (:no_user_account, :name, :scope, :expire, NOW() + INTERVAL :expires_in_days DAY, :user_agent, :ip_address, :auth_token_str)",
+		[
+			"no_user_account" => $no_user_account, "name" => $name, "scope" => $scope, "expire" => is_null($expires_in_days) ? 2 : 0,
+			"expires_in_days" => $expires_in_days,
+			"user_agent" => $user_agent, "ip_address" => $ip_address, "auth_token_str" => $auth_token_str,
+		]
+	);
+}
+
+// Stamps the session as used, with who used it (the address and the user agent the server saw). Every authenticated request
+// calls it, and what reads date_use counts in days (the purge below, the cron's 40 days of inactivity), so a session is
+// written at most every 5 minutes: what GET /api/token shows of its last use is the last time it was written.
+function db_update_auth_token_use($db, $no_auth_token, $ip_address, $user_agent) {
 	return db_exec($db,
-		"UPDATE auth_token SET date_use = NOW() WHERE no_auth_token = :no_auth_token AND (date_use IS NULL OR date_use < NOW() - INTERVAL 5 MINUTE)",
-		["no_auth_token" => $no_auth_token]
+		"UPDATE auth_token SET date_use = NOW(), ip_address_use = :ip_address, user_agent_use = :user_agent
+		WHERE no_auth_token = :no_auth_token AND (date_use IS NULL OR date_use < NOW() - INTERVAL 5 MINUTE)",
+		["no_auth_token" => $no_auth_token, "ip_address" => $ip_address, "user_agent" => $user_agent]
 	);
 }
 
@@ -257,15 +280,21 @@ function db_delete_auth_token($db, $no_auth_token, $no_user_account) {
 	return db_exec($db, "DELETE FROM auth_token WHERE no_auth_token = :no_auth_token AND no_user_account = :no_user_account", ["no_auth_token" => $no_auth_token, "no_user_account" => $no_user_account]);
 }
 
+// The session a browser holds in its cookie (the SHA-256 of what it holds), whoever it belongs to: the browser is about to
+// hold another one.
+function db_delete_auth_token_by_str($db, $auth_token_str) {
+	return db_exec($db, "DELETE FROM auth_token WHERE auth_token_str = :auth_token_str", ["auth_token_str" => $auth_token_str]);
+}
+
 // Every session of the account but one (the caller's own): answers how many were closed.
 function db_delete_auth_tokens_other($db, $no_user_account, $no_auth_token_kept) {
 	return db_exec($db, "DELETE FROM auth_token WHERE no_user_account = :no_user_account AND no_auth_token <> :no_auth_token", ["no_user_account" => $no_user_account, "no_auth_token" => $no_auth_token_kept]);
 }
 
-// sessions not used for 40 days, or older than a year (those that expire). One condition for the purge and
-// for the count of the cron's dry run, which must agree.
+// tokens past their expiry date, and those with none that were not used for 40 days or are older than a year (expire > 0: the
+// rule of a token made without "expiresInDays"). One condition for the purge and for the count of the cron's dry run, which must agree.
 function db_sql_old_auth_token(): string {
-	return "((date_creation < CURDATE() - INTERVAL 365 DAY OR date_use < CURDATE() - INTERVAL 40 DAY) AND expire > 0)";
+	return "(date_expire < NOW() OR (expire > 0 AND (date_creation < CURDATE() - INTERVAL " . AUTH_TOKEN_DEFAULT_LIFETIME_DAYS . " DAY OR date_use < CURDATE() - INTERVAL " . AUTH_TOKEN_IDLE_DAYS . " DAY)))";
 }
 
 function db_delete_old_auth_token($db) {

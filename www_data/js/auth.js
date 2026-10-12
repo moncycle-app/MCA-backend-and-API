@@ -39,6 +39,8 @@ else {
 			answer: $("#rc_captcha"),
 			error: function(message) { $("#reset_error_msg").text(message); },
 		});
+		// the session is named after the site it was opened on, as the browser knows it
+		$("#i_token_name").val("WEB-APP " + window.location.hostname);
 		$("#connexion_form").on("submit", function(event) {
 			event.preventDefault();
 			$("#connexion_but").prop("disabled", true);
@@ -46,6 +48,8 @@ else {
 			var payload = {
 				email: $("#i_email1").val(),
 				password: $("#i_password").val(),
+				name: $("#i_token_name").val(),
+				cookie: $("#i_token_cookie").val() === "true",
 			};
 			if ($("#i_code").val()) payload.code = parseInt($("#i_code").val());
 			if ($("#captcha_wrapper").is(":visible")) {
@@ -54,7 +58,7 @@ else {
 			}
 			$.ajax({
 				type: "POST",
-				url: "api/login",
+				url: "api/token",
 				contentType: "application/json",
 				data: JSON.stringify(payload),
 			}).done(function(ret){

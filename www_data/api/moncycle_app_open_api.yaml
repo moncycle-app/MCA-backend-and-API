@@ -95,15 +95,13 @@ info:
     | `GET /export` | a file (`.nfp` JSON, `.csv` or `.pdf`); errors are **plain text in French** |
     | `GET /all_of_my_data_plz` | a CSV file; `401` has no body |
 
-    `GET /logout` is also special: it answers with an HTTP redirect, not a body.
-
     The one answer that does not follow these exceptions is the maintenance `503` of rule 3: it
     is an `error` envelope on every endpoint that gives it, `GET /pub_stat`,
-    `GET /export`, `GET /all_of_my_data_plz` and `GET /logout` included.
+    `GET /export` and `GET /all_of_my_data_plz` included.
 
     ## 3. Authentication
 
-    There is one credential: a **token**. You get it from `POST /login`.
+    There is one credential: a **token**. You get it from `POST /token`.
 
     The token is a random 256-character string. Send it back in one of two ways — both work on
     every protected endpoint, so pick the one that fits your client:
@@ -117,13 +115,17 @@ info:
 
     Good to know:
 
-    - A token lives until you destroy it (`GET /logout`) or the server purges it: the daily cron
-      deletes a token that has **not been used for 40 days**, or that is **more than a year old**,
-      whatever its use. The next call with it answers `401`: log in again. The cookie is set for
-      5 years, so it can outlive its token.
-    - There is no refresh step. There are no scopes and no roles.
-    - `GET /logout` destroys **one** token (the one you used), not all of them.
-    - One account can hold many valid tokens at the same time (one per device).
+    - A token lives until you destroy it (`DELETE /token`) or the server purges it. Made without
+      `expiresInDays`, it is deleted by the daily cron when it has **not been used for 40 days**, or is
+      **more than a year old**, whatever its use. Made with `expiresInDays`, it dies on that day whatever
+      its use, and from that moment it opens nothing. The next call with it answers `401`: sign in again.
+      The cookie is set for 5 years (the same day as the token, with `expiresInDays`), so it can outlive its token.
+    - There is no refresh step.
+    - `DELETE /token` destroys **one** token (the one you used); `DELETE /token` with `{"all": true}` destroys
+      every other one, and `GET /token` lists them (name, scope, dates, user agent, network).
+    - A token has a **scope**: `readWrite`, or `readOnly` (it reads, and can end its own session).
+      Nothing else limits a token: there are no roles, and a read-write token can do everything its account can.
+    - One account can hold many valid tokens at the same time (one per device), with no limit.
     - Missing or wrong token on a protected endpoint → `401` with code `unauthorized`.
     - **Every body is JSON.** Send `Content-Type: application/json` (a parameter such as
       `; charset=utf-8` is fine) with every `POST` and every `DELETE` that has a body, and with
@@ -166,16 +168,16 @@ info:
     Then log in and keep the token:
 
     ```bash
-    curl -s -X POST http://localhost:8003/api/login \
+    curl -s -X POST http://localhost:8003/api/token \
       -H 'Content-Type: application/json' \
-      -d '{"email":"marie@example.org","password":"<from the email>"}'
-    # -> 200 {"data":{"token":"abc...256 chars...","userId":42,"totpUsed":false}}
+      -d '{"email":"marie@example.org","password":"<from the email>","name":"my script"}'
+    # -> 201 {"data":{"id":12,"token":"abc...256 chars...","userId":42,"totpUsed":false,"name":"my script","scope":"readWrite",...}}
     ```
 
     ## 5. Daily use, step by step
 
     ```bash
-    TOKEN=abc...   # from /login
+    TOKEN=abc...   # from POST /token
     AUTH="Authorization: Bearer $TOKEN"
 
     # Who am I, and what are my settings? Call this once at startup.
@@ -331,10 +333,10 @@ info:
 
     There is also a limit of **30 attempts per IP address**, which answers `429` `rate_limited`.
 
-    Every `/login` response — success or failure — may contain `captchaRequired: true`. It is a
+    Every `POST /token` response — success or failure — may contain `captchaRequired: true`. It is a
     hint about your **next** attempt, not about this one. When you see it, call
     `POST /captcha` with `{"purpose":"login","email":...}` and include the answer and the token
-    in the next login. The token is tied to the account's failure counters, so **ask for a new
+    in the next sign-in. The token is tied to the account's failure counters, so **ask for a new
     one after every refused attempt** (a wrong password moves the counters and ends the token).
 
     The lock only applies to a **wrong** password. The real owner can still log in with the
@@ -710,7 +712,7 @@ paths:
         |---|---|---|---|
         | `register` | `POST /register` | nothing | — (the unique address decides who gets the account) |
         | `recover` | `POST /recover_password` | the stored password | the password changes: a reset uses the token up |
-        | `login` | `POST /login`, once `captchaRequired` | the account's failure counters | a login attempt moves them: ask again after each refused attempt |
+        | `login` | `POST /token`, once `captchaRequired` | the account's failure counters | a login attempt moves them: ask again after each refused attempt |
 
         The answer has the same shape whether the address has an account or not: nothing can be
         learned about an address from it.
@@ -742,7 +744,7 @@ paths:
                 email:
                   type: string
                   format: email
-                  description: The address of the call that follows (`email` of `POST /register`, `/recover_password` or `/login`). Spaces around it are ignored and it is read in lower case.
+                  description: The address of the call that follows (`email` of `POST /register`, `/recover_password` or `/token`). Spaces around it are ignored and it is read in lower case.
                   example: marie@example.org
       responses:
         "200":
@@ -789,62 +791,84 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /login:
+  /token:
     post:
       tags: [account]
-      summary: Log in and get a token
+      summary: Sign in, and get a token
       description: |-
-        Exchanges an email and a password for a **token**. The token is also set as the
-        `MONCYCLEAPP_TOKEN` cookie, so a browser client does not need to store it.
+        Exchanges an email and a password for a **token**. This is the only way to get one: the
+        web app's session and the token of a script are made by the same call. The credentials are
+        **always** checked, whatever token the request carries, so a stolen session cannot make
+        itself another token without the password. The throttling of section 9 applies to every call.
+
+        ### What the token is
+
+        - `name` — what you call it (256 characters at most, one line; default `API`). It is shown in
+          `GET /token`, so make it recognisable: `backup script`, `WEB-APP moncycle.app`. The web app
+          names its sessions `WEB-APP <the domain it was opened on>`.
+        - `scope` — `readWrite` (default) or `readOnly`. A read-only token can use `GET`, `HEAD` and `OPTIONS`
+          and end its own session (`DELETE /token`); everything else, and `GET /totp` (it stores a
+          secret), answers `403` `read_only_token`. Signing in again with it is allowed.
+        - `expiresInDays` — 1 to 365. The token dies on that day **whatever its use**, and from that moment
+          it opens nothing (`401`). Without it the token lives until it is destroyed, but the daily cron
+          erases it after 40 days without use or a year after its creation.
+        - `cookie` — `true` to also have the server set the token as the `MONCYCLEAPP_TOKEN` cookie
+          (a browser's session; the cookie it replaces is dropped with its session). `false` (default) sets
+          no cookie: use it for a script, and for a token made from a page that already has a session.
+          **The token is in the answer either way.** A page of the web app could therefore read it:
+          the `Content-Security-Policy` (`script-src 'self'`) is what stands in the way.
+
+        The server also keeps, for each token, the **user agent** and the **IP address** of the client when
+        the token was made and when it was last used. `GET /token` shows them (the address cut to its network).
+
+        Every sign-in is **announced by e-mail** to the account's own address (the two public demo accounts
+        excepted), with the name, the scope, the expiry date and the user agent. No address is in the mail.
 
         ### Which call do I make?
 
         ```
-        POST /login {email, password}
+        POST /token {email, password, name?, scope?, expiresInDays?, cookie?}
           |
-          |-- 200 + token ............... done
+          |-- 201 + token ............... done
           |-- 401 totp_required ......... retry with {email, password, code}
           |-- 403 captcha_required ...... POST /captcha {purpose:"login", email}, then retry with {email, password, captcha, captchaToken}
           |-- 403 captcha_expired ....... the captchaToken is more than 5 minutes old: ask for a new one
           |-- 401 invalid_credentials ... wrong email or password
           |-- 403 account_locked ........ too many failures, wait (see section 9)
           |-- 429 rate_limited .......... too many attempts from this IP, wait
-          '-- 200 alreadyAuthenticated .. you already sent a valid token
+          '-- 400 invalid_parameter ..... a field of the token (name, scope, expiresInDays, cookie) is wrong; nothing was counted
         ```
 
         A captcha and a TOTP code can both be required at the same time. Send them together.
 
         ### Reading the success body
 
-        - `token` — your credential. **Absent** when `alreadyAuthenticated` is `true`, because
-          no new token was created. Keep using the one you sent.
-        - `alreadyAuthenticated: true` — you sent a valid token, so the server did nothing. The
-          email and password in the body were not even checked. A token of one of the two public
-          demo accounts does not count: the caller is a visitor, and the login goes ahead.
-        - `totpUsed` — whether a second factor was verified on this login.
+        The token as `GET /token` shows it (`current` is `true`), plus:
+
+        - `token` — your credential, **shown this once**: only its SHA-256 is kept, nobody can show it again.
+        - `totpUsed` — whether a second factor was verified on this sign-in.
         - `captchaRequired` — a hint about the **next** attempt on this account, not this one.
           It can appear on a success.
 
-        Each successful login creates a **new** token and leaves the existing ones valid, so
-        logging in on a phone does not disconnect the laptop.
+        Each sign-in creates a **new** token and leaves the existing ones valid, so signing in on a phone
+        does not disconnect the laptop. There is no limit to their number: revoke the ones you do not use.
+        **A script should sign in once and keep its token**, not sign in on every run: each sign-in is a new
+        token in the list and a mail to the owner.
       security: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: '#/components/schemas/TokenRequest'
       responses:
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
-        "200":
-          description: |-
-            Authenticated. Three cases land here: password only, password + TOTP, or a request that
-            already carried a valid token. Read `totpUsed` and `alreadyAuthenticated` to tell them
-            apart.
+        "201":
+          description: Signed in. A token was made.
           headers:
             Set-Cookie:
-              description: "`MONCYCLEAPP_TOKEN=<token>`. HttpOnly, SameSite=Strict by default (`COOKIE_SAMESITE`), 5 years. Not sent when `alreadyAuthenticated` is true."
+              description: "`MONCYCLEAPP_TOKEN=<token>`. HttpOnly, SameSite=Strict by default (`COOKIE_SAMESITE`), 5 years (the day the token dies, with `expiresInDays`). Only with `cookie: true`."
               schema:
                 type: string
           content:
@@ -853,26 +877,26 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      token:
-                        type: string
-                        description: 256-character token. Absent when `alreadyAuthenticated` is `true`.
-                      userId:
-                        type: integer
-                        example: 42
-                      totpUsed:
-                        type: boolean
-                        description: "`true` when a TOTP code was verified. Absent when `alreadyAuthenticated` is `true`."
-                      alreadyAuthenticated:
-                        type: boolean
-                        description: Present and `true` only when the request already carried a valid token.
-                      captchaRequired:
-                        type: boolean
-                        description: Present and `true` when the **next** attempt on this account will need a captcha.
+                    allOf:
+                      - $ref: '#/components/schemas/Token'
+                      - type: object
+                        properties:
+                          token:
+                            type: string
+                            description: 256-character token. Shown once.
+                          userId:
+                            type: integer
+                            example: 42
+                          totpUsed:
+                            type: boolean
+                            description: "`true` when a TOTP code was verified."
+                          captchaRequired:
+                            type: boolean
+                            description: Present and `true` when the **next** attempt on this account will need a captcha.
         "400":
           description: |-
             `missing_credentials` — `email` or `password` is absent, empty, not a string, or the email is malformed.
+            `invalid_parameter` — `name` is not a string or is over 256 characters, `scope` is not `readOnly` or `readWrite`, `expiresInDays` is not a whole number from 1 to 365, or `cookie` is not a boolean. Checked before the credentials: nothing is counted against the account or the address.
           content:
             application/json:
               schema:
@@ -912,34 +936,120 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
-  /logout:
     get:
       tags: [account]
-      summary: Destroy the token you are using
+      summary: List the account's tokens
       description: |-
-        Deletes **the one token** used for this request, and clears the cookie.
+        Every token of the account that still opens something, the newest first: the browsers and
+        apps signed in, and the tokens made for scripts. **The token itself is never shown** (only its
+        hash is kept); `id` is what `DELETE /token` takes.
 
-        This endpoint answers with **`303` and a `Location` header**, not with JSON. The reason
-        is that the web app calls it as a normal link (`<a href>`), and a browser needs a real
-        redirect to navigate. If you call it with `fetch` or from a script, do not follow the
-        redirect — just treat `303` as success.
+        What is shown of each is what the server saw, and what the client said:
 
-        It is **idempotent**. Calling it without a token, or twice, also answers `303`.
+        - the server's own facts: `createdAt`, `lastUsedAt`, `expiresAt`, `scope`, `current` (the token of this
+          very request), the user agent and the network of the address.
+        - `name` is the client's word. **Anyone who signs in can call their token anything**, `WEB-APP moncycle.app`
+          included, and send any user agent. The list helps its owner recognise their devices; it proves nothing
+          about who holds a token. When in doubt, revoke every other token and change the password.
 
-        Other tokens of the same account stay valid. There is no "log out everywhere".
-      security: []
+        `lastUsedAt` and the last user agent and address are written at most **every 5 minutes**.
+
+        The two public demo accounts have no list (`403` `demo_account`): their sessions are the visitors'.
       responses:
-        "303":
-          description: Logged out. Also returned when you were not logged in. Redirects to `/auth`.
-          headers:
-            Location:
-              description: Always `/auth`.
+        "200":
+          description: The tokens.
+          content:
+            application/json:
               schema:
-                type: string
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      tokens:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Token'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: "`demo_account` — a demo account has no list of tokens."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+    delete:
+      tags: [account]
+      summary: Log out, or revoke tokens
+      description: |-
+        **Without a body**: ends the session you are using. It deletes the token of this request and clears the
+        cookie (`HttpOnly`: only the server can). It is **idempotent**: a token that is already gone, or none at all,
+        is a logout all the same and answers `204`, with the cookie cleared. A read-only token may do it.
+
+        **With a body** (`Content-Type: application/json`), one of:
+
+        - `{"id": 12}` — revokes that token. Another account's token, or one that does not exist, is a
+          `404` `not_found` (nobody can probe other accounts' ids). Revoking your own `id` is a logout.
+        - `{"all": true}` — revokes **every token but the one you are using**. This is what to do when a device is lost or a
+          token leaked; `POST /password_change` with `logoutOtherDevices` does the same with the password.
+
+        A read-only token may revoke only itself. The demo accounts' tokens cannot be revoked by `id` or `all`
+        (`403` `demo_account`): they belong to every visitor.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRevokeRequest'
+      responses:
+        "204":
+          description: Logged out. Also returned when you were not logged in.
+          headers:
             Set-Cookie:
               description: Expires `MONCYCLEAPP_TOKEN` (and the legacy `MONCYCLEAPP_JETTON`).
               schema:
                 type: string
+        "200":
+          description: Revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      revoked:
+                        type: integer
+                        description: How many tokens were revoked.
+                        example: 3
+        "400":
+          description: "`invalid_parameter` — the body has neither `id` nor `all`, has both, `id` is not a whole number, or `all` is not `true`. `invalid_json` — see section 2."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "401":
+          description: "`unauthorized` — a body was sent and the token is not valid."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "403":
+          description: "`read_only_token` — a read-only token revoking another token. `demo_account` — see above. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "404":
+          description: "`not_found` — `id` is not a token of this account."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
 
   /password_change:
     post:
@@ -1190,7 +1300,7 @@ paths:
         Confirms the setup started by `GET /totp`, by checking one code produced from the new
         secret. **This is the call that actually turns two-factor on.**
 
-        From now on, `POST /login` needs `code` in addition to the password.
+        From now on, `POST /token` needs `code` in addition to the password.
 
         Call `GET /totp` first. Without a stored secret this call cannot succeed.
 
@@ -2637,7 +2747,7 @@ components:
     Unauthorized:
       description: |-
         `unauthorized` — no token, an unknown token, or the account is deactivated. Send the user
-        back to `POST /login`.
+        back to `POST /token`.
       content:
         application/json:
           schema:
@@ -2703,7 +2813,7 @@ components:
         details:
           type: object
           description: |-
-            Optional extra context. For example `/login` adds `captchaRequired: true`, and
+            Optional extra context. For example `POST /token` adds `captchaRequired: true`, and
             `/register` adds `userId` on `already_authenticated`.
           additionalProperties: true
 
@@ -2715,7 +2825,7 @@ components:
         error:
           $ref: '#/components/schemas/Error'
 
-    LoginRequest:
+    TokenRequest:
       type: object
       required: [email, password]
       properties:
@@ -2729,17 +2839,41 @@ components:
           format: password
           description: The account password.
           example: demo
+        name:
+          type: string
+          maxLength: 256
+          description: |-
+            What the token is called in `GET /token`. One line (control characters are dropped, runs of
+            spaces and line breaks become one space). Absent or empty: `API`.
+          example: backup script
+        scope:
+          type: string
+          enum: [readWrite, readOnly]
+          default: readWrite
+          description: "`readOnly` can read and end its own session, and do nothing else."
+        expiresInDays:
+          type: integer
+          minimum: 1
+          maximum: 365
+          description: |-
+            The token dies this many days from now, whatever its use. Absent: it is erased after 40 days
+            without use or a year after its creation.
+          example: 90
+        cookie:
+          type: boolean
+          default: false
+          description: "`true`: the server also sets the token as the `MONCYCLEAPP_TOKEN` cookie. The token is in the answer either way."
         code:
           type: integer
           description: |-
-            The 6-digit TOTP code. Required only once a login answered `401 totp_required` — that
+            The 6-digit TOTP code. Required only once a sign-in answered `401 totp_required` — that
             is, only for accounts where two-factor is active. Sent as a number or as a string: a
             leading zero lost on the way (`91710` for `091710`) is restored.
           example: 492013
         captcha:
           type: string
           description: |-
-            The answer to the picture from `POST /captcha` (purpose `login`). Required only once a login
+            The answer to the picture from `POST /captcha` (purpose `login`). Required only once a sign-in
             answered `403 captcha_required`, or once a response carried `captchaRequired: true`.
             Upper or lower case, and spaces, make no difference.
           example: ak7fpm
@@ -2749,6 +2883,68 @@ components:
             The `token` that goes with that picture. It is tied to the account's failure counters:
             after a refused attempt, ask for a new one.
           example: 1790000000.9f2c6b1e0d4a8f7c3b5e2a1d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b
+
+    TokenRevokeRequest:
+      type: object
+      description: Exactly one of `id` and `all`.
+      properties:
+        id:
+          type: integer
+          description: The token to revoke (`id` in `GET /token`). Your own is a logout.
+          example: 12
+        all:
+          type: boolean
+          enum: [true]
+          description: Revoke every token but the one of this request.
+
+    Token:
+      type: object
+      description: A token of the account, as `GET /token` and `POST /token` show it. The token itself is not part of it.
+      properties:
+        id:
+          type: integer
+          example: 12
+        name:
+          type: string
+          description: What the client called it. The client's word, not a proof.
+          example: WEB-APP moncycle.app
+        scope:
+          type: string
+          enum: [readWrite, readOnly]
+        current:
+          type: boolean
+          description: "`true` for the token of the request."
+        createdAt:
+          type: string
+          format: date-time
+        createdUserAgent:
+          type: string
+          nullable: true
+          description: The `User-Agent` the server received when the token was made (255 characters at most).
+        createdIp:
+          type: string
+          nullable: true
+          description: The network of the address the token was made from, `a.b.c.0` (IPv4) or the first 48 bits (IPv6, `2001:db8:1234::`). The server keeps the whole address.
+          example: 203.0.113.0
+        lastUsedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: "`null` for a token never used. Written at most every 5 minutes."
+        lastUsedUserAgent:
+          type: string
+          nullable: true
+        lastUsedIp:
+          type: string
+          nullable: true
+          description: Like `createdIp`, for the last use.
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: |-
+            The day the token dies: the date asked for with `expiresInDays`, else a year after `createdAt`
+            (a token without a date is also erased after 40 days without use).
 
     KeyInfos:
       type: object
@@ -2824,7 +3020,7 @@ components:
 
             | Value | Meaning |
             |---|---|
-            | `active` | On. `POST /login` needs a `code`. |
+            | `active` | On. `POST /token` needs a `code`. |
             | `init` | `GET /totp` was called but never confirmed. Login still works with the password alone. |
             | `disabled` | It was on, and the user turned it off. |
             | `never_used` | Never set up. |
@@ -3637,22 +3833,22 @@ components:
       type: http
       scheme: Bearer
       description: |-
-        The token from `POST /login`, in the `Authorization` header:
+        The token from `POST /token`, in the `Authorization` header:
 
         ```
         Authorization: Bearer <token>
         ```
 
         Use this for apps, scripts and mobile clients. It wins over the cookie if both are sent.
-        A token is purged after 40 days without use, or when it is a year old. `GET /logout`
-        destroys the one you send.
+        A token made without `expiresInDays` is purged after 40 days without use, or when it is a year old;
+        one made with it dies on that day. `DELETE /token` destroys the one you send.
 
     HTTPcookie:
       type: apiKey
       in: cookie
       name: MONCYCLEAPP_TOKEN
       description: |-
-        The same token, in a cookie. `POST /login` sets it for you (HttpOnly, SameSite=Strict by default, 5 years),
+        The same token, in a cookie. `POST /token` sets it for you when you ask (`cookie: true`; HttpOnly, SameSite=Strict by default, 5 years),
         so a browser client has nothing to store.
 
         The captcha does not use a cookie (see `POST /captcha`).

@@ -156,6 +156,38 @@ const moncycle_app_text = {
 		return ` ⚠️\u00A0${moncycle_app_text.count(done, "jour modifié", "jours modifiés")}, ${moncycle_app_text.count(refused, "refusé", "refusés")} par le serveur (modifié depuis un autre appareil ?). La description n’est pas supprimée : relancez l’action pour reprendre ${refused > 1 ? "ces jours" : "ce jour"}.`;
 	},
 	desc_comment_delete_failed : " ⚠️\u00A0les commentaires sont écrits, mais la description n’a pas pu être supprimée. Relancez l’action pour la supprimer.",
+
+	/* --- connections (tokens): the list and the creation -------------------- */
+	tokens_current : "cet appareil",
+	tokens_scope : {readOnly : "lecture seule", readWrite : "lecture et écriture"},
+	tokens_created : function (when, ip, agent) {
+		return `Créée le ${when}${ip ? ` depuis ${ip}` : ""}${agent ? ` — ${agent}` : ""}`;
+	},
+	tokens_last_used : function (when, ip, agent) {
+		return when ? `Dernière utilisation le ${when}${ip ? ` depuis ${ip}` : ""}${agent ? ` — ${agent}` : ""}` : "Jamais utilisée";
+	},
+	tokens_expires : function (when) {
+		return `Expire le ${when}`;
+	},
+	tokens_revoke : "Déconnecter",
+	tokens_none : "Aucune connexion.",
+	tokens_confirm_revoke_all : "Déconnecter tous vos autres appareils et applications ?\n\nCet appareil reste connecté. Les autres devront se reconnecter.",
+	tokens_revoked : function (n) {
+		return ` ✅\u00A0${moncycle_app_text.count(n, "connexion supprimée", "connexions supprimées")}`;
+	},
+	token_creating : "⏳\u00A0création…",
+	token_copy_failed : "Copie impossible: sélectionnez le jeton et copiez-le à la main.",
+	token_copied : "✅ copié",
+	token_errors : {
+		invalid_credentials : "Mot de passe incorrect.",
+		totp_required : "Un code d'authentification multifacteur est requis.",
+		totp_invalid : "Le code d'authentification multifacteur est incorrect.",
+		captcha_required : "Captcha manquant ou incorrect.",
+		captcha_expired : "Le captcha a expiré, recopiez le nouveau.",
+		captcha_unavailable : "Le captcha est indisponible pour le moment, réessayez plus tard.",
+		account_locked : "Compte temporairement bloqué après trop de tentatives échouées, réessayez plus tard.",
+		rate_limited : "Trop de tentatives depuis ce réseau, réessayez plus tard.",
+	},
 };
 
 /* ===========================================================================
@@ -229,8 +261,18 @@ $(document).ready(function(){
 
 	moncycle_store.init();
 
-	// the local copy goes with the session (the link itself is the request that ends it)
-	$("#but_logout").on("click", function () { moncycle_store.clear_storage(); });
+	// LOGOUT: the server ends the session (and clears its cookie, which only it can), then the local copy goes with it
+	$("#f_logout").on("submit", function (event) {
+		event.preventDefault();
+		$("#but_logout").prop("disabled", true);
+		$.ajax({type: "DELETE", url: "api/token"}).done(function () {
+			moncycle_store.clear_storage();
+			window.location.replace("/auth");
+		}).fail(function (jqXHR) {
+			$("#but_logout").prop("disabled", false);
+			alert("Déconnexion impossible: " + moncycle_app_error_message(jqXHR));
+		});
+	});
 
 	// TELECHARGEMENT DES DONNES DES UTILISATEUR
 	$.get("api/key_infos", {}).done(function(ret) {
@@ -245,6 +287,10 @@ $(document).ready(function(){
 		if(moncycle_app_usr.method == "fertilityCare") $("#description_section").hide();
 		$("#tech_info_id").text(moncycle_app_usr.email);
 		$("#i_email1").val(moncycle_app_usr.email);
+		$("#i_token_new_email").val(moncycle_app_usr.email);
+		if (moncycle_app_usr.totpState == "active") $("#token_new_code_wrapper").show();
+		if (moncycle_store.is_demo(moncycle_app_usr.userId)) $("#tokens_section").hide();
+		else tokens_load();
 		$("#i_email2").val(moncycle_app_usr.secondaryEmail);
 		let nfp_method = moncycle_app_nfp_method_from_api(moncycle_app_usr.method, moncycle_app_usr.temperatureTracking);
 		$(`#m_${nfp_method}`).attr("checked", "");
@@ -583,6 +629,126 @@ $(document).ready(function(){
 			console.error(jqXHR);
 			$("#but_mdp_change").prop("disabled", false);
 			moncycle_app_show_error($("#mdp_ret_msg"), "erreur:", moncycle_app_error_message(jqXHR), "❌ ", ".");
+		});
+	});
+
+	// MES CONNEXIONS (tokens): the list, the revocation of one or of every other, and the creation of a custom token.
+	// Everything the server says of a token (a name, a user agent) is the device's own word: text nodes only, never HTML.
+	const token_when = function (iso) {
+		return iso ? new Date(iso).toLocaleString("fr-FR", {dateStyle: "short", timeStyle: "short"}) : "";
+	};
+	const token_render = function (tokens) {
+		const container = $("#tokens_container").empty();
+		if (tokens.length === 0) container.append(document.createTextNode(moncycle_app_text.tokens_none));
+		tokens.forEach(function (token) {
+			const row = $("<div>").addClass("token_row");
+			const title = $("<b>").text(token.name);
+			const scope = $("<span>").addClass("label_info").text(" — " + moncycle_app_text.tokens_scope[token.scope]);
+			row.append(title, scope);
+			if (token.current) row.append($("<b>").addClass("vert").text(" (" + moncycle_app_text.tokens_current + ")"));
+			const details = [
+				moncycle_app_text.tokens_created(token_when(token.createdAt), token.createdIp, token.createdUserAgent),
+				moncycle_app_text.tokens_last_used(token_when(token.lastUsedAt), token.lastUsedIp, token.lastUsedUserAgent),
+			];
+			if (token.expiresAt) details.push(moncycle_app_text.tokens_expires(token_when(token.expiresAt)));
+			details.forEach(function (line) { row.append($("<br>"), $("<span>").addClass("label_info").text(line)); });
+			if (!token.current) {
+				const form = $("<form>").addClass("f_token_revoke").attr({action: "api/token", method: "delete"});
+				form.append($("<input>").attr({type: "hidden", name: "id"}).val(token.id));
+				form.append($("<button>").attr("type", "submit").addClass("rouge").text("🗑️ " + moncycle_app_text.tokens_revoke));
+				row.append($("<br>"), form);
+			}
+			container.append(row);
+		});
+	};
+	const tokens_load = function () {
+		return $.get("api/token").done(function (ret) {
+			token_render(ret.data.tokens);
+		}).fail(function (jqXHR) {
+			moncycle_app_redirect_if_unauthenticated(jqXHR);
+			// the demo accounts have no list: their sessions are the visitors' (the server says 403 demo_account)
+			if (jqXHR.status == 403) $("#tokens_section").hide();
+			else moncycle_app_show_error($("#tokens_err"), "❌\u00a0erreur:", moncycle_app_error_message(jqXHR));
+		});
+	};
+	const tokens_revoke = function (body) {
+		$("#tokens_err").empty();
+		const net_stat = $("#tokens_net_stat").removeClass("vert rouge").text("⏳");
+		return $.ajax({type: "DELETE", url: "api/token", contentType: "application/json", data: JSON.stringify(body)}).done(function (ret) {
+			net_stat.addClass("vert").text(moncycle_app_text.tokens_revoked(ret.data.revoked));
+			tokens_load();
+		}).fail(function (jqXHR) {
+			moncycle_app_redirect_if_unauthenticated(jqXHR);
+			net_stat.empty();
+			moncycle_app_show_error($("#tokens_err"), "❌\u00a0erreur:", moncycle_app_error_message(jqXHR));
+			tokens_load();
+		});
+	};
+	$("#tokens_container").on("submit", ".f_token_revoke", function (event) {
+		event.preventDefault();
+		tokens_revoke({id: parseInt($(this).find("input[name=id]").val())});
+	});
+	$("#f_tokens_revoke_all").on("submit", function (event) {
+		event.preventDefault();
+		if (!confirm(moncycle_app_text.tokens_confirm_revoke_all)) return;
+		tokens_revoke({all: $(this).find("input[name=all]").val() === "true"});
+	});
+
+	// the creation is a sign-in that sets no cookie: the password (and the code, and the captcha once the account asks for one) is asked again
+	const token_captcha = moncycle_captcha.attach({
+		purpose: "login",
+		email: $("#i_token_new_email"),
+		image: $("#i_token_new_captcha_img"),
+		token: $("#i_token_new_captcha_token"),
+		answer: $("#i_token_new_captcha"),
+		active: function () { return $("#token_new_captcha_wrapper").is(":visible"); },
+		error: function (message) { $("#token_new_err").text(message); },
+	});
+	$("#f_token_create").on("submit", function (event) {
+		event.preventDefault();
+		const form = $(this);
+		const field = function (name) { return form.find("[name=" + name + "]"); };
+		$("#token_new_err").empty();
+		$("#token_new_result").hide();
+		const payload = {
+			email: field("email").val(),
+			password: field("password").val(),
+			name: field("name").val(),
+			scope: field("scope").val(),
+			expiresInDays: parseInt(field("expiresInDays").val()),
+			cookie: field("cookie").val() === "true",
+		};
+		if (field("code").val()) payload.code = parseInt(field("code").val());
+		if ($("#token_new_captcha_wrapper").is(":visible")) {
+			payload.captcha = field("captcha").val();
+			payload.captchaToken = field("captchaToken").val();
+		}
+		$("#but_token_create").prop("disabled", true).val("🔑 " + moncycle_app_text.token_creating);
+		$.ajax({type: "POST", url: "api/token", contentType: "application/json", data: JSON.stringify(payload)}).done(function (ret) {
+			$("#i_token_new_value").val(ret.data.token);
+			$("#token_copy_ok").text("");
+			$("#token_new_result").show();
+			field("password").val("");
+			field("code").val("");
+			field("name").val("");
+			tokens_load();
+		}).fail(function (jqXHR) {
+			const err = (jqXHR.responseJSON || {}).error || {};
+			// the server asks for a captcha once the account has failed too often (a wrong password here counts like a wrong sign-in)
+			if ((err.details || {}).captchaRequired) $("#token_new_captcha_wrapper").show();
+			const shown = moncycle_app_text.token_errors[err.code] || err.message || "erreur inconnue";
+			$("#token_new_err").empty().append(document.createTextNode("❌ " + shown));
+		}).always(function () {
+			$("#but_token_create").prop("disabled", false).val("🔑 Créer le jeton");
+			// the captcha is tied to the account's counters, which this attempt may have moved: a new one whenever it is shown
+			token_captcha.reload(true);
+		});
+	});
+	$("#but_token_copy").on("click", function () {
+		navigator.clipboard.writeText($("#i_token_new_value").val()).then(function () {
+			$("#token_copy_ok").text(moncycle_app_text.token_copied);
+		}, function () {
+			$("#token_copy_ok").text(moncycle_app_text.token_copy_failed);
 		});
 	});
 

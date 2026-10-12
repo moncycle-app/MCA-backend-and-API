@@ -84,7 +84,34 @@ const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_BILLINGS . ", " . ACCOUNT_DEMO_ID_F
 const ACCOUNT_LIMIT_NAME_CHARS = 255;               // user_account.name varchar(255)
 const ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS = 255;   // user_account.register_comment varchar(255)
 const ACCOUNT_BIRTH_YEAR_MAX_AGE = 100;             // this year, or up to this many years back (user_account.age is a smallint)
-const AUTH_TOKEN_USER_AGENT_BYTES = 200;            // auth_token.name varchar(256): "AUTH | " then the user agent, cut to this
+
+// The methods that change nothing: all a read-only token may use (api_start()).
+const HTTP_SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
+
+// auth_token: what a session or a custom token is (lib/token.php). The widths are those of the columns.
+const AUTH_TOKEN_LIMIT_NAME_CHARS = 256;            // auth_token.name varchar(256)
+const AUTH_TOKEN_LIMIT_USER_AGENT_CHARS = 255;      // auth_token.user_agent and user_agent_use varchar(255), cut to fit
+const AUTH_TOKEN_DEFAULT_NAME = "API";              // the name of a token whose client gave none
+// auth_token.scope: what the token may do. A read-only token reads (GET, HEAD, OPTIONS) and may end its own session.
+const AUTH_TOKEN_SCOPE_READ_ONLY = 1;
+const AUTH_TOKEN_SCOPE_READ_WRITE = 2;
+// scope => the string the JSON API speaks.
+const AUTH_TOKEN_SCOPE_NAMES = [
+	AUTH_TOKEN_SCOPE_READ_ONLY => "readOnly",
+	AUTH_TOKEN_SCOPE_READ_WRITE => "readWrite",
+];
+// "expiresInDays" of POST /api/token: a token that has one dies on that day whatever its use (no 40 days idle rule).
+const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
+const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
+// How much of the user agent the "new login" mail quotes.
+const MAIL_USER_AGENT_CHARS = 120;
+// The rule of a token made without "expiresInDays" (the cron, db_sql_old_auth_token()): it dies after this many days whatever its use,
+// or after this many days without one.
+const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
+const AUTH_TOKEN_IDLE_DAYS = 40;
+// The address of a token as GET /api/token shows it: cut to its first 24 bits (IPv4) or 48 bits (IPv6). The database keeps it whole.
+const AUTH_TOKEN_IP_PREFIX_V4 = 24;
+const AUTH_TOKEN_IP_PREFIX_V6 = 48;
 
 // RGPD retention, re-evaluated on every cron run (so no "warning sent" flag exists): an account
 // with no activity (login, or any write tied to it) for this many years is erased...
@@ -216,6 +243,7 @@ const LOG_EVENTS = [
 	"auth.login_succeeded" => "info",
 	"auth.login_failed" => "warning",
 	"auth.logout" => "info",
+	"auth.token_revoked" => "info",
 	"auth.captcha_issued" => "debug",
 	"auth.token_rejected" => "debug",
 	"account.registered" => "info",

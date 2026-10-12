@@ -18,9 +18,11 @@ require_once __DIR__ . "/sec.php";
 // Starts the log of the request, answers in JSON, ends with a 503 in maintenance, refuses a write from a page
 // that is not ours (a 403 before anything is read), opens the database and finds who is calling: [$db, $user_account]. With
 // $login_required the request ends here with a 401 when nobody is logged in; without it $user_account is
-// null for a visitor. An exception nobody catches is logged and answered with a 500 "unexpected_error",
-// whose message tells nothing.
-function api_start(bool $login_required = true): array {
+// null for a visitor. A read-only token (POST /api/token, "scope") gets a 403 on any method that is not safe
+// (HTTP_SAFE_METHODS), unless the endpoint says $read_only_ok: it then decides itself what such a token may do
+// (api/token.php: end its own session). An exception nobody catches is logged and answered with a 500
+// "unexpected_error", whose message tells nothing.
+function api_start(bool $login_required = true, bool $read_only_ok = false): array {
 	log_start(sec_client_ip());
 	set_exception_handler(function (\Throwable $e) {
 		log_exception($e);
@@ -31,6 +33,9 @@ function api_start(bool $login_required = true): array {
 	sec_exit_if_cross_origin();
 	$db = db_open();
 	$user_account = sec_auth_token($db);
-	if ($login_required) sec_exit_if_logged_out($user_account);
+	if ($login_required) {
+		sec_exit_if_logged_out($user_account);
+		if (!$read_only_ok && !in_array($_SERVER['REQUEST_METHOD'] ?? '', HTTP_SAFE_METHODS, true)) sec_exit_if_token_read_only($user_account);
+	}
 	return [$db, $user_account];
 }

@@ -17,6 +17,9 @@ $is_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
 // START THE SET-UP: a new secret and its QR code
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
+	// a GET that changes something (it stores a secret): the one a read-only token may not make
+	sec_exit_if_token_read_only($user_account);
+
 	if ($is_active) {
 		http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
 	}
