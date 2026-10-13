@@ -55,8 +55,9 @@
 		<div class="contennu" id="register_form">
 			<h2>Créer votre compte</h2>
 			<form action="api/register" method="post" id="f_registration"><br />
-			<label for="i_firstname">Prénoms:</label><br />
-			<input name="firstname" type="text" maxlength="255" id="i_firstname" required placeholder='ex: "Alice et Benoît" ou "Charlotte"' /><br />
+			<label for="i_nickname">Pseudo:</label><br />
+			<input name="nickname" type="text" maxlength="255" id="i_nickname" required placeholder='ex: vos initiales, "AB"' /><br />
+			<span class="label_info">Vos initiales suffisent. Ne saisissez pas votre nom ni votre prénom.</span><br />
 			<br />
 			Méthode à suivre:<br />
 			<input type="radio" name="method" value="2" id="m_glaire" required /><label for="m_glaire"><b>Billings</b>: l'évolution de la glaire cervicale seule</label><br />
@@ -68,6 +69,7 @@
 			<br />
 			<label for="i_login_email">E-mail:</label><br />
 			<input name="login_email" id="i_login_email" type="email" maxlength="255" required placeholder="Entrer votre adresse mail." /><br />
+			<span class="label_info">N'utilisez pas d'adresse qui permet de vous identifier, du type prenom.nom@domaine.fr.</span><br />
 			<br />
 			<label for="i_login_email_conf">Confirmer (re-saisir) votre e-mail:</label><br />
 			<input name="login_email_conf" id="i_login_email_conf" type="email" maxlength="255" required placeholder="Entrer une 2ème fois votre adresse mail." /><br />
@@ -91,7 +93,8 @@
 			<span class="label_info">L'image s'affiche une fois l'e-mail saisi. Majuscules ou minuscules, peu importe. Image difficile à lire ? Cliquez dessus pour en obtenir une autre.</span><br />
 			<br />
 			<label for="i_comment">Comment avez-vous découvert moncycle.app? Un commentaire?</label><br />
-			<textarea required id="i_comment" name="discovered_comment" maxlength="255" placeholder="Dites nous tout!"></textarea>
+			<textarea required id="i_comment" name="discovered_comment" maxlength="255" placeholder="Dites nous tout!"></textarea><br />
+			<span class="label_info">Ne saisissez pas d'informations de santé (médicaments, maladies, ...).</span>
 			<br />
 			<p><input type="checkbox" required id="jc_monito" name="monito" value="1" /> <label for="jc_monito">📝 L'application nécessite d'être formé aux méthodes naturelles pour être utilisé. Je comprends que moncycle.app est seulement un support pour noter les différentes informations de mon cycle. En cas de difficultés dans la tenue de mon tableau, je me tournerai vers l'association qui propose la méthode que j'utilise en contactant une monitrice/instructrice.</label></p>
 			<p><input type="checkbox" required id="jc_gratuit" name="gratuit" value="1" /> <label for="jc_gratuit">🤝 Je suis d'accord avec <a target="_blank" href="https://www.moncycle.app/#rgpd">la politique de gestion des données</a> conformément à la RGPD. Je consens à partager mes données de cycles menstruels et de sexualité avec l’application.</p>

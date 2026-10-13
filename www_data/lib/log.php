@@ -8,7 +8,7 @@
 */
 
 // The app's own log: what happened, to which account, to which row, from where -- never the
-// content. The app holds health data, so a line says "account 21 wrote day 4412", not what the day
+// content. The app holds personal data, so a line says "account 21 wrote day 4412", not what the day
 // holds; what is never logged is in README.md ("Logs"), and log_scrub() is how a message that may
 // carry an address or an SQL fragment is made fit for it.
 //

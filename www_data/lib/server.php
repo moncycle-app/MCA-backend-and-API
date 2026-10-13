@@ -52,7 +52,7 @@ function server_limits(): array {
 	return [
 		"passwordMinBytes" => PASSWORD_MIN_LENGTH,
 		"passwordMaxBytes" => PASSWORD_MAX_BYTES,
-		"accountNameMaxChars" => ACCOUNT_LIMIT_NAME_CHARS,
+		"accountNicknameMaxChars" => ACCOUNT_LIMIT_NICKNAME_CHARS,
 		"registerCommentMaxChars" => ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS,
 		"notificationEmailsMax" => ACCOUNT_NOTIFICATION_EMAILS_MAX,
 		"birthYearMaxAge" => ACCOUNT_BIRTH_YEAR_MAX_AGE,

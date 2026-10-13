@@ -223,7 +223,7 @@ info:
     # 2. Create the account, with the password the user chose, the answer and the token.
     curl -s -X POST http://localhost:8003/api/register \
       -H 'Content-Type: application/json' \
-      -d '{"firstName":"Marie","email":"marie@example.org","password":"a long passphrase","birthYear":1994,
+      -d '{"nickname":"MB","email":"marie@example.org","password":"a long passphrase","birthYear":1994,
            "method":"billings","temperatureTracking":false,"captcha":"a7k2fm","captchaToken":"1790000000.9f2c..."}'
     # -> 202 {"data":{"sent":true}}
     ```
@@ -724,17 +724,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [firstName, email, password, birthYear, captcha, captchaToken]
+              required: [nickname, email, password, birthYear, captcha, captchaToken]
               properties:
-                firstName:
+                nickname:
                   type: string
                   maxLength: 255
-                  description: First name of the user, or both first names when a couple shares the account. Control characters are removed, and leading and trailing spaces.
-                  example: Marie
+                  description: A nickname for the user, their initials for instance. The app does not collect the identity of its users, so do not ask for a name. Control characters are removed, and leading and trailing spaces.
+                  example: MB
                 email:
                   type: string
                   format: email
-                  description: Login address. The link that proves it is sent here. Spaces around it are ignored and it is stored in lower case, so `Marie@Example.org` and `marie@example.org` are one account.
+                  description: Login address. The link that proves it is sent here. It should not identify the person (not `firstname.lastname@domain`). Spaces around it are ignored and it is stored in lower case, so `Marie@Example.org` and `marie@example.org` are one account.
                   example: marie@example.org
                 password:
                   type: string
@@ -1633,7 +1633,7 @@ paths:
       operationId: patchAccount
       summary: Change the settings, the login address, the password
       description: |-
-        **Every setting of the logged-in account is changed here**: its name, method, preferences,
+        **Every setting of the logged-in account is changed here**: its nickname, method, preferences,
         the addresses and the password.
 
         **This is a partial update**: only the fields present in the body are touched, everything else keeps its
@@ -1689,7 +1689,7 @@ paths:
               rename:
                 summary: A setting
                 value:
-                  name: Marie
+                  nickname: MB
               newPassword:
                 summary: A new password, closing the other sessions
                 value:
@@ -3156,10 +3156,10 @@ components:
           type: integer
           description: Year of birth, approximate, used for anonymous statistics.
           example: 1994
-        name:
+        nickname:
           type: string
-          description: First name, or both first names when a couple shares the account.
-          example: Marie
+          description: The user's nickname, their initials for instance (the app does not collect the identity of its users).
+          example: MB
         inscriptionDate:
           type: string
           format: date-time
@@ -4089,7 +4089,7 @@ components:
             passwordMaxBytes:
               type: integer
               example: 72
-            accountNameMaxChars:
+            accountNicknameMaxChars:
               type: integer
               example: 255
             registerCommentMaxChars:
@@ -4180,11 +4180,11 @@ components:
         Every field is optional. A field that is not in this list is refused (`unknown_field`), and so are the read-only fields
         of `Account` (`userId`, `inscriptionDate`, `totpState`).
       properties:
-        name:
+        nickname:
           type: string
           maxLength: 255
-          description: First name, or both first names when a couple shares the account. Not empty, at most 255 characters.
-          example: Marie
+          description: A nickname for the user, their initials for instance. Not empty, at most 255 characters.
+          example: MB
         password:
           type: string
           format: password
@@ -4256,7 +4256,7 @@ components:
           description: Names of the settings that were written (`password` when `newPassword` was set). Empty when nothing was. `loginEmail` is never in it, because it changes when the link is used.
           items:
             type: string
-            enum: [name, notificationEmails, method, birthYear, timelineAscending, research, sponsor, autoMailExport, password]
+            enum: [nickname, notificationEmails, method, birthYear, timelineAscending, research, sponsor, autoMailExport, password]
           example: [method]
         loggedOutDevices:
           type: integer

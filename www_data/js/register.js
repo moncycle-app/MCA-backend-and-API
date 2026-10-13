@@ -49,7 +49,7 @@ else {
 			}
 			var method = $('input[name="method"]:checked').val() == "3" ? "fertilityCare" : "billings";
 			var payload = {
-				firstName: $("#i_firstname").val(),
+				nickname: $("#i_nickname").val(),
 				email: $("#i_login_email").val(),
 				password: $("#i_password").val(),
 				birthYear: parseInt($("#i_anaissance").val()),
@@ -87,7 +87,7 @@ else {
 					password_too_long: "Le mot de passe est trop long (72 octets au plus).",
 					password_invalid: "Le mot de passe contient un caractère interdit.",
 					birthYear: "La date de naissance n'est pas réaliste.",
-					firstName: "Le prénom est invalide ou trop long.",
+					nickname: "Le pseudo est invalide ou trop long.",
 					discoveredComment: "Le commentaire est invalide ou trop long."
 				};
 				$("#register_error_msg").text(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR));

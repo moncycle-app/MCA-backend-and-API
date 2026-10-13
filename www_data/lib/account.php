@@ -79,7 +79,7 @@ function account_password_matches($db, array $user_account, mixed $password): bo
 // ---------------------------------------------------------------------------
 
 // Signs an address up: a new account that cannot be used until the address is proved, and the link that proves it. $new holds the
-// checked fields: first_name, email, password, birth_year, nfp_method, comment, research. An address that already has an account
+// checked fields: nickname, email, password, birth_year, nfp_method, comment, research. An address that already has an account
 // (proved or not) is left exactly as it is, whatever the request says: its owner gets a link to choose a new password instead, so
 // nothing a stranger types can reach an account, and the answer is the same either way.
 // Answers ["captcha" => the verdict of captcha_verify(), "account" => ["no_user_account", "name", "login_email"] or null, "token" => the
@@ -105,14 +105,14 @@ function account_register($db, array $new, mixed $captcha_token, mixed $captcha_
 		$registered = db_transaction($db, function () use ($db, $new, $password_hash, $captcha_token, $captcha_answer, $ip, $existing) {
 			if (is_null($existing)) {
 				$no_user_account = db_insert_user_account(
-					$db, $new["first_name"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"]
+					$db, $new["nickname"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"]
 				);
 				if (is_null($no_user_account)) return null;   // taken since the read
 
 				log_context(["uid" => intval($no_user_account)]);
 				log_event("account.registered", ["nfp" => $new["nfp_method"]]);
 				return [
-					"captcha" => "ok", "created" => true, "account" => ["no_user_account" => $no_user_account, "name" => $new["first_name"], "login_email" => $new["email"]],
+					"captcha" => "ok", "created" => true, "account" => ["no_user_account" => $no_user_account, "name" => $new["nickname"], "login_email" => $new["email"]],
 					"token" => email_token_issue($db, intval($no_user_account), EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION),
 				];
 			}
@@ -197,9 +197,9 @@ function account_check_settings(array $account, array $body, array &$issues): ar
 	];
 	$changed = [];
 
-	$name = day_format_body_text($body, "name", ACCOUNT_LIMIT_NAME_CHARS, $issues);
-	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");
-	elseif (!is_null($name)) [$new["name"], $changed[]] = [$name, "name"];
+	$nickname = day_format_body_text($body, "nickname", ACCOUNT_LIMIT_NICKNAME_CHARS, $issues);
+	if ($nickname === "") $issues[] = input_issue("nickname", "invalid_value", "'nickname' must not be empty.");
+	elseif (!is_null($nickname)) [$new["name"], $changed[]] = [$nickname, "nickname"];
 
 	if (array_key_exists("method", $body) || array_key_exists("temperatureTracking", $body)) {
 		$nfp_method = account_method_id_from_json($body, $issues, intval($account["nfp_method"]));
@@ -366,7 +366,7 @@ function account_to_json(array $user_account): array {
 		"method" => account_method_name($nfp_method),
 		"temperatureTracking" => account_tracks_temperature($nfp_method),
 		"birthYear" => $user_account["age"],
-		"name" => $user_account["name_user_account"],
+		"nickname" => $user_account["name_user_account"],
 		"inscriptionDate" => http_iso8601($user_account["inscription_date"]),
 		"sponsor" => boolval($user_account["sponsor"]),
 		"research" => boolval($user_account["research"]),

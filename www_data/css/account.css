@@ -24,12 +24,6 @@ select {
 	padding: 15px;
 }
 
-.label_info {
-	font-style: italic;
-	font-size: .8em;
-	color: gray;
-}
-
 form {
 	display: inline;
 }

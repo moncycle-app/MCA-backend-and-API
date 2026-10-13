@@ -30,7 +30,7 @@
 const moncycle_store = {
 
 	// Bump it when what is kept in localStorage changes shape: the copy of the versions before is dropped.
-	schema : 4,
+	schema : 5,
 	// The public demo accounts: ACCOUNT_DEMO_IDS of constants.php, change both. Whoever is on one is no one who has an
 	// account yet: the sign-up and the sign-in pages do not send them back to the app.
 	demo_user_ids : [2, 3],
@@ -154,7 +154,7 @@ const moncycle_store = {
 	clear_storage : function () {
 		try { localStorage.clear(); } catch (e) { }
 	},
-	// The session is over: the copy is personal health data, so nothing of it stays in the browser.
+	// The session is over: the copy is personal data, so nothing of it stays in the browser.
 	expire_session : function () {
 		if (moncycle_store.expired) return;
 		moncycle_store.expired = true;

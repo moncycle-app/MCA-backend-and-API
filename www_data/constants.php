@@ -83,7 +83,7 @@ const ACCOUNT_DEMO_IDS = [ACCOUNT_DEMO_ID_BILLINGS, ACCOUNT_DEMO_ID_FERTILITYCAR
 const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_BILLINGS . ", " . ACCOUNT_DEMO_ID_FERTILITYCARE;   // for NOT IN (...): a constant expression cannot implode()
 
 // What user_account and auth_token can hold: the widths of their columns, and the birth years a person can give.
-const ACCOUNT_LIMIT_NAME_CHARS = 255;               // user_account.name varchar(255)
+const ACCOUNT_LIMIT_NICKNAME_CHARS = 255;           // user_account.name varchar(255)
 const ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS = 255;   // user_account.register_comment varchar(255)
 // user_account.notification_emails: the addresses that receive the cycles, the reminders and the warnings with the login address, separated
 // by ";" (the form a client sends and reads, and the form that is stored: lower case, no space, no duplicate).
@@ -206,7 +206,7 @@ const SCHEMA_VERSION_KEY = "schema_version";
 
 // The names a PATCH /api/account body may use, and the ones of GET /api/account that the server alone writes (refused if sent).
 const ACCOUNT_PATCH_FIELDS = [
-	"name", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
+	"nickname", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
 	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
 ];
 const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "totpState"];

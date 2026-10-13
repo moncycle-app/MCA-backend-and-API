@@ -313,7 +313,7 @@ function mail_send_new_login(array $account, string $name, string $prefix, strin
 // the mail off, as the account page words it (account.html, "Exporter mes données").
 function mail_cycle_words(): array {
 	return [
-		"pdf" => "Le graphique de votre cycle, à partager avec votre moniteur, votre instructrice ou votre médecin.",
+		"pdf" => "Le graphique de votre cycle, à partager avec votre moniteur ou votre instructrice.",
 		"csv" => "Vos observations jour par jour, à ouvrir dans LibreOffice ou Microsoft Excel pour une analyse plus détaillée.",
 		"nfp" => "Le fichier NFP contient toutes les données de ce cycle dans un format d’échange : conservez-le comme sauvegarde, vous pourrez le réimporter dans moncycle.app depuis « Mon compte », section « Importer mes données ». Il est également compatible avec d’autres applications si vous souhaitez migrer vos données.",
 		"opt_out" => "Cet envoi est automatique. Vous pouvez le désactiver à tout moment : ouvrez « Mon compte », section « Exporter mes données », puis décochez « Recevoir automatiquement chaque cycle par e-mail ».",

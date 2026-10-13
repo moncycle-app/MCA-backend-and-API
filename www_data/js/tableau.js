@@ -340,7 +340,7 @@ moncycle_app = {
 		let nfp_method = moncycle_app.nfp_method_from_api(d.method, d.temperatureTracking);
 		return {
 			no_user_account : d.userId,
-			name : d.name,
+			nickname : d.nickname,
 			sponsor : d.sponsor,
 			nfp_method : nfp_method,
 			nfp_method_name : {1:"bill_temp", 2:"bill", 3:"fc", 4:"fc_temp"}[nfp_method],
@@ -483,9 +483,9 @@ moncycle_app = {
 		moncycle_app.constante = moncycle_app.constante_from_api(moncycle_store.account);
 		moncycle_app.timeline_asc = moncycle_app.constante.timeline_asc;
 		moncycle_app.description = moncycle_store.all_descriptions().map(moncycle_app.description_from_api);
-		document.title = moncycle_app_text.page_title(moncycle_app.constante.name);
+		document.title = moncycle_app_text.page_title(moncycle_app.constante.nickname);
 		// the name is free text: text first, then the badge (markup of ours)
-		$("#name").text(moncycle_app.constante.name);
+		$("#name").text(moncycle_app.constante.nickname);
 		if (moncycle_app.constante.sponsor) $("#name").append(moncycle_app_text.sponsor_badge);
 		moncycle_app.charger_actu();
 		$(".main_button").css("display","inline-block");

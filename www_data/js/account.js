@@ -308,9 +308,9 @@ $(document).ready(function(){
 	$.get("api/account", {}).done(function(ret) {
 		moncycle_app_usr = ret.data;
 		$("#f_info_pref")[0].reset();
-		$("#name").text(moncycle_app_usr.name);
-		document.title = "moncycle.app - compte " + moncycle_app_usr.name;
-		$("#i_name").val(moncycle_app_usr.name);
+		$("#name").text(moncycle_app_usr.nickname);
+		document.title = "moncycle.app - compte " + moncycle_app_usr.nickname;
+		$("#i_nickname").val(moncycle_app_usr.nickname);
 		$("#tech_info_no").text(moncycle_app_usr.userId);
 		if(moncycle_app_usr.sponsor) $("#merci_don").show();
 		if (moncycle_store.is_demo(moncycle_app_usr.userId)) $("#warning_demo").show();
@@ -579,7 +579,7 @@ $(document).ready(function(){
 
 
 	// MISE A JOURS DES PARAMETTRE DU COMPTE
-	const moncycle_app_account_field_map = {name: "name", age: "birthYear", timeline_asc: "timelineAscending", research: "research", auto_mail_export: "autoMailExport"};
+	const moncycle_app_account_field_map = {nickname: "nickname", age: "birthYear", timeline_asc: "timelineAscending", research: "research", auto_mail_export: "autoMailExport"};
 	$(".auto_save").on("keyup change", function() {
 		// the status goes next to the section the field is in (data-net-stat), the settings one by default
 		let net_stat = $("#" + ($(this).data("net-stat") || "net_stat"));
@@ -601,7 +601,7 @@ $(document).ready(function(){
 			contentType: "application/json",
 			data: JSON.stringify(payload),
 		}).done(function(ret){
-			if (ret.data && ret.data.name) $("#name").text(ret.data.name);
+			if (ret.data && ret.data.nickname) $("#name").text(ret.data.nickname);
 			net_stat.html(' ✅&nbsp;enregistré');
 			net_stat.addClass('vert');
 			net_stat.removeClass('rouge');
@@ -1040,13 +1040,13 @@ $(document).ready(function(){
 	$("#f_suppr_user_account").on("submit", function(event) {
 		event.preventDefault();
 		var password = $('#f_suppr_user_account input[name="pw_before_deletion"]').val();
-		if (!confirm(moncycle_app_usr.name + ', êtes-vous sur de vouloir supprimer votre compte ainsi que toutes vos données? Cette action est irréversible. 😟')) return;
+		if (!confirm(moncycle_app_usr.nickname + ', êtes-vous sur de vouloir supprimer votre compte ainsi que toutes vos données? Cette action est irréversible. 😟')) return;
 		$.ajax({type : 'POST', "url" : $(this).attr("action"), contentType: "application/json", data: JSON.stringify({password: password})}).done(function(){
 			moncycle_store.clear_storage();
-			alert(moncycle_app_usr.name + ", votre compte a bien été supprimé. 😢💔");
+			alert(moncycle_app_usr.nickname + ", votre compte a bien été supprimé. 😢💔");
 			window.location.replace('auth');
 		}).fail(function(jqXHR) {
-			alert(moncycle_app_usr.name + ", votre compte n'a pas été supprimé: " + moncycle_app_error_message(jqXHR));
+			alert(moncycle_app_usr.nickname + ", votre compte n'a pas été supprimé: " + moncycle_app_error_message(jqXHR));
 		});
 	});
 

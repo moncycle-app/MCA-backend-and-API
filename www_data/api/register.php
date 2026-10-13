@@ -21,7 +21,7 @@ input_exit_unless_path_fits(input_path(), 0);
 
 $issues = [];
 input_query([], $issues);
-$body = input_body(["firstName", "email", "password", "birthYear", "method", "temperatureTracking", "discoveredComment", "okForResearch", "captcha", "captchaToken"], $issues);
+$body = input_body(["nickname", "email", "password", "birthYear", "method", "temperatureTracking", "discoveredComment", "okForResearch", "captcha", "captchaToken"], $issues);
 
 if (!is_null($user_account) && !sec_session_is_demo($user_account)) {
 	http_error(409, "already_authenticated", "Account already logged in.", ["userId" => $user_account["no_user_account"]]);
@@ -32,7 +32,7 @@ if (!REGISTRATION_ENABLED) {
 	http_error(403, "registration_disabled", "Account creation has been disabled.");
 }
 
-foreach (["firstName", "email", "password", "birthYear"] as $field) input_require($body, $field, $issues);
+foreach (["nickname", "email", "password", "birthYear"] as $field) input_require($body, $field, $issues);
 
 if (array_key_exists("email", $body)) {
 	if (!is_string($body["email"])) input_wrong_type($issues, "email", $body["email"], "a string (an e-mail address)");
@@ -55,7 +55,7 @@ if (array_key_exists("birthYear", $body)) {
 	}
 }
 
-$first_name = day_format_body_text($body, "firstName", ACCOUNT_LIMIT_NAME_CHARS, $issues);
+$nickname = day_format_body_text($body, "nickname", ACCOUNT_LIMIT_NICKNAME_CHARS, $issues);
 $discovered_comment = day_format_body_text($body, "discoveredComment", ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS, $issues);
 $nfp_method = account_method_id_from_json($body, $issues);
 $research = input_bool_field($body, "okForResearch", $issues);
@@ -66,7 +66,7 @@ input_exit_if_issues($issues);
 
 $attempt = sec_exit_unless_attempt_allowed($db, "register");
 $registration = account_register($db, [
-	"first_name" => $first_name, "email" => $body["email"], "password" => $password, "birth_year" => $body["birthYear"],
+	"nickname" => $nickname, "email" => $body["email"], "password" => $password, "birth_year" => $body["birthYear"],
 	"nfp_method" => $nfp_method, "comment" => $discovered_comment, "research" => $research === true,
 ], $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
 sec_exit_unless_captcha_ok($db, $attempt, $registration["captcha"], "register");
