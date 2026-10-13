@@ -117,6 +117,21 @@ const moncycle_app_text = {
 	to_today : "à auj.",
 
 	/* --- day form ------------------------------------------------------- */
+	// hour and minutes, "14:32"
+	clock : function (d) {
+		return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+	},
+	// foot of the day form: "dernière modification : 8 oct 2026 à 14:32" (the date in bold), or "... : maintenant"
+	last_write_label : "dernière modification :",
+	last_write_now : "maintenant",
+	// the date of that line: "8 oct 2026 à 14:32"
+	last_write : function (d) {
+		return `${moncycle_app_text.date_short(d)} ${d.getFullYear()} à ${moncycle_app_text.clock(d)}`;
+	},
+	// its tooltip, with the weekday: "Dernière modification : jeudi 8 octobre 2026 à 14:32"
+	last_write_title : function (d) {
+		return `Dernière modification : ${moncycle_app_text.date_long(d)} à ${moncycle_app_text.clock(d)}`;
+	},
 	arrow_up : "↑",
 	arrow_down : "↓",
 	// button moving to the previous / next day, "↑ J13"
@@ -322,6 +337,7 @@ moncycle_app = {
 			fc_arrow : moncycle_app.arrow_from_api[d.codifiedArrow] || "",
 			comment : d.comment,
 			description : description,
+			last_write : d.lastWriteClientUtc || d.lastWriteDb || null,
 		};
 	},
 
@@ -720,12 +736,30 @@ moncycle_app = {
 		if (data.counter_start) moncycle_app.counter_starts[date] = data.counter_start;
 		else if (date in moncycle_app.counter_starts) delete moncycle_app.counter_starts[date];
 	},
+	// a save less than this long ago reads "maintenant"
+	last_write_recent_ms : 2 * 60 * 1000,
+	last_write_timer : null,
+	// The moment of the last save of the open day, at the foot of its form (empty for a day never saved).
+	// A recent one says "maintenant" and the line is drawn again when the two minutes are over.
+	show_last_write : function (day) {
+		clearTimeout(moncycle_app.last_write_timer);
+		let moment = day.last_write ? new Date(day.last_write) : null;
+		let box = $("#jour_form_last_write").empty().attr("title", null);
+		if (moment === null || isNaN(moment)) return;
+		let age = Date.now() - moment.getTime();
+		let recent = Math.abs(age) < moncycle_app.last_write_recent_ms;
+		box.attr("title", moncycle_app_text.last_write_title(moment));
+		box.append($("<span>").text(moncycle_app_text.last_write_label));
+		box.append($("<b>").text(recent ? moncycle_app_text.last_write_now : moncycle_app_text.last_write(moment)));
+		if (recent) moncycle_app.last_write_timer = setTimeout(() => moncycle_app.show_last_write(day), moncycle_app.last_write_recent_ms - age);
+	},
 	// A day changed in the copy: draw it again, if it is on the page.
 	refresh_day : function (date) {
 		let shown = moncycle_app.day_timeline[date];
 		if (!shown) return;
 		let data = moncycle_app.view_day(date, shown.cycle, shown.pos);
 		moncycle_app.day_timeline[date] = data;
+		if (date == moncycle_app.menu_opened_date) moncycle_app.show_last_write(data);
 		$(`#o-${date}`).replaceWith(moncycle_app.day_timeline2timeline(data));
 		$(`#ro-${date}`).replaceWith(moncycle_app.day_timeline2recap(data));
 		moncycle_app.track_day(date, data);
@@ -1234,6 +1268,7 @@ moncycle_app = {
 		if (j.day_not_observed) $("#ev_jesaispas").prop('checked', true);
 		if (j.pregnancy) $("#ev_pregnancy").prop('checked', true);
 		$("#from_com").val(j.comment);
+		moncycle_app.show_last_write(j);
 		$("html, body").css({
 			"overflow": "hidden",
 			"touch-action": "none"

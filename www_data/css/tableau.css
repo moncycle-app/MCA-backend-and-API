@@ -76,7 +76,7 @@
 }
 
 .day .e {
-	font-weight: light;	
+	font-weight: light;
 	text-transform: uppercase;
 	font-family: "Montserrat";
 }
@@ -327,8 +327,39 @@
 
 #jour_form_suppr_holder {
 	text-align: right;
-	display: inline-block;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
 	width: 95%;
+	font-weight: bold;
+}
+
+/* the last save, left of the delete button: one line, never wrapped; when the room is short the label is cut with "…" and the date stays */
+#jour_form_last_write {
+	flex: 1 1 0;
+	min-width: 0;
+	display: flex;
+	gap: .3em;
+	white-space: nowrap;
+	text-align: left;
+	font-size: .75em;
+	font-weight: normal;
+	color: gray;
+}
+
+#jour_form_last_write span {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+#jour_form_last_write b {
+	flex: none;
+	font-weight: bold;
+}
+
+#jour_form_suppr {
+	flex: none;
 }
 
 #jour_form_header {
@@ -418,7 +449,7 @@ h2 {
 }
 
 .nouveau_cycle_form {
-	margin-left: 10px;	
+	margin-left: 10px;
 }
 
 .note {
@@ -774,7 +805,7 @@ h2 {
 	}
 
 	.nouveau_cycle_form {
-		margin-left: 0;	
+		margin-left: 0;
 	}
 
 }
@@ -816,7 +847,7 @@ h2 {
 	.mini_ruler span {
 		background-color: #4c4c4c;
 	}
-	
+
 	.mini_ruler span.odd {
 		background-color: #292929;
 	}
