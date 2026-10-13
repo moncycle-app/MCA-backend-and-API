@@ -1,5 +1,4 @@
 {
-    "app": "moncycle.app",
     "version": "15dev",
     "build": "YYYY-MM-DD",
     "commit": "xxxxxxxx"

@@ -72,15 +72,24 @@ function log_start(string $client_ip = ""): void {
 	}
 }
 
-// The `http.request` line: method, path (never the query string), status, duration, and what the
+// The endpoint of the request as the log names it: "/api/day" for /api/day/2026-03-10 and for /api/day?dates=... The arguments of the URL
+// (a date, a row number, a token prefix) are content: they are never logged, nor is the query string.
+function log_endpoint(): ?string {
+	$script = $_SERVER["SCRIPT_NAME"] ?? "";
+	if (is_string($script) && $script !== "") return preg_replace('/\.php\z/', '', $script);
+	$path = parse_url($_SERVER["REQUEST_URI"] ?? "", PHP_URL_PATH);
+	return is_string($path) ? $path : null;
+}
+
+// The `http.request` line: method, endpoint (never the arguments of the URL nor the query string), status, duration, and what the
 // endpoint noted (the API error code, the number of rows a read returned).
 function log_request_end(): void {
 	try {
 		$state = &log_state();
-		$path = parse_url($_SERVER["REQUEST_URI"] ?? "", PHP_URL_PATH);
+		$endpoint = log_endpoint();
 		$fields = [
 			"m" => log_scrub((string) ($_SERVER["REQUEST_METHOD"] ?? "")),
-			"p" => is_string($path) ? log_scrub($path) : null,
+			"p" => is_string($endpoint) ? log_scrub($endpoint) : null,
 			"st" => http_response_code() ?: null,
 			"ms" => (int) round((microtime(true) - $state["started"]) * 1000),
 		];

@@ -14,6 +14,7 @@
 require_once __DIR__ . "/account.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/server.php";
 
 // ===========================================================================
 // EXPORT
@@ -162,7 +163,7 @@ function nfp_export_file($db, string $start_date, string $end_date, array $user_
 // JSON_UNESCAPED_UNICODE / _SLASHES keep accented comments and the ISO-8601 timestamp readable in the
 // file; JSON_PRESERVE_ZERO_FRACTION keeps a round 37.0 a number.
 function nfp_export_json($db, string $start_date, string $end_date, array $user_account, bool $anonymous, bool $pretty = false): string {
-	$app_version = json_decode(file_get_contents(__DIR__ . "/../api/version.json"), true)["version"] ?? "";
+	$app_version = server_build()["version"];
 	$file = nfp_export_file($db, $start_date, $end_date, $user_account, $anonymous, $app_version);
 
 	$flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION;

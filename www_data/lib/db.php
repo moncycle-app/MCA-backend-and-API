@@ -429,6 +429,12 @@ function db_select_description_exists($db, $no_description, $no_user_account): b
 		["no_description" => $no_description, "no_user_account" => $no_user_account]));
 }
 
+// One description of the account (its id, name and type), null when it is not one of its.
+function db_select_description($db, $no_description, $no_user_account): ?array {
+	return db_row($db, "SELECT no_description, name, type FROM description WHERE no_description = :no_description AND no_user_account = :no_user_account",
+		["no_description" => $no_description, "no_user_account" => $no_user_account]);
+}
+
 // is the name taken by another description of the account?
 function db_select_description_name_exists($db, $name, $no_user_account, $no_description): bool {
 	return boolval(db_value($db, "SELECT COUNT(no_description) > 0 FROM description WHERE name = :name AND no_user_account = :no_user_account AND no_description != :no_description",

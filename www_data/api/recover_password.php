@@ -10,22 +10,31 @@
 require_once "../config.php";
 require_once "../lib/account.php";
 require_once "../lib/api.php";
+require_once "../lib/input.php";
 require_once "../lib/mail.php";
 
 [$db] = api_start(false);
 
-$body = http_json_body();
-$email = account_email_normalise($body["email"] ?? null);
+if (http_method() !== "POST") http_exit_method_not_allowed(["POST"]);
+input_exit_unless_path_fits(input_path(), 0);
 
-if (empty($email)) {
-	http_error(400, "missing_email", "'email' is required.");
+$issues = [];
+input_query([], $issues);
+$body = input_body(["email", "captcha", "captchaToken"], $issues);
+
+$email = null;
+if (input_require($body, "email", $issues)) {
+	if (!is_string($body["email"])) input_wrong_type($issues, "email", $body["email"], "a string (an e-mail address)");
+	else {
+		$email = account_email_normalise($body["email"]);
+		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $issues[] = input_issue("email", "invalid_email", "'email' is not a valid e-mail address.");
+	}
 }
-
-if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-	http_error(400, "invalid_email", "Provided email address is not valid.");
+foreach (["captcha", "captchaToken"] as $field) {
+	if (array_key_exists($field, $body) && !is_string($body[$field])) input_wrong_type($issues, $field, $body[$field], "a string");
 }
+input_exit_if_issues($issues);
 
-// the attempt is written before the captcha is looked at, and given back if it passes: only the failures count
 $attempt = sec_exit_unless_attempt_allowed($db, "recover_password");
 $recovery = account_recover_password($db, $email, $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
 sec_exit_unless_captcha_ok($db, $attempt, $recovery["captcha"], "recover_password");

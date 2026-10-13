@@ -11,16 +11,18 @@
 **
 ** What a page draws comes from localStorage, and localStorage follows the server:
 **
-**  - it holds what the API says, in the API's own JSON (the Day, Description and KeyInfos objects of
+**  - it holds what the API says, in the API's own JSON (the Day, Description and Account objects of
 **    api/moncycle_app_open_api.yaml), one key per thing: data_day_YYYY-MM-DD, data_descriptions,
-**    data_account;
+**    data_account (GET /api/account, with the lists of cycles and pregnancies that GET /api/timeline_sync
+**    brings, and the news address that GET /api/server_info gives: the page draws from this one object);
 **  - a change of a day is applied to the copy first, then sent. Until the server has taken it, it
 **    waits in a queue (data_pending, in localStorage too, so closing the page loses nothing) and the
 **    page is told whenever it could not be sent. A description made here waits the same way
 **    (data_pending_descriptions) and is shown with the others meanwhile;
-**  - GET /api/sync brings what was changed elsewhere, and the cursor it gives is kept
-**    (data_last_sync);
-**  - when the session ends, all of localStorage goes. When the app is updated (api/version changes),
+**  - GET /api/timeline_sync brings what was changed elsewhere, and the cursor it gives is kept
+**    (data_last_sync); GET /api/account is read before it (its ETag is kept, data_account_etag: an account
+**    that did not change costs a 304);
+**  - when the session ends, all of localStorage goes. When the app is updated (GET /api/server_info changes),
 **    the copy goes and is downloaded again; the unsent changes stay.
 **
 ** This file holds no text for the user and draws nothing: a page listens to the events (see on()).
@@ -28,21 +30,23 @@
 const moncycle_store = {
 
 	// Bump it when what is kept in localStorage changes shape: the copy of the versions before is dropped.
-	schema : 3,
+	schema : 4,
 	// The public demo accounts: ACCOUNT_DEMO_IDS of constants.php, change both. Whoever is on one is no one who has an
 	// account yet: the sign-up and the sign-in pages do not send them back to the app.
 	demo_user_ids : [2, 3],
 	is_demo : function (user_id) { return moncycle_store.demo_user_ids.includes(parseInt(user_id)); },
-	keys : {version : "data_version", last_sync : "data_last_sync", account : "data_account", descriptions : "data_descriptions", pending : "data_pending", pending_descriptions : "data_pending_descriptions", stale : "data_stale", day : "data_day_"},
+	keys : {version : "data_version", last_sync : "data_last_sync", account : "data_account", account_etag : "data_account_etag", descriptions : "data_descriptions", pending : "data_pending", pending_descriptions : "data_pending_descriptions", stale : "data_stale", day : "data_day_"},
 	// what the versions before this one kept in localStorage, and nobody reads any more
 	legacy_keys : ["description", "constante", "day_timeline", "timeline_asc"],
 
 	// the copy, in memory (the same as in localStorage)
 	days : {},          // date -> Day: only the days that hold something, a cleared day is not kept
 	descriptions : [],  // [Description]
-	account : null,     // KeyInfos
+	account : null,     // Account (GET /api/account) + allCyclesFirstDay, allPregnancyDates (GET /api/timeline_sync) + newsUrl (GET /api/server_info)
+	account_etag : null,    // the ETag GET /api/account gave for the account kept
+	news_url : null,    // newsUrl of GET /api/server_info
 	last_sync : null,   // the syncTimestamp of the last merged answer
-	pending : {},       // date -> {op: "post", body: the POST /api/day body} | {op: "delete", lastWriteClientUtc}
+	pending : {},       // date -> {op: "put", body: the PUT /api/day/{date} body} | {op: "delete", lastWriteClientUtc}
 	pending_descriptions : [],  // [{name, type: "observation" | "sensation", lastWriteClientUtc}]: made here, not yet created by the server
 	stale : [],         // dates of days whose copy is wrong (a write of them was refused): to download again
 
@@ -135,6 +139,8 @@ const moncycle_store = {
 		moncycle_store.days = {};
 		moncycle_store.descriptions = [];
 		moncycle_store.account = null;
+		moncycle_store.account_etag = null;
+		moncycle_store.news_url = null;
 		moncycle_store.last_sync = null;
 		moncycle_store.pending = queue || {};
 		moncycle_store.pending_descriptions = queue_descriptions || [];
@@ -157,7 +163,7 @@ const moncycle_store = {
 		window.location.replace("/auth");
 	},
 	// 401 "unauthorized" is a session that is over. Another 401 is an answer of an endpoint to a
-	// wrong password or code (POST /api/account with a password, DELETE /api/account): the session is fine.
+	// wrong password or code (PATCH /api/account with a password, POST /api/account/deletion): the session is fine.
 	is_unauthorized : function (jqXHR) {
 		if (jqXHR.status != 401) return false;
 		let code = ((jqXHR.responseJSON || {}).error || {}).code;
@@ -184,6 +190,8 @@ const moncycle_store = {
 		});
 		moncycle_store.descriptions = moncycle_store.read(moncycle_store.keys.descriptions) || [];
 		moncycle_store.account = moncycle_store.read(moncycle_store.keys.account);
+		moncycle_store.account_etag = moncycle_store.read(moncycle_store.keys.account_etag);
+		moncycle_store.news_url = moncycle_store.account ? moncycle_store.account.newsUrl || null : null;
 		moncycle_store.last_sync = moncycle_store.read(moncycle_store.keys.last_sync);
 		moncycle_store.pending = moncycle_store.read(moncycle_store.keys.pending) || {};
 		moncycle_store.pending_descriptions = moncycle_store.read(moncycle_store.keys.pending_descriptions) || [];
@@ -227,7 +235,6 @@ const moncycle_store = {
 				contentType : "application/json",
 				data : body === undefined ? undefined : JSON.stringify(body),
 				dataType : "json",
-				cache : false,
 				timeout : moncycle_store.request_timeout,
 			}).done(function (ret) { resolve(ret); }).fail(function (jqXHR) { reject(jqXHR); });
 		});
@@ -245,6 +252,56 @@ const moncycle_store = {
 			message : error.message || jqXHR.statusText || "",
 			issues : (error.details || {}).issues || [],
 		};
+	},
+	// A validation_failed lists what is wrong, field by field: {field, code, message}. The words are the server's (English).
+	issues_of : function (jqXHR) {
+		return (((jqXHR.responseJSON || {}).error || {}).details || {}).issues || [];
+	},
+	// What to tell the user of a failure when the page has no words of its own: every problem of a validation_failed, else the error's message.
+	error_text : function (jqXHR) {
+		let issues = moncycle_store.issues_of(jqXHR);
+		let error = (jqXHR.responseJSON || {}).error || {};
+		if (error.code === "validation_failed" && issues.length) return issues.map(function (issue) { return issue.message; }).join(" ");
+		return error.message || "erreur inconnue";
+	},
+	// The French text a page keeps for a failure of the API. A validation_failed is described by its first issue: the first of
+	// map["field:code"], map["code"], map["field"] that exists (the code of the issue is specific: invalid_email,
+	// password_too_short...), then map[error code]; undefined when the page has no words for it.
+	error_pick : function (jqXHR, map) {
+		let error = (jqXHR.responseJSON || {}).error || {};
+		let issue = error.code === "validation_failed" ? (moncycle_store.issues_of(jqXHR)[0] || {}) : {};
+		let keys = issue.code ? [issue.field + ":" + issue.code, issue.code, issue.field] : [];
+		keys.push(error.code);
+		for (let i = 0; i < keys.length; i++) if (keys[i] !== undefined && map[keys[i]] !== undefined) return map[keys[i]];
+		return undefined;
+	},
+	// The code a failure is known by: the code of the first issue of a validation_failed, else the error's own code.
+	error_code : function (jqXHR) {
+		let error = (jqXHR.responseJSON || {}).error || {};
+		let issue = error.code === "validation_failed" ? (moncycle_store.issues_of(jqXHR)[0] || {}) : {};
+		return issue.code || error.code;
+	},
+
+	// Saves a file the API makes (GET /api/export/{format}) under the name the server gives it. Resolves once the browser has the file.
+	// Rejects with {status, code, message, issues}: the API's error in its envelope (status 0: no answer). A 401 ends the session.
+	download : async function (url) {
+		let response;
+		try { response = await fetch(url, {credentials : "same-origin"}); }
+		catch (e) { throw {status : 0, code : null, message : "", issues : []}; }
+		if (!response.ok) {
+			let error = {};
+			try { error = (await response.json()).error || {}; } catch (e) { }
+			if (response.status == 401 && (!error.code || error.code == "unauthorized")) moncycle_store.expire_session();
+			throw {status : response.status, code : error.code || null, message : error.message || "", issues : (error.details || {}).issues || []};
+		}
+		let name = ((response.headers.get("Content-Disposition") || "").match(/filename="([^"]+)"/) || [])[1] || "moncycle_app";
+		let link = document.createElement("a");
+		link.href = URL.createObjectURL(await response.blob());
+		link.download = name;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		setTimeout(function () { URL.revokeObjectURL(link.href); }, 10000);
 	},
 
 	/* -----------------------------------------------------------------------
@@ -335,7 +392,7 @@ const moncycle_store = {
 		return moved;
 	},
 
-	// The day the server will hold once it has taken a POST /api/day body, as far as the page can tell.
+	// The day the server will hold once it has taken a PUT /api/day/{date} body, as far as the page can tell.
 	// The server's own answer replaces it as soon as there is one.
 	day_from_body : function (body, previous) {
 		let baby = !!body.stampBaby;
@@ -366,14 +423,14 @@ const moncycle_store = {
 	/* -----------------------------------------------------------------------
 	** WRITING: the copy first, then the server
 	** ====================================================================== */
-	// A POST /api/day body (the full state of the day). Returns the dates whose day changed in the copy.
+	// A PUT /api/day/{date} body (the full state of the day). Returns the dates whose day changed in the copy.
 	queue_day : function (body) {
 		let date = body.date;
 		moncycle_store.days[date] = moncycle_store.day_from_body(body, moncycle_store.days[date]);
 		moncycle_store.set_day(moncycle_store.days[date]);
-		return moncycle_store.queued(date, {op : "post", body : body});
+		return moncycle_store.queued(date, {op : "put", body : body});
 	},
-	// DELETE /api/day: the day is cleared, with its descriptions
+	// DELETE /api/day/{date}: the day is cleared, with its descriptions
 	queue_delete : function (date, last_write_client_utc) {
 		moncycle_store.set_day(moncycle_store.blank_day(date));
 		return moncycle_store.queued(date, {op : "delete", lastWriteClientUtc : last_write_client_utc || null});
@@ -415,7 +472,7 @@ const moncycle_store = {
 	// the longest comment the day form takes (index.html, maxlength of #from_com); the server's own limit is 256
 	comment_max_chars : 255,
 
-	// The POST /api/day body that makes the server hold a day of the copy as it is, so that a write can change one
+	// The PUT /api/day/{date} body that makes the server hold a day of the copy as it is, so that a write can change one
 	// field of it: a day is posted whole. Where it stands in its cycle is left out, the server works it out.
 	body_of_day : function (day, last_write_client_utc) {
 		let body = {};
@@ -512,11 +569,11 @@ const moncycle_store = {
 		}
 	},
 	send : function (date, entry) {
+		let url = "api/day/" + encodeURIComponent(date);
 		if (entry.op == "delete") {
-			let query = "api/day?date=" + encodeURIComponent(date) + (entry.lastWriteClientUtc ? "&lastWriteClientUtc=" + encodeURIComponent(entry.lastWriteClientUtc) : "");
-			return moncycle_store.request("DELETE", query);
+			return moncycle_store.request("DELETE", url + (entry.lastWriteClientUtc ? "?lastWriteClientUtc=" + encodeURIComponent(entry.lastWriteClientUtc) : ""));
 		}
-		return moncycle_store.request("POST", "api/day", entry.body);
+		return moncycle_store.request("PUT", url, entry.body);
 	},
 	send_description : function (entry) {
 		return moncycle_store.request("POST", "api/description", {name : entry.name, type : entry.type, lastWriteClientUtc : entry.lastWriteClientUtc});
@@ -530,7 +587,7 @@ const moncycle_store = {
 		delete moncycle_store.pending[date];
 		moncycle_store.write(moncycle_store.keys.pending, moncycle_store.pending);
 		moncycle_store.touched[date] = true;
-		if (entry.op == "post" && answer && answer.data) {
+		if (entry.op == "put" && answer && answer.data) {
 			let before = JSON.stringify(moncycle_store.days[date]);
 			moncycle_store.set_day(answer.data);
 			if (before !== JSON.stringify(moncycle_store.days[date])) moncycle_store.emit("changed", {days : [date], descriptions : false, account : false, source : "server"});
@@ -586,19 +643,19 @@ const moncycle_store = {
 			if (!moncycle_store.stale.includes(date)) moncycle_store.stale.push(date);
 			moncycle_store.write(moncycle_store.keys.stale, moncycle_store.stale);
 		}
-		let message = error.issues.length ? error.issues.join(" ") : error.message;
+		let message = error.issues.length ? error.issues.map(function (issue) { return issue.message; }).join(" ") : error.message;
 		moncycle_store.error = {kind : "rejected", code : error.code, message : message, date : date};
 		moncycle_store.emit("failed", {date : date, message : message, issues : error.issues});
 		moncycle_store.emit_status();
 	},
-	// Downloads again the days whose copy is wrong (GET /api/day); one written here again meanwhile is newer.
+	// Downloads again the days whose copy is wrong (GET /api/day/{date}); one written here again meanwhile is newer.
 	reload_stale : async function () {
 		while (moncycle_store.stale.length) {
 			let date = moncycle_store.stale[0];
 			if (!moncycle_store.pending[date]) {
-				let answer = await moncycle_store.request("GET", "api/day?date=" + encodeURIComponent(date));
+				let answer = await moncycle_store.request("GET", "api/day/" + encodeURIComponent(date));
 				let before = JSON.stringify(moncycle_store.days[date]);
-				moncycle_store.set_day((answer.data || {})[date] || moncycle_store.blank_day(date));
+				moncycle_store.set_day(answer.data || moncycle_store.blank_day(date));
 				let followed = moncycle_store.follow_day(date);
 				if (before !== JSON.stringify(moncycle_store.days[date]) || followed.account) {
 					moncycle_store.emit("changed", {days : followed.days, descriptions : false, account : followed.account, source : "server"});
@@ -631,6 +688,7 @@ const moncycle_store = {
 			moncycle_store.syncing = moncycle_store.flush()
 				.then(moncycle_store.reload_stale)
 				.then(moncycle_store.check_version)
+				.then(moncycle_store.pull_account)
 				.then(moncycle_store.pull)
 				.catch(function (jqXHR) {
 					if (jqXHR && jqXHR.status !== undefined && !moncycle_store.is_unauthorized(jqXHR)) moncycle_store.error = moncycle_store.error_of(jqXHR);
@@ -649,9 +707,11 @@ const moncycle_store = {
 	// is loaded again, so that the new code reads a new copy. The first time there is nothing to compare.
 	check_version : function () {
 		if (moncycle_store.checked_version) return Promise.resolve();
-		return moncycle_store.request("GET", "api/version").then(function (ret) {
+		return moncycle_store.request("GET", "api/server_info").then(function (ret) {
 			moncycle_store.checked_version = true;
-			let stamp = [moncycle_store.schema, ret.version, ret.build, ret.commit].join("/");
+			let info = ret.data || {};
+			moncycle_store.set_news_url(info.newsUrl || null);
+			let stamp = [moncycle_store.schema, info.serverVersion, info.build, info.commit].join("/");
 			let known = localStorage.getItem(moncycle_store.keys.version);
 			if (known === stamp) return;
 			if (known !== null) moncycle_store.wipe_data(true);
@@ -664,24 +724,69 @@ const moncycle_store = {
 			if (moncycle_store.is_unauthorized(jqXHR)) throw jqXHR;
 		});
 	},
+	// Where the news come from (server_info): kept in the account of the copy, which the page draws from.
+	set_news_url : function (url) {
+		moncycle_store.news_url = url;
+		if (moncycle_store.account && moncycle_store.account.newsUrl !== url) {
+			moncycle_store.account.newsUrl = url;
+			moncycle_store.write(moncycle_store.keys.account, moncycle_store.account);
+		}
+	},
 
-	pull : function () {
+	// The account (GET /api/account) before the timeline: the settings, and the ETag that makes the next time a 304 when nothing changed.
+	// The copy keeps the lists the timeline brings (merge) and the address of the news.
+	pull_account : function () {
+		return new Promise(function (resolve, reject) {
+			let known = moncycle_store.account && moncycle_store.account_etag;
+			$.ajax({
+				type : "GET",
+				url : "api/account",
+				dataType : "json",
+				headers : known ? {"If-None-Match" : moncycle_store.account_etag} : {},
+				timeout : moncycle_store.request_timeout,
+			}).done(function (ret, status, jqXHR) {
+				if (status == "notmodified" || !ret || !ret.data) return resolve(false);
+				let before = JSON.stringify(moncycle_store.account);
+				let old = moncycle_store.account || {};
+				moncycle_store.account = Object.assign({}, ret.data, {
+					allCyclesFirstDay : old.allCyclesFirstDay || [],
+					allPregnancyDates : old.allPregnancyDates || [],
+					newsUrl : moncycle_store.news_url,
+				});
+				moncycle_store.account_etag = jqXHR.getResponseHeader("ETag");
+				moncycle_store.write(moncycle_store.keys.account, moncycle_store.account);
+				moncycle_store.write(moncycle_store.keys.account_etag, moncycle_store.account_etag);
+				let changed = before !== JSON.stringify(moncycle_store.account);
+				if (changed) moncycle_store.emit("changed", {days : [], descriptions : false, account : true, source : "sync"});
+				resolve(changed);
+			}).fail(function (jqXHR) { reject(jqXHR); });
+		});
+	},
+	// The timeline since the cursor kept (none: from the start), page after page while the server says there is more.
+	pull : async function () {
 		moncycle_store.touched = {};
 		moncycle_store.created = [];
-		// the first sync has no cursor: the server then reads from the start
-		let query = moncycle_store.last_sync ? "?fromTimestamp=" + encodeURIComponent(moncycle_store.last_sync) : "";
-		return moncycle_store.request("GET", "api/sync" + query).then(function (ret) {
-			let changes = moncycle_store.merge(ret.data);
+		let changes = {days : [], descriptions : false, account : false};
+		let more = true;
+		while (more) {
+			// the first sync has no cursor: the server then reads from the start
+			let query = moncycle_store.last_sync ? "?since=" + encodeURIComponent(moncycle_store.last_sync) : "";
+			let ret = await moncycle_store.request("GET", "api/timeline_sync" + query);
+			let page = moncycle_store.merge(ret.data);
+			changes.days = changes.days.concat(page.days.filter(function (date) { return !changes.days.includes(date); }));
+			changes.descriptions = changes.descriptions || page.descriptions;
+			changes.account = changes.account || page.account;
 			moncycle_store.error = null;
 			moncycle_store.last_pull = Date.now();
 			moncycle_store.last_sync = ret.data.syncTimestamp;
 			if (!moncycle_store.storage_failed) moncycle_store.write(moncycle_store.keys.last_sync, moncycle_store.last_sync);
-			if (changes.days.length || changes.descriptions || changes.account) moncycle_store.emit("changed", Object.assign(changes, {source : "sync"}));
-			return changes;
-		});
+			more = ret.data.hasMore === true;
+		}
+		if (changes.days.length || changes.descriptions || changes.account) moncycle_store.emit("changed", Object.assign(changes, {source : "sync"}));
+		return changes;
 	},
 
-	// Puts an answer of GET /api/sync in the copy, by replacing: an answer merged twice, or a day received
+	// Puts an answer of GET /api/timeline_sync in the copy, by replacing: an answer merged twice, or a day received
 	// again, changes nothing. A day written here since the request left, or still waiting to be sent, is
 	// kept as it is: it is newer than the answer, and about to reach the server.
 	merge : function (data) {
@@ -706,9 +811,10 @@ const moncycle_store = {
 			}
 		}
 
-		if (data.keyInfos) {
+		if (data.allCyclesFirstDay && moncycle_store.account) {
 			let before = JSON.stringify(moncycle_store.account);
-			moncycle_store.account = data.keyInfos;
+			moncycle_store.account.allCyclesFirstDay = data.allCyclesFirstDay;
+			moncycle_store.account.allPregnancyDates = data.allPregnancyDates || [];
 			// the answer does not know the days written here since: the lists agree with them
 			Object.keys(moncycle_store.pending).concat(Object.keys(moncycle_store.touched)).forEach(function (date) {
 				moncycle_store.set_member(moncycle_store.account.allCyclesFirstDay, date, !!(moncycle_store.days[date] && moncycle_store.days[date].cycleFirstDay));

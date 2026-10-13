@@ -11,19 +11,25 @@ require_once "../config.php";
 require_once "../lib/api.php";
 require_once "../lib/account.php";
 require_once "../lib/data.php";
+require_once "../lib/input.php";
 
 [$db, $user_account] = api_start();
 
-$body = http_json_body();
+$path = input_path();
+input_exit_unless_path_fits($path, 1);
+$method = http_method();
+$issues = [];
 
-// DELETION OF THE ACCOUNT
-if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
+// DELETION OF THE ACCOUNT: POST /account/deletion, with the password
+if ($path === ["deletion"]) {
+	if ($method !== "POST") http_exit_method_not_allowed(["POST"]);
 
-	if (!is_string($body["password"] ?? null) || empty($body["password"])) {
-		http_error(400, "missing_password", "'password' is required to confirm account deletion.");
-	}
+	input_query([], $issues);
+	$body = input_body(["password"], $issues);
+	$password = input_secret($body, "password", $issues);
+	input_exit_if_issues($issues);
 
-	if (!account_password_matches($db, $user_account, $body["password"])) {
+	if (!account_password_matches($db, $user_account, $password)) {
 		log_event("account.refused", ["act" => "delete", "err" => "invalid_password"]);
 		http_error(401, "invalid_password", "Incorrect password.");
 	}
@@ -34,8 +40,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 	http_no_content();
 }
 
-// UPDATE OF THE ACCOUNT: its settings, and what wants the password again (loginEmail, newPassword, notificationEmails)
-$outcome = account_update($db, $user_account, $body);
-if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);
+if ($path !== []) http_exit_not_found();
 
-http_data($outcome["status"], $outcome["data"]);
+// THE ACCOUNT
+if ($method === "GET") {
+	input_query([], $issues);
+	input_check_no_body($issues);
+	input_exit_if_issues($issues);
+
+	$account = account_to_json($user_account);
+	// a client that keeps the account sends back the ETag it was given and is told when nothing changed
+	$etag = 'W/"' . md5(json_encode($account)) . '"';
+	header("ETag: $etag");
+	if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? "") === $etag) {
+		http_response_code(304);
+		exit;
+	}
+	http_data(200, $account);
+}
+
+// UPDATE OF THE ACCOUNT: its settings, and what wants the password again (loginEmail, newPassword, notificationEmails)
+if ($method === "PATCH") {
+	input_query([], $issues);
+	$body = input_body(ACCOUNT_PATCH_FIELDS, $issues, [], ACCOUNT_READ_ONLY_FIELDS);
+
+	$outcome = account_update($db, $user_account, $body, $issues);
+	if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);
+
+	http_data($outcome["status"], $outcome["data"], $outcome["meta"]);
+}
+
+http_exit_method_not_allowed(["GET", "PATCH"]);

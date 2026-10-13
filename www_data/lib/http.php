@@ -7,7 +7,6 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/log.php";
 
 // Whether the request says its body is JSON: "application/json" in any case, parameters
@@ -31,7 +30,7 @@ function http_json_body(): array {
 	http_require_json_content_type();
 	$raw = file_get_contents('php://input');
 	$body = json_decode($raw, true);
-	if (!is_array($body)) http_error(400, "invalid_json", "Request body must be a valid JSON object.");
+	if (!is_array($body) || (!empty($body) && array_is_list($body))) http_error(400, "invalid_json", "Request body must be a valid JSON object.");
 	return $body;
 }
 
@@ -51,8 +50,9 @@ function http_respond(int $status, array $body): never {
 	exit;
 }
 
-function http_data(int $status, array $data): never {
-	http_respond($status, ["data" => $data]);
+// $meta is what the answer says about itself and that is not part of the resource (PATCH /api/account: what changed). Only sent when it holds something.
+function http_data(int $status, array $data, array $meta = []): never {
+	http_respond($status, empty($meta) ? ["data" => $data] : ["data" => $data, "meta" => $meta]);
 }
 
 function http_no_content(): never {
@@ -67,31 +67,43 @@ function http_error(int $status, string $code, string $message, array $details =
 	http_respond($status, ["error" => $error]);
 }
 
-// this codebase stores/produces UTC timestamps as bare "YYYY-MM-DD HH:MM:SS" throughout
-// (see lib/date.php's date_validate_timestamp) -- these two helpers are the only place that
-// knows about the ISO-8601 shape the JSON API exposes instead.
+// 405 with the Allow header: the endpoint does not take this method. HEAD is read as GET by the endpoints, so it is not listed.
+function http_exit_method_not_allowed(array $allowed): never {
+	header("Allow: " . implode(", ", $allowed));
+	http_error(405, "method_not_allowed", "Method " . ($_SERVER['REQUEST_METHOD'] ?? "") . " is not supported here. Supported: " . implode(", ", $allowed) . ".");
+}
+
+// 404 for a route that does not exist: an unknown path after the endpoint's name, or a removed endpoint.
+function http_exit_not_found(string $message = "This URL does not exist."): never {
+	http_error(404, "not_found", $message);
+}
+
+// The request method, with HEAD read as GET (the body is not sent for it by the web server).
+function http_method(): string {
+	$method = $_SERVER['REQUEST_METHOD'] ?? "GET";
+	return $method === "HEAD" ? "GET" : $method;
+}
+
+// Whether the request carries a body (GET and DELETE must not).
+function http_body_present(): bool {
+	return file_get_contents('php://input') !== "";
+}
+
+// The Location header of a 201: the address of the new thing, from the root of the API ("description/12" -> "/api/description/12").
+function http_location(string $path): void {
+	header("Location: " . rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? "/api/x"), "/") . "/" . ltrim($path, "/"));
+}
+
+// this codebase stores UTC timestamps as bare "YYYY-MM-DD HH:MM:SS" throughout; http_iso8601() is the shape
+// the JSON API shows them in, and date_parse_rfc3339() (lib/date.php) reads what a client sends back.
 function http_iso8601(?string $utc_timestamp): ?string {
 	if (empty($utc_timestamp)) return null;
 	return str_replace(' ', 'T', trim($utc_timestamp)) . 'Z';
 }
 
-function http_from_iso8601(?string $timestamp): ?string {
-	if (empty($timestamp)) return null;
-	return preg_replace('/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}).*$/', '$1 $2', trim($timestamp));
-}
-
-// The client's own timestamp of a write ("lastWriteClientUtc") as a UTC "Y-m-d H:i:s", or the
-// server's clock when it is absent, not a valid timestamp (a body can hold any JSON value), or outside
-// what the column can store: a client whose clock is wrong must still be able to write.
-function http_client_timestamp(mixed $iso8601): string {
-	$utc = is_string($iso8601) ? http_from_iso8601($iso8601) : null;
-	$storable = $utc && date_validate_timestamp($utc) && $utc >= TIMESTAMP_STORABLE_MIN && $utc <= TIMESTAMP_STORABLE_MAX;
+// The client's own timestamp of a write ("lastWriteClientUtc"), already read by input_timestamp() as a UTC "Y-m-d H:i:s" (null when the client
+// sent none), or the server's clock when it is absent or outside what the column can store: a client whose clock is wrong must still be able to write.
+function http_client_timestamp(?string $utc): string {
+	$storable = $utc && $utc >= TIMESTAMP_STORABLE_MIN && $utc <= TIMESTAMP_STORABLE_MAX;
 	return $storable ? $utc : date('Y-m-d H:i:s');
-}
-
-// The answer of the endpoints a browser calls straight (downloads, pages): a plain-text 400.
-function http_text_error(string $message): never {
-	http_response_code(400);
-	print("ERREUR: " . $message);
-	exit;
 }

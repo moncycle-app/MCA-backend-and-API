@@ -173,21 +173,30 @@ const moncycle_app_text = {
 	tokens_prefix_title : "Début du jeton: il permet de distinguer les connexions d'une même application.",
 	tokens_none : "Aucune connexion.",
 
-	/* --- POST /api/account: what the server refuses when the password is asked again (its own words are English) --- */
+	/* --- PATCH /api/account: what the server refuses when the password is asked again (its own words are English); the keys are the
+	   codes of the problems (moncycle_store.error_pick), or "field:code" --- */
 	account_errors : {
 		invalid_password : "mot de passe incorrect",
-		missing_password : "le mot de passe est nécessaire",
+		password_required : "le mot de passe est nécessaire",
 		totp_required : "un code d\u2019authentification multifacteur est nécessaire",
 		totp_invalid : "le code d\u2019authentification multifacteur est incorrect",
 		invalid_email : "l\u2019adresse e-mail n\u2019est pas valide",
 		email_unchanged : "c\u2019est déjà l\u2019adresse de connexion de votre compte",
-		invalid_notification_emails : "les adresses doivent être valides, séparées par « ; », 5 au plus",
+		"notificationEmails" : "les adresses doivent être valides, séparées par « ; », 5 au plus",
 		password_too_short : "le nouveau mot de passe est trop court (10 caractères au moins)",
 		password_too_long : "le nouveau mot de passe est trop long (72 octets au plus)",
 		password_invalid : "le nouveau mot de passe contient un caractère interdit",
 		password_unchanged : "le nouveau mot de passe est identique à l\u2019ancien",
 		demo_account : "indisponible sur un compte de démo",
 		read_only_token : "cette connexion est en lecture seule",
+	},
+
+	export_errors : {
+		no_data_in_period : "aucune observation sur cette période.",
+		invalid_range : "la 1ère date ne peut pas être après la 2ème.",
+		invalid_date : "dates non valides.",
+		invalid_value : "format non valide.",
+		missing_field : "dates vides.",
 	},
 
 	tokens_confirm_revoke_all : "Déconnecter tous vos autres appareils et applications ?\n\nCet appareil reste connecté. Les autres devront se reconnecter.",
@@ -198,6 +207,8 @@ const moncycle_app_text = {
 	token_copy_failed : "Copie impossible: sélectionnez le jeton et copiez-le à la main.",
 	token_copied : "✅ copié",
 	token_errors : {
+		missing_field : "Mot de passe manquant.",
+		invalid_email : "L'adresse e-mail n'est pas valide.",
 		invalid_credentials : "Mot de passe incorrect.",
 		totp_required : "Un code d'authentification multifacteur est requis.",
 		totp_invalid : "Le code d'authentification multifacteur est incorrect.",
@@ -236,7 +247,7 @@ function moncycle_app_sync_later() {
 }
 
 function moncycle_app_error_message(jqXHR) {
-	return ((jqXHR.responseJSON || {}).error || {}).message || "erreur inconnue";
+	return moncycle_store.error_text(jqXHR);
 }
 
 // "<prefix><b>label</b> message<suffix>" in the element. The label is ours; the message is the server's and
@@ -294,7 +305,7 @@ $(document).ready(function(){
 	});
 
 	// TELECHARGEMENT DES DONNES DES UTILISATEUR
-	$.get("api/key_infos", {}).done(function(ret) {
+	$.get("api/account", {}).done(function(ret) {
 		moncycle_app_usr = ret.data;
 		$("#f_info_pref")[0].reset();
 		$("#name").text(moncycle_app_usr.name);
@@ -411,7 +422,7 @@ $(document).ready(function(){
 			}
 
 			$("#desc_net_stat").text(moncycle_app_text.desc_comment_deleting);
-			try { await moncycle_store.request("DELETE", "api/description?id=" + encodeURIComponent(id)); }
+			try { await moncycle_store.request("DELETE", "api/description/" + encodeURIComponent(id)); }
 			catch (jqXHR) {
 				console.error(jqXHR);
 				$("#desc_net_stat").text(moncycle_app_text.desc_comment_delete_failed);
@@ -492,8 +503,8 @@ $(document).ready(function(){
 			}
 			$("#desc_net_stat").html('⏳');
 			saved.sent = {name: name, type: type_int};
-			let payload = {name: name, type: moncycle_app_desc_type_from_int[type_int], id: id};
-			$.ajax({type: "POST", url: "api/description", contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
+			let payload = {name: name, type: moncycle_app_desc_type_from_int[type_int]};
+			$.ajax({type: "PATCH", url: "api/description/" + encodeURIComponent(id), contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
 				if (edit == desc_last_edit) $("#desc_net_stat").html(' ✅&nbsp;enregistré');
 				// what the page holds of the description follows what was saved (the duplicate check, the delete dialog, the emoji)
 				saved.name = name;
@@ -527,7 +538,7 @@ $(document).ready(function(){
 			if (count>1 && !confirm(`Êtes-vous sûr de vouloir supprimer la description « ${name} » ?\n\nLes jours auxquels ${name} a été associé perdront cette information de manière irréversible. La description « ${name} » est actuellement associé à ${count} dates différentes.`)) return;
 			else if (count>0 && !confirm(`Êtes-vous sûr de vouloir supprimer la description « ${name} » ?\n\nLes jours auxquels ${name} a été associé perdront cette information de manière irréversible. La description « ${name} » est actuellement associé à une date.`)) return;
 			$("#desc_net_stat").html('⏳');
-			$.ajax({type : 'DELETE', "url" : "api/description?id=" + encodeURIComponent(id)}).done(function(){
+			$.ajax({type : 'DELETE', "url" : "api/description/" + encodeURIComponent(id)}).done(function(){
 				$("#desc_net_stat").html('');
 				$(`#desc_row_${id}`).remove();
 				$("#desc_net_stat").html(' ✅&nbsp;supprimé');
@@ -562,8 +573,8 @@ $(document).ready(function(){
 
 
 	// AFFICHAGE VERSION
-	$.get("api/version", {}).done(function(data) {
-		$("#tech_info_ver").text(data.version ?? "?");
+	$.get("api/server_info", {}).done(function(ret) {
+		$("#tech_info_ver").text((ret.data || {}).serverVersion ?? "?");
 	}).fail(moncycle_app_redirect_if_unauthenticated);
 
 
@@ -585,7 +596,7 @@ $(document).ready(function(){
 			payload[moncycle_app_account_field_map[field_name] || field_name] = val;
 		}
 		$.ajax({
-			type: "POST",
+			type: "PATCH",
 			url: "../api/account",
 			contentType: "application/json",
 			data: JSON.stringify(payload),
@@ -604,18 +615,17 @@ $(document).ready(function(){
 	});
 
 
-	// Everything about the account is changed by POST /api/account: the settings as they are typed, and what hands the account (or its cycles)
+	// Everything about the account is changed by PATCH /api/account: the settings as they are typed, and what hands the account (or its cycles)
 	// over -- the addresses and the password -- with the current password sent again. A form carries the data, the script sends the form.
 	const account_update = function (payload, done, fail) {
-		$.ajax({type: "POST", url: "../api/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
+		$.ajax({type: "PATCH", url: "../api/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
 			console.error(jqXHR);
 			fail(jqXHR);
 		});
 	};
 	// what the server refuses, in French (its own words are English); the server's message when the code is not known here
 	const account_error = function (jqXHR) {
-		const code = ((jqXHR.responseJSON || {}).error || {}).code;
-		return moncycle_app_text.account_errors[code] || moncycle_app_error_message(jqXHR).replace(/\.$/, "");
+		return moncycle_store.error_pick(jqXHR, moncycle_app_text.account_errors) || moncycle_app_error_message(jqXHR).replace(/\.$/, "");
 	};
 
 	// THE ADDRESSES THAT RECEIVE THE CYCLES: it is the cycles of the owner, so the password confirms a change
@@ -663,11 +673,11 @@ $(document).ready(function(){
 		$("#login_email_msg").text('');
 		$("#but_login_email").prop("disabled", true);
 		var payload = {loginEmail: $("#i_login_email_new").val(), password: $("#i_login_email_password").val()};
-		if ($("#i_login_email_code").val()) payload.code = parseInt($("#i_login_email_code").val());
+		if ($("#i_login_email_code").val()) payload.code = $("#i_login_email_code").val();
 		account_update(payload, function (ret) {
 			$("#but_login_email").prop("disabled", false);
 			$("#form_login_email input[type=password], #form_login_email input[type=number]").val('');
-			if (ret.data.loginEmailLinkSent) {
+			if ((ret.meta || {}).loginEmailLinkSent) {
 				$("#login_email_ok").text('✅ lien envoyé');
 				$("#i_login_email_new").val('');
 			}
@@ -705,8 +715,7 @@ $(document).ready(function(){
 			if (token.expiresAt) details.push(moncycle_app_text.tokens_expires(token_when(token.expiresAt)));
 			details.forEach(function (line) { row.append($("<div>").addClass("label_info token_detail").text(line)); });
 			if (!token.current && token.prefix) {
-				const form = $("<form>").addClass("f_token_revoke").attr({action: "api/token", method: "delete"});
-				form.append($("<input>").attr({type: "hidden", name: "prefix"}).val(token.prefix));
+				const form = $("<form>").addClass("f_token_revoke").attr({action: "api/token/" + encodeURIComponent(token.prefix), method: "delete"});
 				form.append($("<button>").attr("type", "submit").addClass("rouge").text("🗑️ " + moncycle_app_text.tokens_revoke));
 				row.append(form);
 			}
@@ -715,7 +724,7 @@ $(document).ready(function(){
 	};
 	const tokens_load = function () {
 		return $.get("api/token").done(function (ret) {
-			token_render(ret.data.tokens);
+			token_render(ret.data);
 		}).fail(function (jqXHR) {
 			moncycle_app_redirect_if_unauthenticated(jqXHR);
 			// the demo accounts have no list: their sessions are the visitors' (the server says 403 demo_account)
@@ -723,10 +732,11 @@ $(document).ready(function(){
 			else moncycle_app_show_error($("#tokens_err"), "❌\u00a0erreur:", moncycle_app_error_message(jqXHR));
 		});
 	};
-	const tokens_revoke = function (body) {
+	// The form says what to revoke by its address: api/token/{prefix} for one connection, api/token?others=true for all the others.
+	const tokens_revoke = function (form) {
 		$("#tokens_err").empty();
 		const net_stat = $("#tokens_net_stat").removeClass("vert rouge").text("⏳");
-		return $.ajax({type: "DELETE", url: "api/token", contentType: "application/json", data: JSON.stringify(body)}).done(function (ret) {
+		return $.ajax({type: "DELETE", url: form.attr("action")}).done(function (ret) {
 			net_stat.addClass("vert").text(moncycle_app_text.tokens_revoked(ret.data.revoked));
 			tokens_load();
 		}).fail(function (jqXHR) {
@@ -738,12 +748,12 @@ $(document).ready(function(){
 	};
 	$("#tokens_container").on("submit", ".f_token_revoke", function (event) {
 		event.preventDefault();
-		tokens_revoke({prefix: $(this).find("input[name=prefix]").val()});
+		tokens_revoke($(this));
 	});
 	$("#f_tokens_revoke_all").on("submit", function (event) {
 		event.preventDefault();
 		if (!confirm(moncycle_app_text.tokens_confirm_revoke_all)) return;
-		tokens_revoke({all: $(this).find("input[name=all]").val() === "true"});
+		tokens_revoke($(this));
 	});
 
 	// the creation is a sign-in that sets no cookie: the password (and the code, and the captcha once the account asks for one) is asked again
@@ -770,7 +780,7 @@ $(document).ready(function(){
 			expiresInDays: parseInt(field("expiresInDays").val()),
 			cookie: field("cookie").val() === "true",
 		};
-		if (field("code").val()) payload.code = parseInt(field("code").val());
+		if (field("code").val()) payload.code = field("code").val();
 		if ($("#token_new_captcha_wrapper").is(":visible")) {
 			payload.captcha = field("captcha").val();
 			payload.captchaToken = field("captchaToken").val();
@@ -788,7 +798,7 @@ $(document).ready(function(){
 			const err = (jqXHR.responseJSON || {}).error || {};
 			// the server asks for a captcha once the account has failed too often (a wrong password here counts like a wrong sign-in)
 			if ((err.details || {}).captchaRequired) $("#token_new_captcha_wrapper").show();
-			const shown = moncycle_app_text.token_errors[err.code] || err.message || "erreur inconnue";
+			const shown = moncycle_store.error_pick(jqXHR, moncycle_app_text.token_errors) || moncycle_store.error_text(jqXHR);
 			$("#token_new_err").empty().append(document.createTextNode("❌ " + shown));
 		}).always(function () {
 			$("#but_token_create").prop("disabled", false).val("🔑 Créer le jeton");
@@ -805,10 +815,11 @@ $(document).ready(function(){
 	});
 
 	// TOTP AUTH MULTI FACTEUR
-	$("#i_activate_otp").on("click", function(event) {
+	$("#f_totp_start").on("submit", function(event) {
+		event.preventDefault();
 		$("#i_activate_otp").prop("disabled", true);
 		$("#totp_err_msg").html("");
-		$.get("api/totp", {}).done(function(ret) {
+		$.ajax({type: "POST", url: $(this).attr("action")}).done(function(ret) {
 			$("#i_activate_otp").prop("disabled", false);
 			$("#totp_explications").hide();
 			$("#totp_miseenpalce").show();
@@ -832,7 +843,7 @@ $(document).ready(function(){
 		$("#totp_err_msg").html("");
 		var code = $('#f_totp_validation input[name="tmp_code"]').val();
 		$("#f_totp_validation").trigger("reset");
-		$.ajax({type: "POST", url: "../api/totp", contentType: "application/json", data: JSON.stringify({code: parseInt(code)})}).done(function(ret){
+		$.ajax({type: "POST", url: $(this).attr("action"), contentType: "application/json", data: JSON.stringify({code: code})}).done(function(ret){
 			if (ret.data.totpState == "active") {
 				$("#totp_miseenpalce").hide();
 				$("#totp_state").show();
@@ -847,7 +858,7 @@ $(document).ready(function(){
 		$("#totp_err_msg").html("");
 		var code = $('#f_totp_desac input[name="tmp_code"]').val();
 		$("#f_totp_desac").trigger("reset");
-		$.ajax({type : 'DELETE', "url" : "../api/totp?code=" + encodeURIComponent(code)}).done(function(ret){
+		$.ajax({type: "POST", url: $(this).attr("action"), contentType: "application/json", data: JSON.stringify({code: code})}).done(function(ret){
 			if (ret.data.totpState == "disabled") {
 				$("#totp_explications").show();
 				$("#totp_state").hide();
@@ -865,9 +876,15 @@ $(document).ready(function(){
 		var start_date = $("#i_start_date").val();
 		var end_date = $("#i_end_date").val();
 		var file_format = $("#i_file_format").val();
-		if (start_date == "" || end_date == "") $("#export_err").html("<br /><b>❌&nbsp;erreur:</b> dates vides.");
-		else if (new Date(start_date) >= new Date(end_date)) $("#export_err").html("<br /><b>❌&nbsp;erreur:</b> la 1ère date doit être antérieur à la 2ème.");
-		else window.location.replace(`api/export?type=${file_format}&start_date=${start_date}&end_date=${end_date}`);
+		var show_error = function (reason) { moncycle_app_show_error($("#export_err"), "erreur:", reason, "❌\u00a0"); };
+		$("#export_err").empty();
+		if (start_date == "" || end_date == "") show_error(moncycle_app_text.export_errors.missing_field);
+		else if (new Date(start_date) > new Date(end_date)) show_error(moncycle_app_text.export_errors.invalid_range);
+		else {
+			moncycle_store.download(`${$(this).attr("action")}/${encodeURIComponent(file_format)}?from=${start_date}&to=${end_date}`).catch(function (failure) {
+				show_error(moncycle_app_text.export_errors[failure.issues.length ? failure.issues[0].code : failure.code] || failure.message || "export impossible.");
+			});
+		}
 	});
 
 	// IMPORT NFP
@@ -980,8 +997,8 @@ $(document).ready(function(){
 		// form, and processData off so jQuery does not try to encode the string.
 		file.text().then(function (body) {
 			let query = $.param({
-				dryRun: dry_run ? 1 : 0,
-				override: override ? 1 : 0,
+				dryRun: dry_run,
+				override: override,
 				lastWriteClientUtc: (new Date()).toISOString(),
 			});
 			$.ajax({
@@ -1024,7 +1041,7 @@ $(document).ready(function(){
 		event.preventDefault();
 		var password = $('#f_suppr_user_account input[name="pw_before_deletion"]').val();
 		if (!confirm(moncycle_app_usr.name + ', êtes-vous sur de vouloir supprimer votre compte ainsi que toutes vos données? Cette action est irréversible. 😟')) return;
-		$.ajax({type : 'DELETE', "url" : "../api/account", contentType: "application/json", data: JSON.stringify({password: password})}).done(function(){
+		$.ajax({type : 'POST', "url" : $(this).attr("action"), contentType: "application/json", data: JSON.stringify({password: password})}).done(function(){
 			moncycle_store.clear_storage();
 			alert(moncycle_app_usr.name + ", votre compte a bien été supprimé. 😢💔");
 			window.location.replace('auth');

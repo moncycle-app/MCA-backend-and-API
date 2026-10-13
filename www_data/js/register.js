@@ -76,21 +76,21 @@ else {
 				const return_codes = {
 					already_authenticated: "Compte déjà connecté.",
 					registration_disabled: "La création de compte est désactivée.",
-					missing_fields: "Données manquantes pour créer le compte.",
+					missing_field: "Données manquantes pour créer le compte.",
 					invalid_email: "L'adresse email renseignée n'est pas valide.",
 					captcha_invalid: "Erreur dans la saisie du captcha.",
 					captcha_expired: "Le captcha a expiré, recopiez le nouveau.",
 					captcha_unavailable: "Le captcha est indisponible pour le moment, réessayez plus tard.",
 					rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
-					invalid_parameter: "Le mot de passe est invalide.",
+					password: "Le mot de passe est invalide.",
 					password_too_short: "Le mot de passe est trop court (10 caractères au moins).",
 					password_too_long: "Le mot de passe est trop long (72 octets au plus).",
 					password_invalid: "Le mot de passe contient un caractère interdit.",
-					invalid_birth_year: "La date de naissance n'est pas réaliste.",
-					invalid_first_name: "Le prénom est invalide ou trop long.",
-					invalid_discovered_comment: "Le commentaire est invalide ou trop long."
+					birthYear: "La date de naissance n'est pas réaliste.",
+					firstName: "Le prénom est invalide ou trop long.",
+					discoveredComment: "Le commentaire est invalide ou trop long."
 				};
-				$("#register_error_msg").text(return_codes[err.code] || err.message || "Erreur inconnue.");
+				$("#register_error_msg").text(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR));
 				reactivate_form();
 				// a captcha that was refused is not asked again with the same answer
 				if (err.code === "captcha_invalid" || err.code === "captcha_expired") register_captcha.reload(true);

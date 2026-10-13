@@ -61,7 +61,8 @@ services:
     pids_limit: 200
     mem_limit: 256m
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1/api/health_check"]
+      # "oookkk" is a healthy answer; the 503 "maintenance" of MAINTENANCE_MODE is alive too (a container in maintenance is not a dead one)
+      test: ["CMD-SHELL", "curl -sS http://127.0.0.1/api/health_check | grep -Eq 'oookkk|\"maintenance\"'"]
       interval: 30s
       timeout: 5s
       retries: 3

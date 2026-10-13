@@ -8,41 +8,43 @@
 */
 
 require_once "../config.php";
+require_once "../lib/api.php";
 require_once "../lib/doc_csv.php";
 require_once "../lib/doc_export.php";
-require_once "../lib/log.php";
+require_once "../lib/input.php";
 require_once "../lib/nfp_export.php";
-require_once "../lib/sec.php";
 
-log_start(sec_client_ip());
-http_exit_if_maintenance();
-$db = db_open();
-$user_account = sec_auth_token($db);
-sec_redirect_if_logged_out($user_account);
+// GET /export/{format}: a file. Its failures are the JSON envelope like every other endpoint's.
+[$db, $user_account] = api_start();
 
-// THE PERIOD AND THE FORMAT
-$start_date = date_parse_ymd($_GET['start_date'] ?? null) ?? http_text_error("date de démarrage non indiquée ou au mauvais format.");
-$end_date = date_parse_ymd($_GET['end_date'] ?? null) ?? http_text_error("date de fin non indiquée ou au mauvais format.");
+if (http_method() !== "GET") http_exit_method_not_allowed(["GET"]);
 
-if (new DateTime($start_date) >= new DateTime($end_date)) {
-	http_text_error("la 'start_date' doit être antérieure à la 'end_date'.");
-}
+// THE FORMAT, THE PERIOD AND THE OPTIONS
+$path = input_path();
+input_exit_unless_path_fits($path, 1);
+if ($path === []) http_exit_not_found("Say the format in the URL: /export/" . implode(", /export/", EXPORT_TYPES) . ".");
 
-$type = $_GET['type'] ?? null;
+$issues = [];
+$type = $path[0];
 if (!in_array($type, EXPORT_TYPES, true)) {
-	http_text_error("le format de l'export doit être: " . implode(", ", EXPORT_TYPES));
+	$issues[] = input_issue("path.format", "invalid_value", "The format in the URL must be one of: " . implode(", ", EXPORT_TYPES) . ".");
 }
 
-// 'anonymous' applies to pdf (no name on the chart) and to nfp (no userInformation block in the
-// file); 'json_in_page' only to nfp (shown in the browser instead of downloaded)
-$anonymous = $_GET['anonymous'] ?? "0";
-if (!in_array($anonymous, ["0", "1"], true)) http_text_error("'anonymous' doit être 1 ou 0");
+$query = input_query(["from", "to", "anonymous", "inline"], $issues);
+input_check_no_body($issues);
+foreach (["from", "to"] as $name) {
+	if (!isset($query[$name])) $issues[] = input_issue("query.$name", "missing_field", "'$name' is required: the first and the last date of the period, both included, YYYY-MM-DD.");
+}
+$start_date = input_query_date($query, "from", $issues);
+$end_date = input_query_date($query, "to", $issues);
+if (!is_null($start_date) && !is_null($end_date) && $start_date > $end_date) $issues[] = input_issue("query.from", "invalid_range", "'from' must not be after 'to'.");
 
-$json_in_page = $type === EXPORT_TYPE_NFP ? ($_GET['json_in_page'] ?? "0") : "0";
-if (!in_array($json_in_page, ["0", "1"], true)) http_text_error("'json_in_page' doit être 1 ou 0");
+// 'anonymous' applies to pdf (no name on the chart) and to nfp (no userInformation block in the file), 'inline' to nfp (shown in the
+// browser instead of downloaded); a format they do not apply to accepts them and does nothing with them
+$anonymous = input_query_bool($query, "anonymous", $issues);
+$inline = input_query_bool($query, "inline", $issues) && $type === EXPORT_TYPE_NFP;
+input_exit_if_issues($issues);
 
-$anonymous = $anonymous === "1";
-$json_in_page = $json_in_page === "1";
 $nfp_method = intval($user_account["nfp_method"]);
 
 // THE DAYS OF THE PERIOD -- csv and pdf read exactly the period asked for; the nfp export reads
@@ -57,7 +59,7 @@ else {
 }
 
 if (!$has_data) {
-	http_text_error("il n'y a pas d'observation pour la période demandée.");
+	http_error(404, "no_data_in_period", "There is no observation between 'from' and 'to'.");
 }
 
 // only the length of the period is logged, not the dates
@@ -80,9 +82,9 @@ elseif ($type === EXPORT_TYPE_PDF) {
 }
 
 else {
-	$nfp_json = nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $json_in_page);
+	$nfp_json = nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $inline);
 
 	header('Content-Type: application/json');
-	if (!$json_in_page) header('Content-Disposition: attachment; filename="' . $filename . '.nfp"');
+	if (!$inline) header('Content-Disposition: attachment; filename="' . $filename . '.nfp"');
 	print($nfp_json);
 }

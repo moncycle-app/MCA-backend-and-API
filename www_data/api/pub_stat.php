@@ -1,21 +1,31 @@
 <?php
+/* moncycle.app
+**
+** licence Creative Commons CC BY-NC-SA
+**
+** https://www.moncycle.app
+** https://github.com/moncycle-app/backend-api-web-app
+*/
 
 require_once "../config.php";
+require_once "../lib/api.php";
 require_once "../lib/data.php";
-require_once "../lib/db.php";
-require_once "../lib/log.php";
-require_once "../lib/sec.php";
+require_once "../lib/input.php";
 
-log_start(sec_client_ip());
-http_exit_if_maintenance();
-header('Content-Type: application/json');
+[$db] = api_start(false);
 
-$db = db_open();
-
+if (http_method() !== "GET") http_exit_method_not_allowed(["GET"]);
+$issues = [];
+input_query([], $issues);
+input_check_no_body($issues);
+input_exit_if_issues($issues);
+input_exit_unless_path_fits(input_path(), 0);
 
 // the numbers the cron keeps (counted now when it has not run yet)
-echo json_encode(data_public_stats($db), JSON_PRETTY_PRINT);
+$stats = data_public_stats($db);
 
 db_update_increment_key_value($db, "pub_visit_monthly");
 db_update_increment_key_value($db, "pub_visit_weekly");
 db_update_increment_key_value($db, "pub_visit_daily");
+
+http_data(200, $stats);

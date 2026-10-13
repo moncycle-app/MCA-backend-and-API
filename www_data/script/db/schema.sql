@@ -125,4 +125,5 @@ CREATE TABLE `key_value` (
 INSERT INTO `key_value` (`key`, `value`) VALUES
 ('pub_visit_monthly',	0),
 ('pub_visit_weekly',	0),
-('pub_visit_daily',	0);
+('pub_visit_daily',	0),
+('schema_version',	15);

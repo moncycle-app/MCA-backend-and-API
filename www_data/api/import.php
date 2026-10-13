@@ -19,45 +19,37 @@
 **   3. nfp_import_build_plan()   calendar, ranges, lengths, cycle overlap -> the write plan
 **   4. nfp_import_write_plan()   inside one transaction
 **
-** ?dryRun=1 answers for stage 4 without running it: nfp_import_preview_plan() reads the account
+** ?dryRun=true answers for stage 4 without running it: nfp_import_preview_plan() reads the account
 ** and reports what the write would have done -- which days of the file the account already
 ** holds, and which free-text labels are new -- so the user can see what is at stake, and in
 ** particular decide on 'override', before anything is written. A dry run that is refused also
 ** answers with everything the checks found, not only the first thing that rejects the file,
 ** because a diagnosis is the whole point of asking for one.
 **
-** ?override=<0|1> decides what happens to a date the account already has data on: 0 (the
-** default) leaves it alone and reports it, 1 replaces it.
+** ?override=<true|false> decides what happens to a date the account already has data on: false (the
+** default) leaves it alone and reports it, true replaces it.
 */
 
 require_once "../config.php";
 require_once "../lib/api.php";
+require_once "../lib/input.php";
 require_once "../lib/nfp_import.php";
 
 [$db, $user_account] = api_start();
 
-if ($_SERVER['REQUEST_METHOD'] !== "POST") {
-	http_error(405, "method_not_allowed", "Supported method: POST.");
-}
+if (http_method() !== "POST") http_exit_method_not_allowed(["POST"]);
+input_exit_unless_path_fits(input_path(), 0);
 
 // ---------------------------------------------------------------------------
 // Parameters
 // ---------------------------------------------------------------------------
 
-// The parameter is "override". Its first spelling, "overide", was published: it is still read (and
-// still echoed in the report) so that a client written for it keeps working; "override" wins.
-$override_name = isset($_GET['override']) ? 'override' : 'overide';
-if (isset($_GET[$override_name]) && !in_array($_GET[$override_name], ["0", "1"], true)) {
-	http_error(400, "invalid_parameter", "'$override_name' must be 0 or 1.");
-}
-$override = isset($_GET[$override_name]) && $_GET[$override_name] === "1";
-
-if (isset($_GET['dryRun']) && !in_array($_GET['dryRun'], ["0", "1"], true)) {
-	http_error(400, "invalid_parameter", "'dryRun' must be 0 or 1.");
-}
-$dry_run = isset($_GET['dryRun']) && $_GET['dryRun'] === "1";
-
-$last_write_client_UTC = http_client_timestamp($_GET['lastWriteClientUtc'] ?? null);
+$issues = [];
+$query = input_query(["dryRun", "override", "lastWriteClientUtc"], $issues);
+$dry_run = input_query_bool($query, "dryRun", $issues);
+$override = input_query_bool($query, "override", $issues);
+$last_write_client_UTC = http_client_timestamp(input_timestamp($query["lastWriteClientUtc"] ?? null, "query.lastWriteClientUtc", $issues));
+input_exit_if_issues($issues);
 
 // ---------------------------------------------------------------------------
 // Stage 1 -- the body
@@ -113,7 +105,6 @@ if (!empty($checked["issues"])) {
 $report = [
 	"dryRun" => $dry_run,
 	"override" => $override,
-	"overide" => $override,
 	"schemaVersion" => nfp_format_get($nfp_file, "schemaVersion"),
 	"sourceApp" => nfp_format_get(nfp_format_get($nfp_file, "fileInformation"), "sourceApp"),
 	"cyclesRead" => $checked["cyclesRead"],

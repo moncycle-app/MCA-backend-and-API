@@ -11,10 +11,12 @@ require_once "../config.php";
 require_once "../lib/doc_csv.php";
 require_once "../lib/log.php";
 require_once "../lib/sec.php";
+require_once "../lib/server.php";
 
 log_start(sec_client_ip());
 http_exit_if_maintenance();
 $db = db_open();
+server_exit_if_schema_mismatch($db);
 
 $user_account = sec_auth_token($db);
 sec_redirect_if_logged_out($user_account);

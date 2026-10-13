@@ -17,6 +17,7 @@ require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
+require_once __DIR__ . "/input.php";
 require_once __DIR__ . "/log.php";
 
 // ---------------------------------------------------------------------------
@@ -38,13 +39,12 @@ function sec_hash($text) {
 	return password_hash($text, PASSWORD_BCRYPT);
 }
 
-// What is wrong with a password a client chose, as [error code, message] for a 422, or null when it can be used. One rule for the
-// sign-up, the reset by link and the change from the account page. bcrypt cannot hash a password holding a null byte (PHP throws) and
-// reads 72 bytes only: a longer one is refused rather than half kept.
-function sec_password_problem(string $password): ?array {
-	if (strlen($password) < PASSWORD_MIN_LENGTH) return ["password_too_short", "New password is too short (minimum " . PASSWORD_MIN_LENGTH . " characters)."];
-	if (strlen($password) > PASSWORD_MAX_BYTES) return ["password_too_long", "New password is too long (maximum " . PASSWORD_MAX_BYTES . " bytes)."];
-	if (str_contains($password, "\0")) return ["password_invalid", "New password must not contain a null character."];
+// The problem of a password a client chooses (register, a new password, a reset), as an issue of the field that holds it (lib/input.php), or null
+// when it can be used. Its messages never hold the password.
+function sec_password_issue(string $password, string $field): ?array {
+	if (strlen($password) < PASSWORD_MIN_LENGTH) return input_issue($field, "password_too_short", "'$field' is too short: the minimum is " . PASSWORD_MIN_LENGTH . " characters.");
+	if (strlen($password) > PASSWORD_MAX_BYTES) return input_issue($field, "password_too_long", "'$field' is too long: the maximum is " . PASSWORD_MAX_BYTES . " bytes.");
+	if (str_contains($password, "\0")) return input_issue($field, "password_invalid", "'$field' must not contain a null character.");
 	return null;
 }
 
@@ -116,6 +116,7 @@ function sec_auth_token($db) {
 function sec_exit_if_logged_out($user_account) {
 	if (is_null($user_account)) {
 		log_note(["err" => "unauthorized"]);
+		header('WWW-Authenticate: Bearer');
 		http_response_code(401);
 		echo json_encode(["error" => ["code" => "unauthorized", "message" => "Authentication required."]]);
 		exit;
@@ -252,7 +253,7 @@ function sec_exit_if_cross_origin(): void {
 // ---------------------------------------------------------------------------
 
 // the string vocabulary (TOTP_STATE_NAMES, constants.php) the JSON API exposes instead of
-// the raw 0-3 DB int -- shared by api/totp.php and api/key_infos.php so the two never drift apart.
+// the raw 0-3 DB int -- shared by api/totp.php and lib/account.php so the two never drift apart.
 function sec_totp_state_name($state) {
 	if (!is_int($state)) return "unknown";
 	return TOTP_STATE_NAMES[$state] ?? "unknown";
@@ -426,8 +427,8 @@ function sec_login_account_locked($user_account) {
 // it finds one that asks for no captcha, and signs in on its password alone like any login.)
 // Every outcome is logged: the refusals as `auth.login_failed`, with the account when the address
 // has one and its count of failed attempts, this one included when it was counted against it.
-// The address in $body["email"] is read as it is: the endpoint has already normalised it
-// (account_email_normalise(), api/token.php), which is how it is stored.
+// $body["email"] (a valid address, normalised: account_email_normalise(), how it is stored) and $body["password"] (a non-empty string) have been
+// checked by the endpoint (api/token.php), and so have the types of "code", "captcha" and "captchaToken".
 // $token_options is what sec_auth_success() takes (name, scope, expires_in_days, cookie), checked by the endpoint (token_parse_options()).
 function sec_login($db, array $body, array $token_options = []): array {
 	$user_account = [];
@@ -441,10 +442,6 @@ function sec_login($db, array $body, array $token_options = []): array {
 		]);
 		return ["status" => $status, "code" => $code, "message" => $message, "meta" => $meta];
 	};
-
-	if (!isset($body["email"]) || !isset($body["password"]) || !is_string($body["password"]) || !filter_var($body["email"], FILTER_VALIDATE_EMAIL)) {
-		return $refuse(400, "missing_credentials", "'email' and 'password' are required.");
-	}
 
 	$client_ip = sec_client_ip();
 	$user_account = db_select_user_account_by_email($db, $body["email"]) ?? [];
@@ -475,8 +472,6 @@ function sec_login($db, array $body, array $token_options = []): array {
 	if (is_null($attempt)) {
 		return $refuse(429, "rate_limited", "Too many attempts from this network, please try again later.", $meta);
 	}
-
-	if (empty($body["email"]) || empty($body["password"])) return $counted(400, "missing_credentials", "'email' and 'password' are required.");
 
 	// the account, the password, the code: what a login is once the captcha (if it is asked) is passed
 	$check_credentials = function () use ($db, $body, $token_options, $meta, $counted, $refuse, &$user_account, &$account_locked, &$attempt) {

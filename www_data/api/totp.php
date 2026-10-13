@@ -9,16 +9,26 @@
 
 require_once "../config.php";
 require_once "../lib/api.php";
+require_once "../lib/input.php";
 
 [$db, $user_account] = api_start();
 
+// POST /totp starts the set-up, POST /totp/confirm turns it on with a code, POST /totp/disable turns it off with a code
+$path = input_path();
+input_exit_unless_path_fits($path, 1);
+$step = $path[0] ?? "";
+if (!in_array($step, ["", "confirm", "disable"], true)) http_exit_not_found();
+if (http_method() !== 'POST') http_exit_method_not_allowed(["POST"]);
+
 $is_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
+$issues = [];
+input_query([], $issues);
 
-// START THE SET-UP: a new secret and its QR code
-if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-
-	// a GET that changes something (it stores a secret): the one a read-only token may not make
-	sec_exit_if_token_read_only($user_account);
+// START
+if ($step === "") {
+	// the body is optional, and has no field
+	if (http_body_present()) input_body([], $issues);
+	input_exit_if_issues($issues);
 
 	if ($is_active) {
 		http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
@@ -29,20 +39,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 	http_data(200, $setup);
 }
 
-// CONFIRM IT WITH A FIRST CODE
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+$body = input_body(["code"], $issues);
+$code = input_code($body, $issues);
+input_exit_if_issues($issues);
 
-	$body = http_json_body();
-
+// CONFIRM
+if ($step === "confirm") {
 	if ($is_active) {
 		http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
 	}
 
-	if (empty($body["code"]) || intval($body["code"]) <= 0) {
-		http_error(400, "totp_code_missing", "TOTP one-time code not provided.");
-	}
-
-	if (!sec_totp_code_valid($user_account, $body["code"])) {
+	if (!sec_totp_code_valid($user_account, $code)) {
 		log_event("account.refused", ["act" => "totp_enable", "err" => "totp_invalid"]);
 		http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
 	}
@@ -53,25 +60,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 	http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_ACTIVE)]);
 }
 
-// TURN IT OFF, WITH A CODE
-if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-
-	if (empty($_GET["code"]) || intval($_GET["code"]) <= 0) {
-		http_error(400, "totp_code_missing", "TOTP one-time code not provided.");
-	}
-
-	if (!$is_active) {
-		http_error(409, "totp_not_enabled", "Two-factor authentication is not enabled.");
-	}
-
-	if (!sec_totp_code_valid($user_account, $_GET["code"])) {
-		log_event("account.refused", ["act" => "totp_disable", "err" => "totp_invalid"]);
-		http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
-	}
-
-	db_update_user_account_totp_state($db, TOTP_STATE_DISABLED, $user_account["no_user_account"]);
-	db_update_user_account_totp_secret($db, null, $user_account["no_user_account"]);
-	log_event("account.totp_disabled");
-
-	http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_DISABLED)]);
+// DISABLE
+if (!$is_active) {
+	http_error(409, "totp_not_enabled", "Two-factor authentication is not enabled.");
 }
+
+if (!sec_totp_code_valid($user_account, $code)) {
+	log_event("account.refused", ["act" => "totp_disable", "err" => "totp_invalid"]);
+	http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
+}
+
+db_update_user_account_totp_state($db, TOTP_STATE_DISABLED, $user_account["no_user_account"]);
+db_update_user_account_totp_secret($db, null, $user_account["no_user_account"]);
+log_event("account.totp_disabled");
+
+http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_DISABLED)]);

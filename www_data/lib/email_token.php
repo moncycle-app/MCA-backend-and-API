@@ -16,6 +16,7 @@
 // posts it to POST /api/verify_email: a mail scanner that only fetches the link uses nothing up.
 
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/input.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/mail.php";
 require_once __DIR__ . "/sec.php";
@@ -60,20 +61,32 @@ function email_token_use($db, mixed $token, int $purpose, callable $apply): arra
 //   refusal: ["status" => 4xx, "code" => ..., "message" => ...]
 // The password is checked before the link is touched: a password that is refused does not use the link up. The mails that tell the
 // owner what happened go once the work is committed.
-function email_token_complete($db, array $body): array {
+function email_token_complete($db, array $body, array $issues = []): array {
 	$refuse = fn(int $status, string $code, string $message) => ["status" => $status, "code" => $code, "message" => $message];
 
-	$purpose = is_string($body["purpose"] ?? null) ? array_search($body["purpose"], EMAIL_TOKEN_PURPOSE_NAMES, true) : false;
-	if ($purpose === false) return $refuse(400, "invalid_purpose", "'purpose' must be one of: " . implode(", ", EMAIL_TOKEN_PURPOSE_NAMES) . ".");
-	if (!is_string($body["token"] ?? null) || $body["token"] === "") return $refuse(400, "missing_token", "'token' is required.");
+	$purpose = false;
+	if (input_require($body, "purpose", $issues)) {
+		if (!is_string($body["purpose"])) input_wrong_type($issues, "purpose", $body["purpose"], "a string (" . implode(", ", EMAIL_TOKEN_PURPOSE_NAMES) . ")");
+		else {
+			$purpose = array_search($body["purpose"], EMAIL_TOKEN_PURPOSE_NAMES, true);
+			if ($purpose === false) $issues[] = input_issue("purpose", "invalid_value", "'purpose' must be one of: " . implode(", ", EMAIL_TOKEN_PURPOSE_NAMES) . ".");
+		}
+	}
+	input_secret($body, "token", $issues);
+
+	$new_password = null;
+	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {
+		$new_password = input_secret($body, "newPassword", $issues);
+		$issue = is_null($new_password) ? null : sec_password_issue($new_password, "newPassword");
+		if (!is_null($issue)) $issues[] = $issue;
+	}
+	elseif ($purpose !== false && array_key_exists("newPassword", $body)) {
+		$issues[] = input_issue("newPassword", "invalid_value", "'newPassword' only goes with the purpose 'resetPassword'.");
+	}
+	input_exit_if_issues($issues);
 
 	$password_hash = null;
-	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {
-		if (!is_string($body["newPassword"] ?? null) || $body["newPassword"] === "") return $refuse(400, "missing_fields", "'newPassword' is required.");
-		$problem = sec_password_problem($body["newPassword"]);
-		if (!is_null($problem)) return $refuse(422, $problem[0], $problem[1]);
-		$password_hash = sec_hash($body["newPassword"]);   // before the lock: bcrypt is slow
-	}
+	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) $password_hash = sec_hash($new_password);   // before the lock: bcrypt is slow
 
 	$used = email_token_use($db, $body["token"], $purpose, function (array $account) use ($db, $purpose, $password_hash) {
 		if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {

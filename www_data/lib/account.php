@@ -7,14 +7,15 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// The user_account row as the code and the JSON API see it: its method, and what a
-// POST /api/account body changes.
+// The user_account row as the code and the JSON API see it: its method, the account as GET /api/account shows it, and what a
+// PATCH /api/account body changes.
 
 require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/email_token.php";
 require_once __DIR__ . "/http.php";
+require_once __DIR__ . "/input.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/mail.php";
 require_once __DIR__ . "/sec.php";
@@ -33,17 +34,26 @@ function account_tracks_temperature(int $nfp_method): bool {
 	return NFP_METHOD_BY_ID[$nfp_method][1] ?? false;
 }
 
-// The id of a method name (any case) and temperature flag, as the API takes them. Anything
-// that is not FertilityCare is Billings, as before the two fields were split.
+// The id of a method name (one of NFP_METHODS_NATIVE) and temperature flag, as the API takes them.
 function account_method_id(string $method, bool $temperature_tracking): int {
-	$method = strtolower(trim($method)) === strtolower(NFP_METHOD_FERTILITY_CARE) ? NFP_METHOD_FERTILITY_CARE : NFP_METHOD_BILLINGS;
 	return array_search([$method, $temperature_tracking], NFP_METHOD_BY_ID, true);
 }
 
-// The id a body's "method" and "temperatureTracking" ask for; Billings without temperature when absent.
-function account_method_id_from_json(array $body): int {
-	$method = $body["method"] ?? NFP_METHOD_BILLINGS;
-	return account_method_id(is_string($method) ? $method : NFP_METHOD_BILLINGS, boolval($body["temperatureTracking"] ?? false));
+// The id a body's "method" and "temperatureTracking" ask for, both checked (an issue for a wrong one); a missing one is $default_id's:
+// Billings without temperature for a new account, the account's own for a change. Null when a field is wrong.
+function account_method_id_from_json(array $body, array &$issues, int $default_id = 2): ?int {
+	[$method, $temperature_tracking] = NFP_METHOD_BY_ID[$default_id];
+	$before = count($issues);
+
+	if (array_key_exists("method", $body)) {
+		if (!is_string($body["method"])) input_wrong_type($issues, "method", $body["method"], "a string (" . implode(" or ", NFP_METHODS_NATIVE) . ")");
+		elseif (!in_array($body["method"], NFP_METHODS_NATIVE, true)) $issues[] = input_issue("method", "invalid_value", "'method' must be " . implode(" or ", NFP_METHODS_NATIVE) . ".");
+		else $method = $body["method"];
+	}
+	$flag = input_bool_field($body, "temperatureTracking", $issues);
+	if (!is_null($flag)) $temperature_tracking = $flag;
+
+	return count($issues) > $before ? null : account_method_id($method, $temperature_tracking);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,7 +157,7 @@ function account_recover_password($db, string $email, mixed $token, mixed $answe
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/account
+// PATCH /api/account, GET /api/account
 // ---------------------------------------------------------------------------
 
 // A birth year a person can give: this year, or up to ACCOUNT_BIRTH_YEAR_MAX_AGE years back. The
@@ -176,10 +186,10 @@ function account_notification_emails_parse(mixed $value): ?string {
 	return strlen($joined) <= ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS ? $joined : null;
 }
 
-// What a body changes of the account row among the settings that need no password: [the values db_update_user_account_settings() takes,
-// the JSON names of the fields it changes]. An absent or unusable field leaves the account as it is. "notificationEmails" is one of the
-// values (it is passed on as it is stored); whether it changes is account_update()'s to say, since it asks for the password.
-function account_apply_json(array $account, array $body): array {
+// The settings of a PATCH body that need no password, checked: [the values db_update_user_account_settings() takes, the JSON names of the fields
+// it changes]. A field that is absent leaves the account as it is; a wrong one is an issue. "notificationEmails" is one of the values (passed
+// on as it is stored); whether it changes is account_update()'s to say, since it asks for the password.
+function account_check_settings(array $account, array $body, array &$issues): array {
 	$new = [
 		"name" => $account["name_user_account"], "notification_emails" => $account["notification_emails"], "nfp_method" => $account["nfp_method"],
 		"age" => $account["age"], "sponsor" => $account["sponsor"], "timeline_asc" => $account["timeline_asc"], "research" => $account["research"],
@@ -187,94 +197,123 @@ function account_apply_json(array $account, array $body): array {
 	];
 	$changed = [];
 
-	// a name that is not a string, is empty or is longer than its column is unusable
-	[$name] = isset($body["name"]) ? day_format_text($body["name"], "name", ACCOUNT_LIMIT_NAME_CHARS) : [null];
-	if (!is_null($name) && $name !== '') {
-		$new["name"] = $name;
-		$changed[] = "name";
+	$name = day_format_body_text($body, "name", ACCOUNT_LIMIT_NAME_CHARS, $issues);
+	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");
+	elseif (!is_null($name)) [$new["name"], $changed[]] = [$name, "name"];
+
+	if (array_key_exists("method", $body) || array_key_exists("temperatureTracking", $body)) {
+		$nfp_method = account_method_id_from_json($body, $issues, intval($account["nfp_method"]));
+		if (!is_null($nfp_method)) [$new["nfp_method"], $changed[]] = [$nfp_method, "method"];
 	}
-	if (isset($body["method"]) || isset($body["temperatureTracking"])) {
-		$new["nfp_method"] = account_method_id_from_json($body);
-		$changed[] = "method";
+
+	if (array_key_exists("birthYear", $body)) {
+		if (!is_int($body["birthYear"])) input_wrong_type($issues, "birthYear", $body["birthYear"], "a whole number (a year)");
+		elseif (!account_birth_year_valid($body["birthYear"])) {
+			$issues[] = input_issue("birthYear", "out_of_range", "'birthYear' must be a year from " . (intval(date("Y")) - ACCOUNT_BIRTH_YEAR_MAX_AGE) . " to " . date("Y") . ".");
+		}
+		else [$new["age"], $changed[]] = [$body["birthYear"], "birthYear"];
 	}
-	if (!empty($body["birthYear"]) && account_birth_year_valid(intval($body["birthYear"]))) {
-		$new["age"] = intval($body["birthYear"]);
-		$changed[] = "birthYear";
-	}
+
 	foreach (["timelineAscending" => "timeline_asc", "research" => "research", "sponsor" => "sponsor", "autoMailExport" => "auto_mail_export"] as $json => $column) {
-		if (!isset($body[$json])) continue;
-		$new[$column] = boolval($body[$json]) ? 1 : 0;
+		$flag = input_bool_field($body, $json, $issues);
+		if (is_null($flag)) continue;
+		$new[$column] = $flag ? 1 : 0;
 		$changed[] = $json;
 	}
 
 	return [$new, $changed];
 }
 
-// POST /api/account: every setting of the account is changed here. Answers what the endpoint says:
-//   success: ["status" => 200, "data" => ["name", "fieldsUpdated", "lastWriteClientUtc", and when they were asked "loggedOutDevices", "loginEmailLinkSent"]]
+// PATCH /api/account: every setting of the account is changed here. $body has gone through input_body(); $issues are the ones it found (the names that
+// are not known), to which this adds its own so that the client is told everything at once. Answers what
+// the endpoint says:
+//   success: ["status" => 200, "data" => the account after the change (account_to_json()), "meta" => ["fieldsUpdated", and when they were asked
+//            "loggedOutDevices", "loginEmailLinkSent"]]
 //   refusal: ["status" => 4xx, "code" => ..., "message" => ...]
-// Three changes want the password again, "password" in the body, because whoever holds a session must not be able to hand the account (or
-// its cycles) to someone else with it: "newPassword" (with "logoutOtherDevices" if the other sessions are to close), "notificationEmails"
-// (the list of addresses that receive the cycles, ";" between two) and "loginEmail" (the address that signs in; it also wants the TOTP code,
-// "code", when the account has one). The first two are made at once. The third only asks: a link goes to the NEW address and the change
-// happens when it is used (email_token.php). All of it is checked before anything is written, so a request that is refused changes nothing;
-// the settings and the password are written together, then the mails go, then the link is made.
-function account_update($db, array $user_account, array $body): array {
+// Every problem of a value ends the request with the 400 validation_failed first (collected, all at once). Three changes want the password
+// again, "password" in the body, because whoever holds a session must not be able to hand the account (or its cycles) to someone else with it:
+// "newPassword" (with "logoutOtherDevices" if the other sessions are to close), "notificationEmails" (the list of addresses that receive the
+// cycles, ";" between two) and "loginEmail" (the address that signs in; it also wants the TOTP code, "code", when the account has one). The first
+// two are made at once. The third only asks: a link goes to the NEW address and the change happens when it is used (email_token.php). All of it
+// is checked before anything is written, so a request that is refused changes nothing; the settings and the password are written together,
+// then the mails go, then the link is made.
+function account_update($db, array $user_account, array $body, array $issues = []): array {
 	$refuse = fn(int $status, string $code, string $message) => ["status" => $status, "code" => $code, "message" => $message];
 	$no_user_account = intval($user_account["no_user_account"]);
 
 	// --- what is asked, and whether it can be
-	[$new, $changed] = account_apply_json($user_account, $body);
+	[$new, $changed] = account_check_settings($user_account, $body, $issues);
 
 	$new_notification_emails = null;
-	if (array_key_exists("notificationEmails", $body) && !is_null($body["notificationEmails"])) {
-		$new_notification_emails = account_notification_emails_parse($body["notificationEmails"]);
-		if (is_null($new_notification_emails)) {
-			return $refuse(400, "invalid_notification_emails", "'notificationEmails' must be at most " . ACCOUNT_NOTIFICATION_EMAILS_MAX . " valid addresses separated by '" . ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR . "' (or an empty string).");
+	if (array_key_exists("notificationEmails", $body)) {
+		if (!is_string($body["notificationEmails"])) input_wrong_type($issues, "notificationEmails", $body["notificationEmails"], "a string of addresses separated by '" . ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR . "' (or an empty string)");
+		else {
+			$parsed = account_notification_emails_parse($body["notificationEmails"]);
+			if (is_null($parsed)) {
+				$issues[] = input_issue("notificationEmails", "invalid_value", "'notificationEmails' must be at most " . ACCOUNT_NOTIFICATION_EMAILS_MAX . " valid e-mail addresses separated by '" . ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR . "', "
+					. ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS . " characters in all (or an empty string to clear the list).");
+			}
+			elseif ($parsed !== (account_notification_emails_parse($user_account["notification_emails"] ?? "") ?? "")) $new_notification_emails = $parsed;
 		}
-		if ($new_notification_emails === (account_notification_emails_parse($user_account["notification_emails"] ?? "") ?? "")) $new_notification_emails = null;
 	}
 
 	$new_login_email = null;
-	if (array_key_exists("loginEmail", $body) && !is_null($body["loginEmail"])) {
-		$new_login_email = account_email_normalise($body["loginEmail"]);
-		if (!filter_var($new_login_email, FILTER_VALIDATE_EMAIL)) return $refuse(400, "invalid_email", "Provided email address is not valid.");
-		if ($new_login_email === $user_account["login_email"]) return $refuse(400, "email_unchanged", "This is already the login email address of the account.");
+	if (array_key_exists("loginEmail", $body)) {
+		if (!is_string($body["loginEmail"])) input_wrong_type($issues, "loginEmail", $body["loginEmail"], "a string (an e-mail address)");
+		else {
+			$email = account_email_normalise($body["loginEmail"]);
+			if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $issues[] = input_issue("loginEmail", "invalid_email", "'loginEmail' is not a valid e-mail address.");
+			elseif ($email === $user_account["login_email"]) $issues[] = input_issue("loginEmail", "email_unchanged", "'loginEmail' is already the login address of the account.");
+			else $new_login_email = $email;
+		}
 	}
 
-	$new_password = null;
-	if (array_key_exists("newPassword", $body) && !is_null($body["newPassword"])) {
-		if (!is_string($body["newPassword"]) || $body["newPassword"] === "") return $refuse(400, "invalid_parameter", "'newPassword' must be a non-empty string.");
-		$problem = sec_password_problem($body["newPassword"]);
-		if (!is_null($problem)) return $refuse(422, $problem[0], $problem[1]);
-		$new_password = $body["newPassword"];
+	$new_password = input_secret($body, "newPassword", $issues, false);
+	if (!is_null($new_password)) {
+		$issue = sec_password_issue($new_password, "newPassword");
+		if (!is_null($issue)) {
+			$issues[] = $issue;
+			$new_password = null;
+		}
 	}
 
-	if (array_key_exists("logoutOtherDevices", $body) && !is_bool($body["logoutOtherDevices"])) {
-		return $refuse(400, "invalid_parameter", "'logoutOtherDevices' must be true or false.");
+	$logout_other_devices = input_bool_field($body, "logoutOtherDevices", $issues);
+	if ($logout_other_devices === true && !array_key_exists("newPassword", $body)) {
+		$issues[] = input_issue("logoutOtherDevices", "invalid_value", "'logoutOtherDevices' closes the other sessions when the password changes: send it with 'newPassword'.");
 	}
-	$logout_other_devices = ($body["logoutOtherDevices"] ?? false) === true;
 
-	// --- the password again, for what hands the account or its cycles over
-	if (!is_null($new_notification_emails) || !is_null($new_login_email) || !is_null($new_password)) {
+	$password = input_secret($body, "password", $issues, false);
+	$sensitive = !is_null($new_notification_emails) || !is_null($new_login_email) || !is_null($new_password);
+	if ($sensitive) {
 		// the demo accounts are shared and their password is public: it is no one's to change, nor their addresses
 		if (sec_session_is_demo($user_account)) return $refuse(403, "demo_account", "Not available on a demo account.");
-
-		if (!is_string($body["password"] ?? null) || $body["password"] === "") {
-			return $refuse(400, "missing_password", "'password' is required to change 'loginEmail', 'newPassword' or 'notificationEmails'.");
+		if (is_null($password) && !array_key_exists("password", $body)) {
+			$issues[] = input_issue("password", "password_required", "'password' (the current password) is required to change 'loginEmail', 'newPassword' or 'notificationEmails'.");
 		}
+	}
+
+	$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
+	if (!is_null($new_login_email) && $totp_active && array_key_exists("code", $body) && !is_string($body["code"]) && !is_int($body["code"])) {
+		input_wrong_type($issues, "code", $body["code"], "a string of digits (the one-time code)");
+	}
+
+	$last_write_client_UTC = http_client_timestamp(input_timestamp($body["lastWriteClientUtc"] ?? null, "lastWriteClientUtc", $issues));
+	input_exit_if_issues($issues);
+
+	// --- the password again, for what hands the account or its cycles over
+	if ($sensitive) {
 		$full_account = db_select_user_account_by_email($db, $user_account["login_email"]) ?? [];
-		if (!isset($full_account["password"]) || !password_verify($body["password"], $full_account["password"])) {
+		if (!isset($full_account["password"]) || !password_verify($password, $full_account["password"])) {
 			log_event("account.refused", ["act" => "account", "err" => "invalid_password"]);
 			return $refuse(401, "invalid_password", "Incorrect password.");
 		}
-		if (!is_null($new_login_email) && $user_account["totp_state"] == TOTP_STATE_ACTIVE && !sec_totp_code_valid($user_account, $body["code"] ?? "")) {
+		if (!is_null($new_login_email) && $totp_active && !sec_totp_code_valid($user_account, $body["code"] ?? "")) {
 			$given = is_scalar($body["code"] ?? null) && strlen((string) $body["code"]) > 0;
 			log_event("account.refused", ["act" => "account", "err" => $given ? "totp_invalid" : "totp_required"]);
 			return $given ? $refuse(401, "totp_invalid", "The TOTP code is incorrect.") : $refuse(401, "totp_required", "A TOTP code is required.");
 		}
 		if (!is_null($new_password) && password_verify($new_password, $full_account["password"])) {
-			return $refuse(422, "password_unchanged", "New password is identical to the previous password.");
+			input_exit_if_issues([input_issue("newPassword", "password_unchanged", "'newPassword' is identical to the current password.")]);
 		}
 	}
 
@@ -283,7 +322,6 @@ function account_update($db, array $user_account, array $body): array {
 		$new["notification_emails"] = $new_notification_emails;
 		$changed[] = "notificationEmails";
 	}
-	$last_write_client_UTC = http_client_timestamp($body["lastWriteClientUtc"] ?? null);
 	$logged_out_devices = db_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $last_write_client_UTC, $new_password, $logout_other_devices) {
 		if (!empty($changed)) db_update_user_account_settings($db, $no_user_account, $new, $last_write_client_UTC);
 		if (is_null($new_password)) return null;
@@ -291,33 +329,38 @@ function account_update($db, array $user_account, array $body): array {
 		db_update_password($db, sec_hash($new_password), $no_user_account);
 		// a link to choose a password, still in the mailbox, is no use any more; a pending change of address is left alone
 		db_update_user_account_email_token_clear($db, $no_user_account, EMAIL_TOKEN_PURPOSE_RESET_PASSWORD);
-		return $logout_other_devices ? db_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : 0;
+		return $logout_other_devices === true ? db_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : 0;
 	});
 
 	if (!empty($changed)) log_event("account.settings_changed", ["fld" => $changed]);
 	if (!is_null($new_password)) log_event("account.password_changed", ["out" => $logged_out_devices]);
 	if (!is_null($new_notification_emails)) mail_send_notification_emails_changed($user_account["login_email"], $new_notification_emails);
 
-	$data = ["name" => $new["name"], "fieldsUpdated" => is_null($new_password) ? $changed : array_merge($changed, ["password"])];
-	if (!is_null($new_password)) $data["loggedOutDevices"] = $logged_out_devices;
-	if (!is_null($new_login_email)) $data["loginEmailLinkSent"] = email_token_request_email_change($db, $user_account, $new_login_email);
-	$data["lastWriteClientUtc"] = http_iso8601($last_write_client_UTC);
+	$meta = ["fieldsUpdated" => is_null($new_password) ? $changed : array_merge($changed, ["password"])];
+	if (!is_null($new_password)) $meta["loggedOutDevices"] = $logged_out_devices;
+	if (!is_null($new_login_email)) $meta["loginEmailLinkSent"] = email_token_request_email_change($db, $user_account, $new_login_email);
 
-	return ["status" => 200, "data" => $data];
+	// the account as it is now: the row the request started from, with what was written
+	$after = array_merge($user_account, [
+		"name_user_account" => $new["name"], "notification_emails" => $new["notification_emails"], "nfp_method" => $new["nfp_method"], "age" => $new["age"],
+		"sponsor" => $new["sponsor"], "timeline_asc" => $new["timeline_asc"], "research" => $new["research"], "auto_mail_export" => $new["auto_mail_export"],
+	]);
+	if (!empty($changed)) $after["last_write_client_UTC"] = $last_write_client_UTC;
+
+	return ["status" => 200, "data" => account_to_json($after), "meta" => $meta];
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/key_infos
+// GET /api/account
 // ---------------------------------------------------------------------------
 
-// The account summary a client starts from, shared by GET /api/key_infos and GET /api/sync:
-// who the user is, their settings, the shape of their timeline, and where the news banner comes from
-// (NEWS_URL, null when it is off). $user_account is the row sec_auth_token() read. Nothing secret in it.
-function account_key_infos($db, array $user_account): array {
+// The account as a client starts from it: who the user is and their settings. $user_account is the row sec_auth_token() read. Nothing secret in
+// it. The timeline (cycles, pregnancies) is not here: it is in GET /api/timeline_sync, and the news banner is in GET /api/server_info.
+function account_to_json(array $user_account): array {
 	$nfp_method = intval($user_account["nfp_method"]);
 
 	return [
-		"userId" => $user_account["no_user_account"],
+		"userId" => intval($user_account["no_user_account"]),
 		"loginEmail" => $user_account["login_email"],
 		"notificationEmails" => $user_account["notification_emails"],
 		"method" => account_method_name($nfp_method),
@@ -329,10 +372,7 @@ function account_key_infos($db, array $user_account): array {
 		"research" => boolval($user_account["research"]),
 		"timelineAscending" => boolval($user_account["timeline_asc"]),
 		"autoMailExport" => boolval($user_account["auto_mail_export"]),
-		"allCyclesFirstDay" => db_select_cycles($db, $user_account["no_user_account"]),
-		"allPregnancyDates" => db_select_pregnancies($db, $user_account["no_user_account"]),
 		"totpState" => sec_totp_state_name($user_account["totp_state"]),
 		"lastWriteClientUtc" => http_iso8601($user_account["last_write_client_UTC"]),
-		"newsUrl" => str_starts_with(NEWS_URL, "https://") ? NEWS_URL : null,
 	];
 }

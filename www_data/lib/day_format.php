@@ -11,7 +11,7 @@
 //
 //   - the DB row of day_timeline, with the packed columns (stamp, fc_score, fc_arrow);
 //   - the structured JSON "day" the API speaks, on the vocabulary of the NFP file format
-//     (stampColor, isPeak, codifiedArrow, ...): api/day.php, api/sync.php;
+//     (stampColor, isPeak, codifiedArrow, ...): api/day.php, api/timeline_sync.php;
 //   - the NFP day (lib/nfp_export.php, lib/nfp_import.php), which is this JSON day with a few fields renamed, and which is
 //     read into it before it is stored.
 //
@@ -19,6 +19,7 @@
 // to be stored: the API and the NFP import both come through them.
 
 require_once __DIR__ . "/http.php";
+require_once __DIR__ . "/input.php";
 
 // ---------------------------------------------------------------------------
 // stamp: the DB holds "" | "R" | "G" | "Y" | "BB" | "RBB" | "GBB" | "YBB"; the API speaks
@@ -164,14 +165,26 @@ function day_format_time(string $time): ?string {
 }
 
 // Free text a client sends for a varchar($max_chars) column (a label, a name): [the text cleaned as
-// day_format_clean_text() does, null], or [null, why it cannot be stored]. $field names it for the client.
+// day_format_clean_text() does, null], or [null, the issue that says why it cannot be stored]. $field names it for the client.
 function day_format_text(mixed $value, string $field, int $max_chars): array {
-	if (!is_string($value)) return [null, "'$field' must be a string."];
+	if (!is_string($value)) {
+		$issues = [];
+		input_wrong_type($issues, $field, $value, "a string");
+		return [null, $issues[0]];
+	}
 
 	$text = day_format_clean_text($value);
 	$length = mb_strlen($text);
-	if ($length > $max_chars) return [null, "'$field' is $length characters; the limit is $max_chars."];
+	if ($length > $max_chars) return [null, input_issue($field, "too_long", "'$field' is $length characters; the limit is $max_chars.")];
 	return [$text, null];
+}
+
+// $body[$field] as a text bound for a varchar: the text cleaned, or null when the field is absent (no issue) or unusable (an issue added).
+function day_format_body_text(array $body, string $field, int $max_chars, array &$issues): ?string {
+	if (!array_key_exists($field, $body)) return null;
+	[$text, $issue] = day_format_text($body[$field], $field, $max_chars);
+	if (!is_null($issue)) $issues[] = $issue;
+	return $text;
 }
 
 // true when a field carries a value: "0" is a real FertilityCare code (dryness) and falsy in PHP,
@@ -185,67 +198,92 @@ function day_format_filled(array $day, string $field): bool {
 // Checking what a client sends
 // ---------------------------------------------------------------------------
 
-// A day posted in the JSON shape, checked against what can be stored and cleaned for
-// day_format_from_json(): [the day, the problems]. The problems are messages for the client; with
-// any, the day is not to be stored. A field left out is not a problem: a day is the full state of
-// the day, and what is absent is empty.
-function day_format_validate(array $day): array {
-	$problems = [];
+// A day sent in the JSON shape (PUT /api/day/{date}), checked against what can be stored and cleaned for day_format_from_json(): the day, and the
+// problems added to $issues (with any, the day is not to be stored). A field left out is not a problem: a day is the full state of the day, and
+// what is absent is empty. The types are the JSON ones: a flag is true or false, a count a whole number, a code a string.
+function day_format_validate(array $day, array &$issues): array {
+	foreach (['cycleFirstDay', 'dayNotObserved', 'stampBaby', 'isPeak', 'sexUnion', 'booleanPregnancyDetected'] as $field) {
+		if (array_key_exists($field, $day) && !is_bool($day[$field])) input_wrong_type($issues, $field, $day[$field], "true or false");
+	}
 
 	foreach (['stampColor' => NFP_STAMP_COLORS, 'codifiedArrow' => NFP_ARROWS] as $field => $vocabulary) {
-		if (isset($day[$field]) && !in_array($day[$field], $vocabulary, true)) {
-			$problems[] = "'$field' must be one of " . implode(", ", $vocabulary) . ", or null.";
+		if (!array_key_exists($field, $day)) continue;
+		if (!is_string($day[$field])) input_wrong_type($issues, $field, $day[$field], "a string (" . implode(", ", $vocabulary) . ") or null");
+		elseif (!in_array($day[$field], $vocabulary, true)) $issues[] = input_issue($field, "invalid_value", "'$field' must be one of " . implode(", ", $vocabulary) . ", or null.");
+	}
+
+	$codes_ok = true;
+	foreach (array_keys(DAY_FORMAT_FC_GROUPS) as $field) {
+		if (!array_key_exists($field, $day)) continue;
+		if (!is_string($day[$field])) {
+			input_wrong_type($issues, $field, $day[$field], "a string (FertilityCare codes) or null");
+			$codes_ok = false;
+		}
+		elseif (day_format_filled($day, $field)) {
+			$canonical = day_format_fc_canonical($field, $day[$field]);
+			if (is_null($canonical)) {
+				$issues[] = input_issue($field, "invalid_value", "'$field' holds a code outside the FertilityCare notation. The codes of this group are: " . implode(", ", DAY_FORMAT_FC_GROUPS[$field]) . ".");
+				$codes_ok = false;
+			}
+			else $day[$field] = $canonical;
 		}
 	}
-
-	foreach (array_keys(DAY_FORMAT_FC_GROUPS) as $field) {
-		if (!day_format_filled($day, $field)) continue;
-		$canonical = is_string($day[$field]) ? day_format_fc_canonical($field, $day[$field]) : null;
-		if (is_null($canonical)) $problems[] = "'$field' holds a code outside the FertilityCare notation.";
-		else $day[$field] = $canonical;
-	}
-	if (empty($problems)) {
+	if ($codes_ok) {
 		$packed = mb_strlen(day_format_fc_score_encode($day));
-		if ($packed > DAY_LIMIT_FC_SCORE_CHARS) $problems[] = "The FertilityCare notes take $packed characters packed; the limit is " . DAY_LIMIT_FC_SCORE_CHARS . ".";
+		if ($packed > DAY_LIMIT_FC_SCORE_CHARS) $issues[] = input_issue("codifiedBleedingObservation", "too_long", "The FertilityCare notes take $packed characters packed; the limit is " . DAY_LIMIT_FC_SCORE_CHARS . ".");
 	}
 
-	if (isset($day['comment'])) {
-		if (!is_string($day['comment'])) $problems[] = "'comment' must be a string.";
+	if (array_key_exists('comment', $day)) {
+		if (!is_string($day['comment'])) input_wrong_type($issues, 'comment', $day['comment'], "a string");
 		else {
 			$day['comment'] = day_format_clean_text($day['comment']);
-			if (mb_strlen($day['comment']) > DAY_LIMIT_COMMENT_CHARS) $problems[] = "'comment' is " . mb_strlen($day['comment']) . " characters; the limit is " . DAY_LIMIT_COMMENT_CHARS . ".";
+			if (mb_strlen($day['comment']) > DAY_LIMIT_COMMENT_CHARS) $issues[] = input_issue('comment', "too_long", "'comment' is " . mb_strlen($day['comment']) . " characters; the limit is " . DAY_LIMIT_COMMENT_CHARS . ".");
 		}
 	}
 
 	foreach (['freeMucusSensation', 'freeMucusObservation', 'freeOther'] as $field) {
-		if (!isset($day[$field])) continue;
-		if (!is_array($day[$field]) || count(array_filter($day[$field], 'is_string')) !== count($day[$field])) {
-			$problems[] = "'$field' must be a list of strings.";
+		if (!array_key_exists($field, $day)) continue;
+		if (!is_array($day[$field]) || !array_is_list($day[$field])) {
+			input_wrong_type($issues, $field, $day[$field], "a list of strings");
 			continue;
 		}
-		$names = array_filter(array_map('day_format_clean_text', $day[$field]), fn($name) => $name !== '');
-		foreach ($names as $name) {
-			if (mb_strlen($name) > DAY_LIMIT_DESCRIPTION_CHARS) $problems[] = "A '$field' entry is " . mb_strlen($name) . " characters; the limit is " . DAY_LIMIT_DESCRIPTION_CHARS . ".";
+		$names = [];
+		foreach ($day[$field] as $position => $name) {
+			if (!is_string($name)) {
+				input_wrong_type($issues, "{$field}[$position]", $name, "a string");
+				continue;
+			}
+			$name = day_format_clean_text($name);
+			if (mb_strlen($name) > DAY_LIMIT_DESCRIPTION_CHARS) $issues[] = input_issue("{$field}[$position]", "too_long", "'{$field}[$position]' is " . mb_strlen($name) . " characters; the limit is " . DAY_LIMIT_DESCRIPTION_CHARS . ".");
+			elseif ($name !== '') $names[] = $name;
 		}
 		$day[$field] = array_values(array_unique($names));
 	}
 
-	if (!empty($day['temperature'])) {
-		if (!is_numeric($day['temperature']) || $day['temperature'] < DAY_TEMPERATURE_STORABLE_MIN || $day['temperature'] > DAY_TEMPERATURE_STORABLE_MAX) {
-			$problems[] = "'temperature' must be a number from " . DAY_TEMPERATURE_STORABLE_MIN . " to " . DAY_TEMPERATURE_STORABLE_MAX . ".";
+	if (array_key_exists('temperature', $day)) {
+		if (!is_int($day['temperature']) && !is_float($day['temperature'])) input_wrong_type($issues, 'temperature', $day['temperature'], "a number");
+		elseif ($day['temperature'] < DAY_TEMPERATURE_STORABLE_MIN || $day['temperature'] > DAY_TEMPERATURE_STORABLE_MAX) {
+			$issues[] = input_issue('temperature', "out_of_range", "'temperature' must be a number from " . DAY_TEMPERATURE_STORABLE_MIN . " to " . DAY_TEMPERATURE_STORABLE_MAX . " (0 means none).");
 		}
-		elseif (!empty($day['temperatureTime'])) {
-			$time = is_string($day['temperatureTime']) ? day_format_time($day['temperatureTime']) : null;
-			if (is_null($time)) $problems[] = "'temperatureTime' must be a time of day, hh:mm or hh:mm:ss.";
+	}
+	if (array_key_exists('temperatureTime', $day)) {
+		if (!is_string($day['temperatureTime'])) input_wrong_type($issues, 'temperatureTime', $day['temperatureTime'], "a time of day string, hh:mm or hh:mm:ss");
+		elseif ($day['temperatureTime'] === '') $day['temperatureTime'] = null;
+		else {
+			$time = day_format_time($day['temperatureTime']);
+			if (is_null($time)) $issues[] = input_issue('temperatureTime', "invalid_value", "'temperatureTime' must be a time of day, hh:mm or hh:mm:ss.");
 			else $day['temperatureTime'] = $time;
 		}
 	}
 
-	if (!empty($day['counterStart']) && (!is_numeric($day['counterStart']) || $day['counterStart'] < 0 || $day['counterStart'] > DAY_LIMIT_COUNTER_START)) {
-		$problems[] = "'counterStart' must be a whole number from 0 to " . DAY_LIMIT_COUNTER_START . ".";
+	if (array_key_exists('counterStart', $day)) {
+		if (!is_int($day['counterStart'])) input_wrong_type($issues, 'counterStart', $day['counterStart'], "a whole number");
+		elseif ($day['counterStart'] < 0 || $day['counterStart'] > DAY_LIMIT_COUNTER_START) {
+			$issues[] = input_issue('counterStart', "out_of_range", "'counterStart' must be a whole number from 0 to " . DAY_LIMIT_COUNTER_START . ".");
+		}
 	}
 
-	return [$day, $problems];
+	return $day;
 }
 
 // ---------------------------------------------------------------------------

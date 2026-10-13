@@ -21,14 +21,14 @@ function date_parse_ymd(mixed $value): ?string {
 	return checkdate(intval($m[2]), intval($m[3]), intval($m[1])) ? trim($value) : null;
 }
 
-function date_validate_timestamp($timestamp) {
-    $pattern = '/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/';
-    if (!preg_match($pattern, $timestamp)) return false;
-    $dateParts = explode(' ', $timestamp);
-    [$year, $month, $day] = explode('-', $dateParts[0]);
-    [$hour, $minute, $second] = explode(':', $dateParts[1]);
-	if (!checkdate((int)$month, (int)$day, (int)$year)) return false;
-	if ($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59 || $second < 0 || $second > 59) return false;
-	return true;
-}
+// An RFC 3339 timestamp as a client writes it ("2026-03-10T15:30:45Z", fractional seconds allowed, "Z" or a numeric offset "+02:00") ->
+// the same moment in UTC as the app stores it, "YYYY-MM-DD hh:mm:ss"; null when it is not one: a zone is required (a time without one
+// has no moment), the bare "YYYY-MM-DD hh:mm:ss" form is not accepted, nor is a date that does not exist.
+function date_parse_rfc3339(mixed $value): ?string {
+	if (!is_string($value) || !preg_match('/\A(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})\z/', $value, $m)) return null;
 
+	$moment = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:sP', $m[1] . ($m[2] === "Z" ? "+00:00" : $m[2]));
+	$errors = DateTimeImmutable::getLastErrors();
+	if ($moment === false || ($errors && ($errors["warning_count"] > 0 || $errors["error_count"] > 0))) return null;
+	return $moment->setTimezone(new DateTimeZone("UTC"))->format('Y-m-d H:i:s');
+}

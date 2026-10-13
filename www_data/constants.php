@@ -190,6 +190,62 @@ const NFP_METHOD_BY_ID = [
 ];
 
 // ===========================================================================
+// THE SERVER AND ITS CONTRACT -- GET /api/server_info (api/server_info.php, lib/server.php), what a request may say (lib/input.php)
+// ===========================================================================
+
+const APP_NAME = "moncycle.app";
+
+// The version of the HTTP contract: an integer, raised only by a change that breaks a client. Adding a field, an optional parameter, an
+// endpoint or an enum value is not one. GET /api/server_info is what a client reads it from, first.
+const API_VERSION = 2;
+
+// The version of the database schema this code is written for: the highest vN of script/migration/vN-1_to_vN.*, the row 'schema_version'
+// of key_value (schema.sql inserts it, each migration sets it). A database that says another number is not served (503 schema_mismatch).
+const SCHEMA_VERSION = 15;
+const SCHEMA_VERSION_KEY = "schema_version";
+
+// The names a PATCH /api/account body may use, and the ones of GET /api/account that the server alone writes (refused if sent).
+const ACCOUNT_PATCH_FIELDS = [
+	"name", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
+	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
+];
+const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "totpState"];
+
+// The names a day body may use (PUT /api/day/{date}), and the ones of the day the server alone writes: a client that reads a day, changes it and
+// sends it back whole sends them too, and they are dropped (api/day.php).
+const DAY_INPUT_FIELDS = [
+	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "booleanPregnancyDetected",
+	"freeMucusSensation", "freeMucusObservation", "freeOther", "temperature", "temperatureTime", "codifiedArrow",
+	"codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations",
+	"comment", "lastWriteClientUtc",
+];
+const DAY_OUTPUT_ONLY_FIELDS = ["cycleStartDate", "cycleDay", "lastWriteDb"];
+
+// The codes of the "issues" of a 400 validation_failed: what is wrong with ONE field of a body, a query string or a path.
+const INPUT_ISSUE_CODES = [
+	"unknown_field",        // a name the endpoint does not read
+	"read_only_field",      // a name the server only writes
+	"missing_field",        // required and absent
+	"wrong_type",           // a string where a number is expected, a list for an object...
+	"invalid_value",        // right type, not one of the allowed values
+	"out_of_range",         // a number, a date or a length outside its limits
+	"too_long",             // a text over the limit of its column
+	"too_many",             // a list or a span over its limit
+	"invalid_date",         // not a real YYYY-MM-DD date
+	"invalid_timestamp",    // not an RFC 3339 timestamp with a zone
+	"invalid_email",        // not an e-mail address
+	"date_mismatch",        // the date of the body is not the one of the URL
+	"body_not_allowed",     // a body on a request that takes none
+	"password_required",    // the current password is needed for this change
+	"password_too_short",
+	"password_too_long",
+	"password_invalid",
+	"password_unchanged",
+	"email_unchanged",
+	"invalid_range",        // two bounds in the wrong order
+];
+
+// ===========================================================================
 // DESCRIPTIONS AND EXPORT TYPES
 // ===========================================================================
 
@@ -198,7 +254,7 @@ const DESCRIPTION_TYPE_UNDEFINED = 0;     // text the v15 migration could not cl
 const DESCRIPTION_TYPE_OBSERVATION = 1;   // a mucus observation
 const DESCRIPTION_TYPE_SENSATION = 2;     // a mucus sensation
 
-// type <-> the string the JSON API speaks (api/description.php, api/sync.php).
+// type <-> the string the JSON API speaks (api/description.php, api/timeline_sync.php).
 const DESCRIPTION_TYPE_NAMES = [
 	DESCRIPTION_TYPE_UNDEFINED => "undefined",
 	DESCRIPTION_TYPE_OBSERVATION => "observation",
@@ -210,7 +266,7 @@ const DESCRIPTION_TYPE_BY_NAME = [
 	"sensation" => DESCRIPTION_TYPE_SENSATION,
 ];
 
-// The formats api/export.php can produce, as its "type" parameter names them.
+// The formats api/export.php can produce, as the {format} of its URL names them.
 const EXPORT_TYPE_PDF = "pdf";
 const EXPORT_TYPE_CSV = "csv";
 const EXPORT_TYPE_NFP = "nfp";
@@ -223,13 +279,13 @@ const EXPORT_TYPES = [EXPORT_TYPE_PDF, EXPORT_TYPE_CSV, EXPORT_TYPE_NFP];
 // The three numbers it answers: JSON name => [the key_value row the cron keeps it in, the digits it is rounded to].
 // Counting them walks day_timeline, which a public endpoint must not do on every visit.
 const PUB_STAT_KEYS = [
-	"moncycle_app_nb_user_account" => ["pub_stat_nb_user_account", -1],
-	"moncycle_app_nb_cycle" => ["pub_stat_nb_cycle", -1],
-	"moncycle_app_nb_total_observation" => ["pub_stat_nb_total_observation", -2],
+	"accounts" => ["pub_stat_nb_user_account", -1],
+	"cycles" => ["pub_stat_nb_cycle", -1],
+	"observations" => ["pub_stat_nb_total_observation", -2],
 ];
 
 // ===========================================================================
-// SYNC -- GET /api/sync (api/sync.php, lib/data.php)
+// SYNC -- GET /api/timeline_sync (api/timeline_sync.php, lib/data.php)
 // ===========================================================================
 
 // How far before the cursor a client sends the sync reads. A row is stamped (last_write_db) when its
@@ -237,7 +293,7 @@ const PUB_STAT_KEYS = [
 // for good. A client replaces what it holds by what it receives, so reading a row twice is harmless.
 const SYNC_OVERLAP_SECONDS = 120;
 
-// What a sync with no fromTimestamp reads from: the start of everything, as a client's first sync does.
+// What a sync with no "since" reads from: the start of everything, as a client's first sync does.
 const SYNC_FROM_START = "1970-01-01 00:00:00";
 
 // ===========================================================================
@@ -341,8 +397,9 @@ const DAY_FORMAT_FC_GROUPS = [
 // ("X1" and "10" in "X10") the order decides. 'R' belongs to no group: it is taken out and ignored.
 const DAY_FORMAT_FC_PARSE_ORDER = ['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', 'X2', 'X3', 'AD', 'AP', 'VL', 'VH', '2W', '10', 'H', 'M', 'L', 'B', '0', '2', '4', '6', '8', 'C', 'G', 'K', 'P', 'Y', 'R'];
 
-// How many dates GET /api/day?date=a,b,c reads (one query each): a year of days.
-const DAY_LIMIT_QUERY_DATES = 366;
+// How many days one GET /api/day reads: the dates of "dates=a,b,c", or the span of "from" to "to" (both ends counted). Also what keeps
+// the URL of the first form short.
+const DAY_LIMIT_QUERY_DAYS = 100;
 
 // What day_timeline and description can hold: the widths of their columns.
 const DAY_LIMIT_COMMENT_CHARS = 256;        // day_timeline.comment    varchar(256)

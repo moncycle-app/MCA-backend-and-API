@@ -10,17 +10,21 @@
 require_once "../config.php";
 require_once "../lib/api.php";
 require_once "../lib/email_token.php";
+require_once "../lib/input.php";
 
 // The link of a mail, used: it proves an address, or sets a new password, or changes the primary address. It needs no session (the
 // person may open the mail on another device), and the token is the whole proof. The page of the link posts the token it finds in its
 // fragment (js/verify_email.js).
 [$db] = api_start(false);
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-	http_error(405, "method_not_allowed", "Use POST.");
-}
+if (http_method() !== 'POST') http_exit_method_not_allowed(["POST"]);
+input_exit_unless_path_fits(input_path(), 0);
 
-$outcome = email_token_complete($db, http_json_body());
+$issues = [];
+input_query([], $issues);
+$body = input_body(["purpose", "token", "newPassword"], $issues);
+
+$outcome = email_token_complete($db, $body, $issues);
 if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);
 
 http_data($outcome["status"], $outcome["data"]);

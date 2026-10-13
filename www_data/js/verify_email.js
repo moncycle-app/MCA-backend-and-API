@@ -86,12 +86,12 @@ $(document).ready(function(){
 				invalid_token: "Ce lien n'est plus valable: il a peut-être déjà servi, ou été remplacé par un plus récent.",
 				token_expired: "Ce lien a expiré. Demandez-en un nouveau.",
 				email_taken: "Cette adresse est déjà utilisée par un autre compte.",
-				missing_fields: "Données manquantes.",
+				missing_field: "Données manquantes.",
 				password_too_short: "Le mot de passe est trop court (10 caractères au moins).",
 				password_too_long: "Le mot de passe est trop long (72 octets au plus).",
 				password_invalid: "Le mot de passe contient un caractère interdit."
 			};
-			$("#et_error_msg").text(return_codes[err.code] || err.message || "Erreur inconnue.");
+			$("#et_error_msg").text(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR));
 		});
 	});
 });

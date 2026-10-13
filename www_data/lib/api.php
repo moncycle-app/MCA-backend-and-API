@@ -14,24 +14,30 @@ require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/sec.php";
+require_once __DIR__ . "/server.php";
 
-// Starts the log of the request, answers in JSON, ends with a 503 in maintenance, refuses a write from a page
-// that is not ours (a 403 before anything is read), opens the database and finds who is calling: [$db, $user_account]. With
-// $login_required the request ends here with a 401 when nobody is logged in; without it $user_account is
-// null for a visitor. A read-only token (POST /api/token, "scope") gets a 403 on any method that is not safe
-// (HTTP_SAFE_METHODS), unless the endpoint says $read_only_ok: it then decides itself what such a token may do
-// (api/token.php: end its own session). An exception nobody catches is logged and answered with a 500
-// "unexpected_error", whose message tells nothing.
-function api_start(bool $login_required = true, bool $read_only_ok = false): array {
+// What every JSON endpoint begins with, and the only thing the ones that answer in maintenance (GET /api/server_info) do: starts the log of the
+// request, answers in JSON, and has an exception nobody catches logged and answered with a 500 "unexpected_error", whose message tells nothing.
+function api_start_open(): void {
 	log_start(sec_client_ip());
 	set_exception_handler(function (\Throwable $e) {
 		log_exception($e);
 		http_error(500, "unexpected_error", "Unexpected error.");
 	});
 	header('Content-Type: application/json');
+}
+
+// Starts the request: api_start_open(), then a 503 in maintenance, a 403 for a write from a page that is not ours (before anything is read),
+// the database opened and checked to be the one this code is written for (503 schema_mismatch, server_exit_if_schema_mismatch()), and who is
+// calling found: [$db, $user_account]. With $login_required the request ends here with a 401 when nobody is logged in; without it
+// $user_account is null for a visitor. A read-only token (POST /api/token, "scope") gets a 403 on any method that is not safe
+// (HTTP_SAFE_METHODS), unless the endpoint says $read_only_ok: it then decides itself what such a token may do (api/token.php: end its own session).
+function api_start(bool $login_required = true, bool $read_only_ok = false): array {
+	api_start_open();
 	http_exit_if_maintenance();
 	sec_exit_if_cross_origin();
 	$db = db_open();
+	server_exit_if_schema_mismatch($db);
 	$user_account = sec_auth_token($db);
 	if ($login_required) {
 		sec_exit_if_logged_out($user_account);

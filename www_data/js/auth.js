@@ -51,7 +51,7 @@ else {
 				name: $("#i_token_name").val(),
 				cookie: $("#i_token_cookie").val() === "true",
 			};
-			if ($("#i_code").val()) payload.code = parseInt($("#i_code").val());
+			if ($("#i_code").val()) payload.code = $("#i_code").val();
 			if ($("#captcha_wrapper").is(":visible")) {
 				payload.captcha = $("#i_captcha").val();
 				payload.captchaToken = $("#i_captcha_token").val();
@@ -71,7 +71,8 @@ else {
 				var err = (jqXHR.responseJSON || {}).error || {};
 				const return_codes = {
 					login_disabled : "La connexion est désactivée.",
-					missing_credentials : "E-mail et/ou mot de passe manquant.",
+					missing_field : "E-mail et/ou mot de passe manquant.",
+					invalid_email : "L'adresse e-mail n'est pas valide.",
 					account_disabled : "Compte désactivé.",
 					email_not_verified : "Merci de vérifier votre adresse e-mail avant de vous connecter: cliquez sur le lien du mail reçu à l'inscription. Il a disparu? Utilisez « mot de passe perdu » ci-dessous pour en recevoir un nouveau.",
 					totp_required : "Bon mot de passe, mais un code TOTP est requis.",
@@ -84,7 +85,7 @@ else {
 					rate_limited : "Trop de tentatives depuis ce réseau, réessayez plus tard."
 				};
 				if ((err.details || {}).captchaRequired) $("#captcha_wrapper").show();
-				$("#message_err").empty().append(document.createTextNode(return_codes[err.code] || err.message || "Erreur inconnue."), $("<br>"));
+				$("#message_err").empty().append(document.createTextNode(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR)), $("<br>"));
 
 				// the token is tied to the account's counters, which this attempt may have moved: a new one, whenever the
 				// captcha is shown (and the first one, when this answer is the one that asks for it)
@@ -117,14 +118,14 @@ else {
 				console.error(jqXHR);
 				var err = (jqXHR.responseJSON || {}).error || {};
 				const return_codes = {
-					missing_email : "L'adresse e-mail est manquante.",
+					missing_field : "L'adresse e-mail est manquante.",
 					invalid_email : "L'adresse e-mail n'est pas valide.",
 					captcha_invalid : "Erreur dans la saisie du captcha.",
 					captcha_expired : "Le captcha a expiré, recopiez le nouveau.",
 					captcha_unavailable : "Le captcha est indisponible pour le moment, réessayez plus tard.",
 					rate_limited : "Trop de tentatives depuis ce réseau, réessayez plus tard."
 				};
-				$("#reset_error_msg").text(return_codes[err.code] || err.message || "Erreur inconnue.");
+				$("#reset_error_msg").text(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR));
 				// a captcha that was refused is not asked again with the same answer
 				if (err.code === "captcha_invalid" || err.code === "captcha_expired") reset_captcha.reload(true);
 			});

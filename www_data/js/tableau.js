@@ -149,6 +149,10 @@ const moncycle_app_text = {
 	sync_rejected : function (message) {
 		return `❌ Modification refusée par le serveur, elle n'a pas été enregistrée : ${message}`;
 	},
+	export_failed : function (failure) {
+		let code = failure.issues.length ? failure.issues[0].code : failure.code;
+		return "Export impossible : " + ({no_data_in_period : "aucune observation sur cette période.", invalid_range : "dates non valides."}[code] || (failure.status === 0 ? "connexion impossible." : "le serveur a refusé la demande."));
+	},
 	sync_retry : "Réessayer",
 	sync_dismiss : "OK",
 
@@ -283,7 +287,7 @@ moncycle_app = {
 		return {no_description: d.id, name: d.name, type: moncycle_app.desc_type_to_int[d.type] || 0, use_count: d.useCount};
 	},
 
-	// full Day object (GET/POST /api/day, or one entry of GET /api/day's keyed-by-date
+	// full Day object (GET/PUT /api/day/{date}, or one entry of GET /api/day
 	// result) -> the legacy flat shape day_timeline2timeline/day_timeline2recap/open_menu
 	// expect. Description names are matched against the already-loaded picklist
 	// (moncycle_app.description) to recover the numeric ids open_menu checks against.
@@ -330,7 +334,7 @@ moncycle_app = {
 		return temperatureTracking ? pair[1] : pair[0];
 	},
 
-	// GET /api/key_infos's response -> the legacy flat shape moncycle_app.constante has
+	// GET /api/account's response (with the lists of the timeline, see js/store.js) -> the legacy flat shape moncycle_app.constante has
 	// always had.
 	constante_from_api : function (d) {
 		let nfp_method = moncycle_app.nfp_method_from_api(d.method, d.temperatureTracking);
@@ -420,6 +424,7 @@ moncycle_app = {
 		moncycle_store.on("changed", moncycle_app.store_changed);
 		moncycle_store.on("sent", moncycle_app.day_sent);
 		moncycle_store.on("failed", moncycle_app.day_failed);
+		$(document).on("click", ".cycle_options a", moncycle_app.download_export);
 		$("#charger_cycle").click(moncycle_app.charger_cycle);
 		$("#jour_form_close").click(moncycle_app.close_menu);
 		$("#jour_form_submit").click(moncycle_app.submit_menu);
@@ -812,14 +817,15 @@ moncycle_app = {
 	cycle_option : function (c_date_str, c_date_fin_str, discri) {
 		let id_buts = c_date_str.replace("-", "_").replace("-", "_");
 		let c_action = $(`<div class='cycle_options c_options_${c_date_str}' style='display:none'></div>`);
-		c_action.append(`<a id='nfp_but_${id_buts}_${discri}' href='api/export?start_date=${c_date_str}&end_date=${c_date_fin_str}&type=nfp&anonymous=0'><button>${moncycle_app_text.but_export_nfp}</button></a> `);
-		c_action.append(`<a href='api/export?start_date=${c_date_str}&end_date=${c_date_fin_str}&type=csv'><button>${moncycle_app_text.but_export_csv}</button></a> `);
-		c_action.append(`<a id='pdf_but_${id_buts}_${discri}' href='api/export?start_date=${c_date_str}&end_date=${c_date_fin_str}&type=pdf&anonymous=0'><button>${moncycle_app_text.but_export_pdf}</button></a> `);
+		// the address carries the format, the period and the option; a click fetches the file and saves it (download_export)
+		c_action.append(`<a id='nfp_but_${id_buts}_${discri}' href='api/export/nfp?from=${c_date_str}&to=${c_date_fin_str}&anonymous=false'><button>${moncycle_app_text.but_export_nfp}</button></a> `);
+		c_action.append(`<a href='api/export/csv?from=${c_date_str}&to=${c_date_fin_str}'><button>${moncycle_app_text.but_export_csv}</button></a> `);
+		c_action.append(`<a id='pdf_but_${id_buts}_${discri}' href='api/export/pdf?from=${c_date_str}&to=${c_date_fin_str}&anonymous=false'><button>${moncycle_app_text.but_export_pdf}</button></a> `);
 		// the checkbox applies to every export that can carry the user's identity: the PDF
 		// (name on the chart) and the NFP file (userInformation block). The CSV never does.
 		let anonymous_checkbox = $(`<input type='checkbox' value='1' id='anonymous_${id_buts}_${discri}' name="privacy" />`);
 		anonymous_checkbox.change(function () {
-			let anonymous = $(this).is(':checked') ? 1 : 0;
+			let anonymous = $(this).is(':checked');
 			c_action.find(`#nfp_but_${id_buts}_${discri}, #pdf_but_${id_buts}_${discri}`).each(function () {
 				let url = $(this).attr("href").split('?');
 				let params = new URLSearchParams(url[1]);
@@ -832,6 +838,13 @@ moncycle_app = {
 		c_action.append(anonymous_checkbox);
 		c_action.append(`<label for='anonymous_${id_buts}_${discri}' class='label_anonymous_export'>${moncycle_app_text.label_anonymous_export}</label>`);
 		return c_action;
+	},
+	// A click on an export of a cycle: the file is fetched and saved, a failure is told (the API answers it in JSON, in English).
+	download_export : function (event) {
+		event.preventDefault();
+		moncycle_store.download($(this).attr("href")).catch(function (failure) {
+			alert(moncycle_app_text.export_failed(failure));
+		});
 	},
 	cycle_title_opened : null,
 	cycle_title_click : function () {
@@ -1320,7 +1333,7 @@ moncycle_app = {
 	},
 	fc_form2note : function() {
 		let note = $('input[name="fc_regles"]:checked').map(function(){ return this.value }).get().join("");
-		if (note.length && !note.endsWith(' ')) note += " " ;
+		if (note.length && !note.endsWith(' ')) note += " ";
 		note += $('.fc_sens:checked').map(function(){ return this.value }).get().join("");
 		note += $(".fc_obs:checked").map(function(){ return this.value }).get().join("");
 		note += $('.fc_sens_L:checked').val() ? $('.fc_sens_L:checked').val() : "";
@@ -1404,15 +1417,9 @@ moncycle_app = {
 			let j = d.getDate();
 			return [d.getFullYear(), m<10 ? "0"+m : m, j<10 ? "0"+j : j].join("-");
 		},
+		// the moment as the API wants it (RFC 3339, UTC): 2026-03-10T15:30:45Z
 		nowInUTC : function () {
-			const now = new Date();
-			year = now.getUTCFullYear();
-			month = String(now.getUTCMonth() + 1).padStart(2, '0');
-			day = String(now.getUTCDate()).padStart(2, '0');
-			hours = String(now.getUTCHours()).padStart(2, '0');
-			minutes = String(now.getUTCMinutes()).padStart(2, '0');
-			seconds = String(now.getUTCSeconds()).padStart(2, '0');
-			return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+			return new Date().toISOString().replace(/\.\d+Z$/, "Z");
 		}
 	}
 }

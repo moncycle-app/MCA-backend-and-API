@@ -1,3 +1,6 @@
+-- v14 -> v15. Every migration, from this one on, ends by setting the version of the schema in key_value (see the end of this file); the code
+-- checks it at every request (SCHEMA_VERSION, constants.php) and serves nothing from a database that says another number.
+
 CREATE TABLE `description` (
   `no_description` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `no_compte` mediumint(8) unsigned DEFAULT NULL,
@@ -208,3 +211,8 @@ CHANGE `email1` `login_email` varchar(255) COLLATE 'utf8mb4_bin' NOT NULL,
 CHANGE `email2` `notification_emails` varchar(1024) COLLATE 'utf8mb4_bin' NULL DEFAULT NULL,
 RENAME INDEX `email1` TO `login_email`,
 ALGORITHM=INPLACE, LOCK=NONE;
+
+-- The version of the schema, which the code checks at every request (SCHEMA_VERSION, constants.php; GET /api/server_info shows it): a database
+-- that says another number is not served (503 schema_mismatch). From v15 on, every migration ends by setting it to its own number:
+-- UPDATE `key_value` SET `value` = N WHERE `key` = 'schema_version';
+INSERT INTO `key_value` (`key`, `value`) VALUES ('schema_version', 15) ON DUPLICATE KEY UPDATE `value` = 15;

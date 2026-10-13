@@ -11,83 +11,81 @@ require_once "../config.php";
 require_once "../lib/api.php";
 require_once "../lib/data.php";
 require_once "../lib/day_format.php";
+require_once "../lib/input.php";
 
 [$db, $user_account] = api_start();
 $no_user_account = $user_account["no_user_account"];
 
-// CREATION/MODIFICATION OF A DESCRIPTION
-if ($_SERVER['REQUEST_METHOD'] == "POST") {
+// /description lists and creates; /description/{id} renames, retypes and deletes
+$path = input_path();
+input_exit_unless_path_fits($path, 1);
+$method = http_method();
+$allowed = $path === [] ? ["GET", "POST"] : ["PATCH", "DELETE"];
+if (!in_array($method, $allowed, true)) http_exit_method_not_allowed($allowed);
 
-	$body = http_json_body();
+$issues = [];
+$id = $path === [] ? null : input_path_id($path[0], $issues);
 
-	$id = null;
-	if (!empty($body["id"])) {
-		if (!filter_var($body["id"], FILTER_VALIDATE_INT)) {
-			http_error(400, "invalid_id", "'id' must match the description to edit.");
-		}
-		if (!boolval(db_select_description_exists($db, $body["id"], $no_user_account))) {
-			http_error(404, "not_found", "'id' does not match a known description.");
-		}
-		$id = intval($body["id"]);
-	}
+// LISTING ALL DESCRIPTIONS
+if ($method === "GET") {
+	input_query([], $issues);
+	input_check_no_body($issues);
+	input_exit_if_issues($issues);
 
-	if (empty($body["name"]) || !isset($body["type"])) {
-		http_error(400, "missing_fields", "'name' and 'type' are required.");
-	}
-
-	if (!is_string($body["type"]) || !isset(DESCRIPTION_TYPE_BY_NAME[$body["type"]])) {
-		http_error(400, "invalid_type", "'type' must be one of: " . implode(", ", array_keys(DESCRIPTION_TYPE_BY_NAME)) . ".");
-	}
-
-	// the name as it will be stored: what is checked for a duplicate is what is inserted
-	[$name, $problem] = day_format_text($body["name"], "name", DAY_LIMIT_DESCRIPTION_CHARS);
-	if (!is_null($problem)) {
-		http_error(400, "invalid_name", $problem);
-	}
-	if ($name === '') {
-		http_error(400, "missing_fields", "'name' and 'type' are required.");
-	}
-
-	$type = DESCRIPTION_TYPE_BY_NAME[$body["type"]];
-	$last_write_client_UTC = http_client_timestamp($body["lastWriteClientUtc"] ?? null);
-
-	$is_new = is_null($id);
-	$id = data_save_description($db, $no_user_account, $id, $name, $type, $last_write_client_UTC);
-	if (is_null($id)) {
-		http_error(409, "duplicate_name", "This description name already exists: " . $name);
-	}
-
-	http_data($is_new ? 201 : 200, [
-		"id" => $id,
-		"name" => $name,
-		"type" => DESCRIPTION_TYPE_NAMES[$type],
-		"lastWriteClientUtc" => http_iso8601($last_write_client_UTC),
-	]);
+	$descriptions = array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account));
+	log_note(["n" => count($descriptions)]);
+	http_data(200, $descriptions);
 }
 
 // DELETION OF A DESCRIPTION
-elseif ($_SERVER['REQUEST_METHOD'] == "DELETE") {
+elseif ($method === "DELETE") {
+	input_query([], $issues);
+	input_check_no_body($issues);
+	input_exit_if_issues($issues);
 
-	if (empty($_GET["id"])) {
-		http_error(400, "missing_id", "'id' query parameter is required.");
+	if (!db_select_description_exists($db, $id, $no_user_account)) {
+		http_error(404, "not_found", "No description of this account has this id.");
 	}
 
-	if (!filter_var($_GET["id"], FILTER_VALIDATE_INT)) {
-		http_error(400, "invalid_id", "'id' must match the description to delete.");
-	}
-
-	if (!boolval(db_select_description_exists($db, $_GET["id"], $no_user_account))) {
-		http_error(404, "not_found", "'id' does not match a known description.");
-	}
-
-	data_delete_description($db, $no_user_account, intval($_GET["id"]));
+	data_delete_description($db, $no_user_account, $id);
 
 	http_no_content();
 }
 
-// LISTING ALL DESCRIPTIONS
+// CREATION (POST /description) OR MODIFICATION (PATCH /description/{id}) OF A DESCRIPTION
 else {
-	$descriptions = array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account));
-	log_note(["n" => count($descriptions)]);
-	http_data(200, $descriptions);
+	input_query([], $issues);
+	$body = input_body(["name", "type", "lastWriteClientUtc"], $issues);
+	$creates = $method === "POST";
+
+	$name = day_format_body_text($body, "name", DAY_LIMIT_DESCRIPTION_CHARS, $issues);
+	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");
+	elseif ($creates) input_require($body, "name", $issues);
+
+	$type = null;
+	if (array_key_exists("type", $body)) {
+		if (!is_string($body["type"])) input_wrong_type($issues, "type", $body["type"], "a string (" . implode(", ", array_keys(DESCRIPTION_TYPE_BY_NAME)) . ")");
+		elseif (!isset(DESCRIPTION_TYPE_BY_NAME[$body["type"]])) $issues[] = input_issue("type", "invalid_value", "'type' must be one of: " . implode(", ", array_keys(DESCRIPTION_TYPE_BY_NAME)) . ".");
+		else $type = DESCRIPTION_TYPE_BY_NAME[$body["type"]];
+	}
+	elseif ($creates) input_require($body, "type", $issues);
+	if (!$creates && !array_key_exists("name", $body) && !array_key_exists("type", $body)) {
+		$issues[] = input_issue("body", "missing_field", "Send the 'name' or the 'type' to change (or both).");
+	}
+
+	$last_write_client_UTC = http_client_timestamp(input_timestamp($body["lastWriteClientUtc"] ?? null, "lastWriteClientUtc", $issues));
+	input_exit_if_issues($issues);
+
+	$saved = data_save_description($db, $no_user_account, $id, $name, $type, $last_write_client_UTC);
+	if ($saved["outcome"] === "not_found") http_error(404, "not_found", "No description of this account has this id.");
+	if ($saved["outcome"] === "duplicate_name") http_error(409, "duplicate_name", "A description of this account already has this name.");
+
+	$description = $saved["description"];
+	if ($creates) http_location("description/" . $description["no_description"]);
+	http_data($creates ? 201 : 200, [
+		"id" => $description["no_description"],
+		"name" => $description["name"],
+		"type" => DESCRIPTION_TYPE_NAMES[$description["type"]],
+		"lastWriteClientUtc" => http_iso8601($last_write_client_UTC),
+	]);
 }

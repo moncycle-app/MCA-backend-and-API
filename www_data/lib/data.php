@@ -10,7 +10,6 @@
 // What the app does with its data, on top of the queries of lib/db.php: building a day, saving one,
 // the descriptions (the free-text labels of a day). The shape of a day itself is lib/day_format.php.
 
-require_once __DIR__ . "/account.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
@@ -48,7 +47,7 @@ function data_cycle_day(string $cycle, string $date): int {
 }
 
 // a description row (db_select_description_with_count) as the JSON API shows it, shared by
-// api/description.php and api/sync.php so the two never drift apart.
+// api/description.php and api/timeline_sync.php so the two never drift apart.
 function data_description_to_json(array $row): array {
 	return [
 		"id" => intval($row["no_description"]),
@@ -191,7 +190,7 @@ function data_reload_demo_accounts($db): void {
 // ---------------------------------------------------------------------------
 
 // Clears a day: its fields, and its descriptions with them. The row stays, empty, stamped with when
-// it was cleared: that is how GET /api/sync tells the other clients the day is gone. A date that was
+// it was cleared: that is how GET /api/timeline_sync tells the other clients the day is gone. A date that was
 // never written has nothing to clear, and logs nothing. False when the day is not cleared because it
 // is newer than the clear (data_day_is_newer()).
 function data_clear_day($db, int $no_user_account, string $date, string $last_write_client_UTC): bool {
@@ -206,26 +205,32 @@ function data_clear_day($db, int $no_user_account, string $date, string $last_wr
 	return $cleared;
 }
 
-// Creates a description ($no_description null), or renames and retypes one. A day shows its
-// descriptions by name and type, so the days carrying it are stamped written: the sync reports them.
-// Returns the id, or null when another description of the account already has that name.
-function data_save_description($db, int $no_user_account, ?int $no_description, string $name, int $type, string $last_write_client_UTC): ?int {
-	$is_new = is_null($no_description);
-
-	$no_description = db_transaction($db, function () use ($db, $no_user_account, $no_description, $name, $type, $last_write_client_UTC) {
+// Creates a description ($no_description null; $name and $type are then given), or renames and / or retypes one ($name and $type null stay what
+// they are). A day shows its descriptions by name and type, so the days carrying it are stamped written: the sync reports them.
+// Answers ["outcome" => "created" | "updated" | "duplicate_name" | "not_found", "description" => ["no_description", "name", "type"] or null].
+function data_save_description($db, int $no_user_account, ?int $no_description, ?string $name, ?int $type, string $last_write_client_UTC): array {
+	$saved = db_transaction($db, function () use ($db, $no_user_account, $no_description, $name, $type, $last_write_client_UTC) {
 		db_select_user_account_for_update($db, $no_user_account);
-		if (db_select_description_name_exists($db, $name, $no_user_account, $no_description ?? 0)) return null;
 
-		if (is_null($no_description)) return intval(db_insert_description($db, $no_user_account, $name, $type, $last_write_client_UTC));
+		$current = is_null($no_description) ? null : db_select_description($db, $no_description, $no_user_account);
+		if (!is_null($no_description) && is_null($current)) return ["outcome" => "not_found", "description" => null];
+
+		$name ??= $current["name"];
+		$type ??= intval($current["type"]);
+		if (db_select_description_name_exists($db, $name, $no_user_account, $no_description ?? 0)) return ["outcome" => "duplicate_name", "description" => null];
+
+		if (is_null($no_description)) {
+			$no_description = intval(db_insert_description($db, $no_user_account, $name, $type, $last_write_client_UTC));
+			return ["outcome" => "created", "description" => ["no_description" => $no_description, "name" => $name, "type" => $type]];
+		}
 
 		db_update_description_name_type($db, $no_user_account, $no_description, $name, $type, $last_write_client_UTC);
 		db_update_day_timeline_touch_description($db, $no_user_account, $no_description);
-		return $no_description;
+		return ["outcome" => "updated", "description" => ["no_description" => $no_description, "name" => $name, "type" => $type]];
 	});
-	if (is_null($no_description)) return null;
 
-	log_event("data.description_saved", ["dsc" => $no_description, "new" => $is_new]);
-	return $no_description;
+	if (!is_null($saved["description"])) log_event("data.description_saved", ["dsc" => $saved["description"]["no_description"], "new" => $saved["outcome"] === "created"]);
+	return $saved;
 }
 
 // Deletes a description, and with it its links to the days. Those days are stamped first (the links
@@ -240,7 +245,7 @@ function data_delete_description($db, int $no_user_account, int $no_description)
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/sync: what a client needs to catch up with the account
+// GET /api/timeline_sync: what a client needs to catch up with the timeline
 // ---------------------------------------------------------------------------
 
 // The date ranges a set of written days changes. A day's cycleStartDate and cycleDay come from the
@@ -302,9 +307,9 @@ function data_sync_days($db, int $no_user_account, string $from_timestamp): arra
 // once a day and stores (data_public_stats_store()).
 function data_public_stats_count($db): array {
 	$counts = [
-		"moncycle_app_nb_user_account" => db_count_user_accounts($db),
-		"moncycle_app_nb_cycle" => db_count_cycles($db),
-		"moncycle_app_nb_total_observation" => db_count_days($db),
+		"accounts" => db_count_user_accounts($db),
+		"cycles" => db_count_cycles($db),
+		"observations" => db_count_days($db),
 	];
 	foreach ($counts as $name => $count) $counts[$name] = round($count, PUB_STAT_KEYS[$name][1]);
 	return $counts;
@@ -331,18 +336,20 @@ function data_public_stats($db): array {
 	return $stats;
 }
 
-// The answer of GET /api/sync: the cursor to send next time (the database's clock, read before
-// anything else so what is written while this runs is in the next one), the days to merge, every
-// description, and the account summary. The descriptions come whole every time: there are few of
-// them, and that is how a deletion, a rename and the count of days each is on reach the client.
+// The answer of GET /api/timeline_sync: the cursor to send next time (the database's clock, read before anything else so what is written while
+// this runs is in the next one), whether there is more to fetch (never, for now: the whole answer is one page), the days to merge, every
+// description, and the first days of all the cycles and the pregnancy dates. The descriptions and the cycle lists come whole every time: there
+// are few of them, and that is how a deletion reaches a client.
 function data_sync($db, array $user_account, string $from_timestamp): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$now = db_select_now($db);
 
 	return [
 		"syncTimestamp" => http_iso8601($now),
+		"hasMore" => false,
 		"days" => array_map('day_format_to_json', data_sync_days($db, $no_user_account, $from_timestamp)),
 		"descriptions" => array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account)),
-		"keyInfos" => account_key_infos($db, $user_account),
+		"allCyclesFirstDay" => db_select_cycles($db, $no_user_account),
+		"allPregnancyDates" => db_select_pregnancies($db, $no_user_account),
 	];
 }

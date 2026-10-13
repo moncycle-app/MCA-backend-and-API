@@ -51,13 +51,15 @@ info:
 
     This is the whole mindset of the API. Keep it in mind and the rest follows.
 
-    ## 2. Three rules for every response
+    ## 2. Rules for every response
 
     **Rule 1 — success is wrapped in `data`.**
 
     ```json
-    { "data": { "status": "ok" } }
+    { "data": { "status": "oookkk" } }
     ```
+
+    A single thing is an object, a list is a bare array. Nothing else sits next to `data`, except `meta`.
 
     **Rule 2 — failure is wrapped in `error`.**
 
@@ -75,43 +77,98 @@ info:
     `cross_origin_refused` means a browser page of another origin tried to write (both in
     section 3). `503` with the code `maintenance` means the operator put the server in
     maintenance: every endpoint answers it, whatever the method, before it reads or writes
-    anything, and nothing was done; try again later. The only ones that do not are `GET /version`
-    (a static file) and `GET /health_check`. Check the status first, then the body.
+    anything, and nothing was done; try again later. The only one that does not is
+    `GET /server_info`, which answers `200` with `status: "maintenance"` so that a client can say what is
+    going on. `503` with `schema_mismatch` means the database is not at the version this code needs: nothing
+    works until the operator runs the migrations. Check the status first, then the body.
 
-    **Every response carries an `X-Request-Id` header** (but `GET /version`, a static file, and `GET /health_check`). It is
+    **Rule 4 — `meta` is about the answer, not part of it.** A few answers carry a sibling `meta` next to `data`
+    (`PATCH /account`: what was changed). It is how information can be added to a list later without turning the list
+    into an object.
+
+    **Every response carries an `X-Request-Id` header** (but `GET /health_check`). It is
     the id the server's own log uses for that request: quote it when you report a problem. You
     may send your own in an `X-Request-Id` request header (letters, digits and `._:-`, 64
     characters at most) and it is used instead; anything else is ignored and the server makes one.
 
+    A method an endpoint does not take answers `405 method_not_allowed` with an `Allow` header. A `401` carries
+    `WWW-Authenticate: Bearer`. A `201` carries a `Location`.
+
     ### Exceptions to rule 1 and 2
 
-    Four endpoints are older or serve files. They do **not** use the `data` / `error` envelope.
-    This is the complete list, so you never have to guess:
+    Two endpoints answer a **file** when they succeed. Their failures are in the envelope like everything else
+    (`GET /export/{format}` included, and English: the web app shows its own French text from the `code`).
 
-    | Endpoint | What it returns instead |
+    | Endpoint | What it returns when it works |
     |---|---|
-    | `GET /version` | a plain JSON object (a static file) |
-    | `GET /pub_stat` | a plain JSON object |
-    | `GET /export` | a file (`.nfp` JSON, `.csv` or `.pdf`); errors are **plain text in French** |
-    | `GET /all_of_my_data_plz` | a CSV file; `401` has no body |
+    | `GET /export/{format}` | a file (`.nfp` JSON, `.csv` or `.pdf`) |
+    | `GET /all_of_my_data_plz` | a CSV file; its `401` has no body |
 
-    The one answer that does not follow these exceptions is the maintenance `503` of rule 3: it
-    is an `error` envelope on every endpoint that gives it, `GET /pub_stat`,
-    `GET /export` and `GET /all_of_my_data_plz` included.
+    ### Errors that tell the whole story
+
+    A request the server cannot accept because of **what it says** — an unknown field, a value of the wrong type,
+    a number out of range, a date that is not one — is refused with **HTTP 400** and the code `validation_failed`.
+    `details.issues` lists **every** problem found, not only the first:
+
+    ```json
+    {
+      "error": {
+        "code": "validation_failed",
+        "message": "The request is not valid: 2 problems (see details.issues). First: Unknown field 'stampColour'. Did you mean 'stampColor'?",
+        "details": {
+          "issues": [
+            { "field": "stampColour", "code": "unknown_field", "message": "Unknown field 'stampColour'. Did you mean 'stampColor'?" },
+            { "field": "temperature", "code": "wrong_type", "message": "'temperature' must be a decimal number, got string." }
+          ]
+        }
+      }
+    }
+    ```
+
+    - `field` says where: the name of a body field (`stampColor`, `freeMucusSensation[2]`), `query.from` for a query
+      parameter, `path.date` for a part of the address.
+    - `code` is a stable slug you can branch on: `unknown_field`, `read_only_field`, `missing_field`, `wrong_type`,
+      `invalid_value`, `out_of_range`, `too_long`, `too_many`, `invalid_date`, `invalid_timestamp`, `invalid_email`,
+      `invalid_range`, `date_mismatch`, `body_not_allowed`, `password_required`, `password_too_short`,
+      `password_too_long`, `password_invalid`, `password_unchanged`, `email_unchanged`.
+    - `message` is a sentence for a human that names the field, says what came (a type, never the value of a
+      password, a code or a text) and what is expected (the type, the allowed values, the limit).
+
+    **Nothing is silently ignored.** A typo in a field name is an error, not "nothing happened"; a value that cannot
+    be stored is an error, not a quiet `null`. The exceptions are written where they apply: the fields of a day that
+    the server computes are dropped when you send a day back (`PUT /day/{date}`), and a field set to `null` is the same
+    as a field that is not sent.
+
+    A request in the wrong **state** is not a validation problem and keeps its own code and status: `unauthorized`,
+    `invalid_credentials`, `invalid_password`, `stale_write`, `duplicate_name`, `not_found`, `totp_invalid`...
+    `invalid_json` (400) is a body that is not a JSON object.
+
+    ### Compatibility: what can change, and what cannot
+
+    The API is versioned by `apiVersion`, an integer you read from `GET /server_info` — the first call of every client.
+    There is no version in the address.
+
+    - **These are not breaking changes and never change `apiVersion`**: a new field in an answer, a new optional field in a
+      request, a new endpoint, a new value of an enum, a new `code`. **A client must ignore the fields and the enum values it
+      does not know**, and treat a `code` it does not know like any other error of the same status.
+    - **A breaking change** (a field renamed or removed, a meaning changed, a required field added) raises `apiVersion`.
+      A client that finds a greater `apiVersion` than the one it was written for must stop and ask the user to update.
+    - `GET /server_info`, its URL and the fields it has, never break.
 
     ## 3. Authentication
 
     There is one credential: a **token**. You get it from `POST /token`.
 
-    The token is a random 256-character string. Send it back in one of two ways — both work on
-    every protected endpoint, so pick the one that fits your client:
+    The token is a random 256-character string. Send it back in one of two ways. **Each one works alone, on every
+    protected endpoint** — pick the one that fits your client:
 
     ```
     Authorization: Bearer <token>          <- apps, scripts, mobile clients
     Cookie: MONCYCLEAPP_TOKEN=<token>      <- browsers (the server sets this cookie for you)
     ```
 
-    If both are present, the `Authorization` header wins.
+    If both are present, the `Authorization` header wins and is the only credential looked at: an invalid Bearer
+    token is a `401` even when a valid cookie comes with it.
 
     Good to know:
 
@@ -121,20 +178,20 @@ info:
       its use, and from that moment it opens nothing. The next call with it answers `401`: sign in again.
       The cookie is set for 5 years (the same day as the token, with `expiresInDays`), so it can outlive its token.
     - There is no refresh step.
-    - `DELETE /token` destroys **one** token (the one you used); `DELETE /token` with `{"prefix": "abcde"}` destroys
-      the token that starts with these 5 characters, with `{"all": true}` every other one, and `GET /token` lists them
+    - `DELETE /token` destroys **one** token (the one you used); `DELETE /token/{prefix}` destroys the token that starts
+      with these 5 characters, `DELETE /token?others=true` every other one, and `GET /token` lists them
       (prefix, name, scope, dates, user agent, network).
     - A token has a **scope**: `readWrite`, or `readOnly` (it reads, and can end its own session).
       Nothing else limits a token: there are no roles, and a read-write token can do everything its account can.
     - One account can hold many valid tokens at the same time (one per device), with no limit.
     - Missing or wrong token on a protected endpoint → `401` with code `unauthorized`.
     - **Every body is JSON.** Send `Content-Type: application/json` (a parameter such as
-      `; charset=utf-8` is fine) with every `POST` and every `DELETE` that has a body, and with
+      `; charset=utf-8` is fine) with every `POST`, `PUT` and `PATCH`, and with
       `POST /import`, whose body is the NFP file. Any other type, a form or `text/plain`, is
-      answered `415` `unsupported_media_type`.
+      answered `415` `unsupported_media_type`. A `GET` and a `DELETE` take **no body**: one is refused.
     - **A write from a browser page that is not ours is refused**, with `403`
       `cross_origin_refused`, whoever is logged in. The server reads the `Origin` header of a
-      `POST` or `DELETE` (and `Sec-Fetch-Site` when there is no `Origin`): the allowed origins
+      `POST`, `PUT`, `PATCH` or `DELETE` (and `Sec-Fetch-Site` when there is no `Origin`): the allowed origins
       are the server's own, the web app's (`APP_URL`) and the ones the operator lists
       (`WEB_APP_ORIGINS`). A request with neither header, which is what curl, a script or a
       mobile app sends, is not a browser's and is never refused for this.
@@ -142,6 +199,14 @@ info:
       `COOKIE_SAMESITE` to `lax` or `none`.
 
     ## 4. First run, step by step
+
+    **Start with `GET /server_info`**, a public call: it tells you which `apiVersion` this server speaks (stop if it is
+    greater than yours), whether it is `ok`, whether `registrationEnabled`, and the `limits` to check forms with.
+
+    ```bash
+    curl -s http://localhost:8003/api/server_info
+    # -> 200 {"data":{"app":"moncycle.app","apiVersion":2,"status":"ok","registrationEnabled":true,"limits":{...},...}}
+    ```
 
     Creating an account needs a captcha. The server keeps nothing about it: `POST /captcha` gives
     a picture and a signed **token**, and you send the token back with what the human read.
@@ -183,37 +248,41 @@ info:
     TOKEN=abc...   # from POST /token
     AUTH="Authorization: Bearer $TOKEN"
 
-    # Who am I, and what are my settings? Call this once at startup.
-    curl -s -H "$AUTH" http://localhost:8003/api/key_infos
+    # Who am I, and what are my settings? Call this at startup, and when the app comes back to the foreground.
+    curl -s -H "$AUTH" http://localhost:8003/api/account
 
-    # Write today. Day 1 of a new cycle, red stamp, one free-text sensation.
+    # The whole timeline the first time (the days, the labels, the cycles); then only what changed (section 8).
+    curl -s -H "$AUTH" http://localhost:8003/api/timeline_sync
+
+    # Write today. Day 1 of a new cycle, red stamp, one free-text sensation. The date is in the address.
     curl -s -H "$AUTH" -H 'Content-Type: application/json' \
-      -X POST http://localhost:8003/api/day \
-      -d '{"date":"2026-03-10","cycleFirstDay":true,"stampColor":"Red",
+      -X PUT http://localhost:8003/api/day/2026-03-10 \
+      -d '{"cycleFirstDay":true,"stampColor":"Red",
            "freeMucusSensation":["dry"],"comment":"cramps in the morning"}'
     # -> 201 (day created) with the full day as the server now stores it
 
-    # Read one week back
+    # Read one week back (at most 100 days per call)
     curl -s -H "$AUTH" \
-      'http://localhost:8003/api/day?start_date=2026-03-04&end_date=2026-03-10'
+      'http://localhost:8003/api/day?from=2026-03-04&to=2026-03-10'
     ```
 
-    ### The most important write rule: POST /day replaces the whole day
+    ### The most important write rule: PUT /day/{date} replaces the whole day
 
-    `POST /day` is an **upsert of the complete day**, not a partial patch. Any field you leave
-    out is written as empty or `false`. There is no `PATCH`.
+    `PUT /day/{date}` is an **upsert of the complete day**, not a partial patch. Any field you leave
+    out is written as empty or `false`. There is no `PATCH` for a day.
 
     ```
     stored:  { date: 2026-03-10, stampColor: "Red", isPeak: true, comment: "cramps" }
-    you send:{ date: 2026-03-10, stampColor: "Green" }
+    you send:{ stampColor: "Green" }       (PUT /day/2026-03-10)
     result:  { date: 2026-03-10, stampColor: "Green", isPeak: false, comment: "" }
                                                       ^^^^^^^^^^^^^  ^^^^^^^^^^^^
                                                       both were silently cleared
     ```
 
     **Always read the day, change the fields you want, then send the whole object back.**
-    The response body is the day as the server stored it, so you can use it to refresh your
-    local copy without a second `GET`.
+    The day you read can be sent as it is. The response body is the day as the server stored it, so you
+    can use it to refresh your local copy without a second `GET`.
+    (`PATCH /account` is the opposite: a partial update, only the fields sent are touched.)
 
     ## 6. Dates, times and null
 
@@ -221,28 +290,33 @@ info:
     |---|---|---|
     | A calendar date | `YYYY-MM-DD` | `2026-03-10` |
     | A time of day | `hh:mm:ss` | `06:45:00` |
-    | A timestamp | ISO 8601 **UTC**, ends with `Z` | `2026-03-10T05:32:48Z` |
+    | A timestamp | RFC 3339, **with a zone**; the server always answers in UTC with `Z` | `2026-03-10T05:32:48Z` |
 
-    Timestamps are always UTC. The server never sends a local offset such as `+02:00`, and it
-    ignores one if you send it. Convert to local time in your client.
+    What you send as a timestamp (`lastWriteClientUtc`, `since`) is an RFC 3339 timestamp **with a zone**: `Z`, or an
+    offset such as `+02:00`, which the server **converts to UTC** (`2026-03-10T07:32:48+02:00` is `05:32:48Z`).
+    Fractional seconds are accepted (`2026-03-10T05:32:48.123Z`, what a browser's `toISOString()` writes). A time with
+    no zone, and the bare `2026-03-10 05:32:48`, are refused (`invalid_timestamp`). In a URL, write the `+` of an
+    offset as `%2B`. Convert to local time in your client.
 
     Two timestamps appear on days, descriptions and the account:
 
-    - **`lastWriteClientUtc`** — *your* clock. You send it. If you omit it, or it is not valid,
-      the server writes its own clock instead. It is stored and returned as you gave it. On a
+    - **`lastWriteClientUtc`** — *your* clock. You send it. If you omit it, or it is outside what the server can
+      store (a clock far in the past or the future), the server writes its own clock instead. A value that is not a
+      timestamp at all is an error. It is stored and returned as you gave it, in UTC. On a
       day, it also decides which write is the latest: see "A write that arrives late" on
-      `POST /day`.
+      `PUT /day/{date}`.
     - **`lastWriteDb`** — the server clock. Read-only. The server always sets it. This is the
-      field `GET /sync` is based on, so a wrong clock on your side cannot make you miss anything.
+      field `GET /timeline_sync` is based on, so a wrong clock on your side cannot make you miss anything.
 
     A field that is `null` means "no value recorded". An empty array (`[]`) means "no labels".
     An empty string (`""`) is used for `comment` when there is no comment. Booleans are real
-    JSON booleans (`true` / `false`), never the strings `"true"` / `"false"`.
+    JSON booleans (`true` / `false`), never the strings `"true"` / `"false"`. On a request, a field set to `null`
+    is the same as a field that is not sent.
 
     ## 7. Two tracking methods
 
     Each account uses one method, chosen at registration and changeable later on
-    `POST /account`. The method decides **which fields of a day make sense**. The server does
+    `PATCH /account`. The method decides **which fields of a day make sense**. The server does
     not block the other fields, but the app will not display them.
 
     | Method | How a day is recorded | Fields used |
@@ -264,7 +338,7 @@ info:
     **description**, with its own `id` and a `useCount`.
 
     You never have to create them by hand. When you send a new name inside
-    `freeMucusSensation` or `freeMucusObservation`, `POST /day` creates the description for you
+    `freeMucusSensation` or `freeMucusObservation`, `PUT /day/{date}` creates the description for you
     and links it to the day. The `/description` endpoints exist so the app can show a
     "most used first" picklist, and rename or delete a label everywhere at once.
 
@@ -277,52 +351,59 @@ info:
       label. It does not create a second one.
     - A label can have no type yet (`type: "undefined"`). These are the texts the v15 migration
       could not class. A day shows them in `freeOther`, and keeps them only if you send them
-      back there. To classify one, `POST /description` with its `id` and the new `type`: every
+      back there. To classify one, `PATCH /description/{id}` with the new `type`: every
       day that carries it then shows it in `freeMucusSensation` or `freeMucusObservation`.
 
     ## 8. Keeping a local copy in sync
 
-    `GET /sync?fromTimestamp=...` is made for a client that keeps its own copy of the account:
-    a phone, a browser, a script. It answers with everything that copy may lack.
+    `GET /timeline_sync?since=...` is made for a client that keeps its own copy of the timeline:
+    a phone, a browser, a script. It answers with everything that copy may lack. (The account's settings are not
+    in it: read `GET /account` at start-up and when the app comes back to the foreground.)
 
     | Key | What it holds |
     |---|---|
-    | `syncTimestamp` | The server clock when it started to answer. **Keep it**: it is the `fromTimestamp` of your next call. |
-    | `days` | The days written since `fromTimestamp`, and the days that follow them in their cycle. A cleared day is among them, empty. |
+    | `syncTimestamp` | The server clock when it started to answer. **Keep it**: it is the `since` of your next call. |
+    | `hasMore` | `true` when there is more to fetch: call again at once with `since` = the `syncTimestamp` you just got. Always `false` today. |
+    | `days` | The days written since `since`, and the days that follow them in their cycle. A cleared day is among them, empty. |
     | `descriptions` | **Every** label of the account, with its `useCount`. |
-    | `keyInfos` | The account summary of `GET /key_infos`. |
+    | `allCyclesFirstDay` | **Every** day flagged `cycleFirstDay`, newest first. |
+    | `allPregnancyDates` | **Every** day flagged `booleanPregnancyDetected`, newest first. |
 
     The loop:
 
     ```
-    1. POST your own unsent changes to /day and /description        (your changes first)
+    1. PUT/DELETE your own unsent days, POST/PATCH/DELETE your labels   (your changes first)
          - a day answered 409 stale_write was written after you made your change: drop yours
-    2. GET /sync?fromTimestamp=<lastSync>     (the first time: GET /sync, with no parameter)
-    3. merge into your copy:
+    2. GET /account                           (the settings; send its ETag back to get a 304)
+    3. GET /timeline_sync?since=<lastSync>    (the first time: GET /timeline_sync, with no parameter)
+         - repeat step 3 while hasMore is true, with since = the syncTimestamp just received
+    4. merge into your copy:
          - each returned day replaces yours; an empty day means "forget this day";
-         - the returned labels replace yours; the returned key infos replace yours;
+         - the returned labels replace yours; the returned lists of cycles and pregnancies replace yours;
          - except a day you changed after step 1: keep yours, you are about to send it
-    4. save syncTimestamp as lastSync, once step 3 is done
+    5. save syncTimestamp as lastSync, once step 4 is done
     ```
 
     What the server does for you, so that this loop is enough:
 
     - **The server clock decides, not yours.** Days are selected on `lastWriteDb`, and
-      `syncTimestamp` comes from the same clock. A client whose clock is wrong misses nothing.
+      `syncTimestamp` comes from the same clock. A client whose clock is wrong misses nothing. **Take the cursor from
+      `syncTimestamp` only**, never from your own clock, and treat it as a value to hand back, not to compute with.
     - **A safety margin is taken for you.** The server reads from 120 seconds *before*
-      `fromTimestamp`: a write is stamped when it starts but only seen when it is committed, and
+      `since`: a write is stamped when it starts but only seen when it is committed, and
       the bound is inclusive anyway. So the last days of a sync come back in the next one.
       **Your merge must tolerate a day received twice** — replacing it is enough.
-    - **Deletions are reported.** `DELETE /day` does not remove the row: the day stays, empty,
+    - **Deletions are reported.** `DELETE /day/{date}` does not remove the row: the day stays, empty,
       with the time it was cleared, and comes back in `days` with every field empty. A deleted
       label is absent from `descriptions`, which always lists all of them: forget the ones that
-      are not in the list. Renaming, retyping or deleting a label also reports the days that
-      carry it, with their new `freeMucus*` and `freeOther` lists.
+      are not in the list. Renaming, retyping or deleting a label also reports the days
+      that carry it, with their new `freeMucus*` and `freeOther` lists.
     - **A change of cycle reports the cycle.** Setting or clearing `cycleFirstDay` changes the
       `cycleStartDate` and `cycleDay` of every following day up to the next first day. Those days
       come back too, so you never have to compute a cycle yourself.
-    - **Nothing is paged.** The answer is as big as the changed days (about 500 bytes a day). The
-      first call returns the whole timeline.
+    - **Nothing is paged yet.** The answer is as big as the changed days (about 500 bytes a day). The
+      first call returns the whole timeline, and `hasMore` is `false`; a client that loops on `hasMore` already
+      handles the day it is not.
 
     ## 9. Login protection
 
@@ -363,7 +444,7 @@ info:
       a random 1–5 seconds. This hides whether an account exists.
     - `GET /all_of_my_data_plz` gives the user a full CSV dump of their own data (GDPR right of
       access). Passwords, TOTP secrets and tokens are masked in it.
-    - `DELETE /account` deletes the account for real. Rows in every other table are removed by
+    - `POST /account/deletion` deletes the account for real. Rows in every other table are removed by
       database cascade. It needs the password as confirmation.
     - An account with no activity for 4 years is deleted automatically.
     - The server's log says what happened, to which account and to which row, never the content:
@@ -408,33 +489,35 @@ security:
   - HTTPcookie: []
 
 tags:
-  - name: general
+  - name: server
     description: |-
-      Public endpoints. No token, no personal data. Use them for monitoring, for a version
-      check at client startup, and for the public counters on the website.
+      Public endpoints. No token, no personal data. **`GET /server_info` is the first call of every client**: the
+      version of the contract, the state of the server and the limits to check a form with. Also monitoring
+      (`GET /health_check`) and the public counters for a web site (`GET /pub_stat`).
+  - name: auth
+    description: |-
+      Getting in and proving who you are: the captcha, sign-up, the link by e-mail (`POST /verify_email`), sign-in
+      and the tokens (`POST`, `GET`, `DELETE /token`), the lost password, two-factor authentication.
+
+      Read **sections 3 and 4** of the introduction first. The order of the calls matters: a
+      captcha is asked for just before the call it guards, for the same address.
   - name: account
     description: |-
-      The account lifecycle: register, verify the address, captcha, log in, log out, change or
-      recover the password, change the login address, two-factor authentication, change
-      settings, delete the account.
-
-      Read **section 3 and 4** of the introduction first. The order of the calls matters: a
-      captcha is asked for just before the call it guards, for the same address.
-  - name: observations
+      The account: `GET /account`, `PATCH /account` (settings, login address, password), and its deletion.
+  - name: timeline
     description: |-
-      The heart of the API: the timeline of days, the reusable free-text labels, the account
-      summary, and the sync endpoint.
+      The heart of the API: the timeline of days (`/day`), the reusable free-text labels (`/description`), and
+      `GET /timeline_sync`, which keeps a local copy up to date.
 
       Read **section 1** of the introduction first ("one day = one observation"), and
-      **section 5** before your first write (`POST /day` replaces the whole day).
+      **section 5** before your first write (`PUT /day/{date}` replaces the whole day).
   - name: files
     description: |-
       Import and export. Both speak the portable **NFP file format**, which is versioned on its
       own (`schemaVersion`) and shared with other NFP apps.
 
-      `/export` returns a **file**, not a live resource, so it does not use the `data` / `error`
-      envelope — its errors are plain text in French. `/import` takes a file but answers like
-      the rest of the API, with `data` on success and `error` on failure.
+      `GET /export/{format}` returns a **file** when it works and the usual `error` envelope when it does not.
+      `POST /import` takes a file but answers like the rest of the API, with `data` on success and `error` on failure.
 
 paths:
 
@@ -442,52 +525,90 @@ paths:
   # GENERAL
   # ---------------------------------------------------------------------------
 
-  /version:
+  /server_info:
     get:
-      tags: [general]
-      summary: Server and API version
+      tags: [server]
+      operationId: getServerInfo
+      summary: What this server is — the first call of every client
       description: |-
-        A static JSON file. **No `data` envelope.** Call it at client startup to check which
-        server you are talking to, and to warn the user if your client is too old.
+        Public, no token. **Call it first**, before anything else: it says which API this server speaks
+        (`apiVersion`), which build it is, whether it is ready, and the numbers a client needs to check a
+        form before sending it.
 
-        `version` is a plain number. During a development cycle it carries the suffix `dev`,
-        for example `"15dev"`.
+        ### The contract of this call
+
+        `GET /server_info` is the one URL that **never changes**. Its fields may grow (see the introduction,
+        "Compatibility"), they are never renamed or removed. A client written for `apiVersion` 2 that finds a
+        greater number here **must stop and ask the user to update the app**: the rest of the API may not be
+        what it was written for.
+
+        ### `status`
+
+        | Value | Meaning | What to do |
+        |---|---|---|
+        | `ok` | Ready. | Go on. |
+        | `maintenance` | The operator put the server in maintenance. Every other endpoint answers `503 maintenance`. `schemaVersion` is `null`: the database is not opened. | Tell the user, try again later. |
+        | `schema_mismatch` | The database is not at the version this code needs (a migration was not run, or the code and the database do not match). Every other endpoint answers `503 schema_mismatch`. | Tell the user the service is down; it needs its operator. |
+
+        The answer is `200` in all three cases, so a client can show a precise message. `503 database_unreachable`
+        means the database does not answer at all.
+
+        ### Three versions, three places
+
+        - `apiVersion` — an integer, the version of **this contract**. It rises only when something a client
+          relies on breaks.
+        - `serverVersion`, `build`, `commit` — the release and the build that runs. `build` and `commit` are `null` on
+          a development tree.
+        - `schemaVersion` — the version the database says it is at (the `schema_version` row of `key_value`, set by
+          every migration).
+
+        ### `limits`
+
+        The numbers a form can check before it sends anything: lengths in characters (`...Chars`), sizes in bytes
+        (`...Bytes`), and how many days or dates one `GET /day` reads. Nothing here is secret.
       security: []
       responses:
         "200":
-          description: OK
+          description: The server.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  app:
-                    type: string
-                    example: moncycle.app
-                  version:
-                    type: string
-                    description: Plain number, with the suffix `dev` on a development server.
-                    example: "15dev"
-                  build:
-                    type: string
-                    description: Build date, `YYYY-MM-DD`. The placeholder `YYYY-MM-DD` on a development server.
-                    example: "2026-03-01"
-                  commit:
-                    type: string
-                    description: Short git commit hash. The placeholder `xxxxxxxx` on a development server.
-                    example: 5d81638a
+                  data:
+                    $ref: '#/components/schemas/ServerInfo'
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          description: "`database_unreachable` — the database does not answer."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /health_check:
     get:
-      tags: [general]
+      tags: [server]
+      operationId: getHealthCheck
       summary: Is the server alive?
       description: |-
         For monitoring. The server answers `200` only if it can reach the database **and** get
         the expected result from a real query. Any other case is `503`.
 
-        Nothing is written and nothing personal is read, so you can poll this often. It keeps
-        answering while the server is in maintenance (see rule 3 of the introduction), so that a
-        container in maintenance is not taken for a dead one.
+        The body of a healthy answer is the fixed string `oookkk` (test for it as it is):
+
+        ```json
+        { "data": { "status": "oookkk" } }
+        ```
+
+        In maintenance it answers `503 maintenance` like every other endpoint, without opening the database. A
+        container healthcheck must accept that answer as alive, or a server in maintenance is taken for a dead one
+        (the `docker-compose.exemple.yml` of the repository does).
+
+        Nothing is written and nothing personal is read, so you can poll this often. For the version, the status
+        and the limits of the server use `GET /server_info`.
       security: []
       responses:
         "200":
@@ -502,9 +623,11 @@ paths:
                     properties:
                       status:
                         type: string
-                        enum: [ok]
+                        enum: [oookkk]
         "503":
-          description: "`database_unreachable` — the database is down, or the query failed."
+          description: |-
+            `maintenance` — the server is in maintenance (the database was not looked at).
+            `database_unreachable` — the database is down, or the query failed.
           content:
             application/json:
               schema:
@@ -512,10 +635,11 @@ paths:
 
   /pub_stat:
     get:
-      tags: [general]
+      tags: [server]
+      operationId: getPubStat
       summary: Public counters
       description: |-
-        Public, anonymous usage counters, used on the website. **No `data` envelope.**
+        Public, anonymous usage counters, for a web site.
 
         Every number is **rounded on purpose** so that no individual can be recognised:
         accounts and cycles to the nearest 10, observations to the nearest 100. A small
@@ -534,26 +658,32 @@ paths:
               schema:
                 type: object
                 properties:
-                  moncycle_app_nb_user_account:
-                    type: integer
-                    description: Number of accounts, rounded to the nearest 10.
-                    example: 1250
-                  moncycle_app_nb_cycle:
-                    type: integer
-                    description: Number of recorded cycles, rounded to the nearest 10.
-                    example: 8430
-                  moncycle_app_nb_total_observation:
-                    type: integer
-                    description: Number of recorded days, rounded to the nearest 100.
-                    example: 241500
-
-  # ---------------------------------------------------------------------------
-  # ACCOUNT
-  # ---------------------------------------------------------------------------
+                  data:
+                    type: object
+                    properties:
+                      accounts:
+                        type: integer
+                        description: Number of accounts, rounded to the nearest 10.
+                        example: 1250
+                      cycles:
+                        type: integer
+                        description: Number of recorded cycles, rounded to the nearest 10.
+                        example: 8430
+                      observations:
+                        type: integer
+                        description: Number of recorded days, rounded to the nearest 100.
+                        example: 241500
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /register:
     post:
-      tags: [account]
+      tags: [auth]
+      operationId: registerAccount
       summary: Create an account
       description: |-
         Creates an account with the password the caller gives, and **emails a link that proves the
@@ -567,7 +697,7 @@ paths:
         (proved or not), so nobody can find out who has an account. For an address that already has
         one, **nothing of it is touched**, whatever this request says (name, password, birth year):
         its owner gets a mail saying so, with a link to choose a new password. Everything a request
-        can get wrong (a field, the password) is refused with a 400 or a 422 *before* the address is
+        can get wrong (a field, the password) is refused with a 400 (`validation_failed`, with every problem in `details.issues`) *before* the address is
         looked up, so these answers do not depend on it either.
 
         ### Order of calls
@@ -661,20 +791,7 @@ paths:
                         type: boolean
                         description: "`false` means the mail could not be sent."
         "400":
-          description: "`missing_fields` | `invalid_email` | `invalid_parameter` (`password` is not a string) | `invalid_birth_year` | `invalid_first_name` | `invalid_discovered_comment` (not a string, or over 255 characters)"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "422":
-          description: |-
-            `password_too_short` — fewer than 10 characters.
-            `password_too_long` — more than 72 bytes.
-            `password_invalid` — the password holds a null character (`\u0000`).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "403":
           description: |-
             `registration_disabled` — this instance does not accept new accounts.
@@ -708,7 +825,8 @@ paths:
 
   /captcha:
     post:
-      tags: [account]
+      tags: [auth]
+      operationId: createCaptcha
       summary: Get a captcha challenge
       description: |-
         Gives a **picture** and a signed **token** for one purpose and one address. A human reads
@@ -781,11 +899,7 @@ paths:
                         description: When the token runs out, a Unix time (5 minutes after it was made).
                         example: 1790000000
         "400":
-          description: "`invalid_purpose` — `purpose` is absent or not one of `register`, `recover`, `login`. `invalid_email` — absent, not a string, or not an address. `invalid_json` — see section 2."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "403":
           $ref: '#/components/responses/CrossOriginRefused'
         "405":
@@ -803,9 +917,98 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /verify_email:
+    post:
+      tags: [auth]
+      operationId: verifyEmail
+      summary: Use the link of a mail
+      description: |-
+        Uses the link that a mail carried: it **proves the address** of a new account
+        (`accountCreation`), **sets a new password** (`resetPassword`) or **changes the login
+        address** (`changeEmail`). No token is needed: the person may open the mail on another
+        device, and the link's token is the whole proof.
+
+        ### The link
+
+        A mail's link is a page of the app: `APP_URL` + `verify_email#purpose=<purpose>&t=<token>`.
+        The purpose and the token are in the **fragment**, which no server, log or `Referer`
+        ever sees, and a mail scanner that only fetches the link runs no script, so it uses
+        nothing up. The page posts them here. A client that is not a web page does the same: read
+        both from the link, post them.
+
+        - The token is 32 random bytes; the server keeps its SHA-256 only.
+        - **One slot per account:** a new link (a sign-up, a `POST /recover_password`, a
+          `PATCH /account` that changes `loginEmail`) replaces the one before it, whatever that one was for.
+        - A link is **single use** and checked against its purpose: the link of one action cannot do
+          another (`invalid_token`).
+        - It lives 3 days (`accountCreation`), 1 hour (`resetPassword`) or 1 day (`changeEmail`), then
+          answers `token_expired`.
+
+        ### What each purpose does
+
+        | `purpose` | Does | Also |
+        |---|---|---|
+        | `accountCreation` | the address is proved: the account can be signed in to | |
+        | `resetPassword` | sets `newPassword` | proves the address; the sessions that are open **stay open** and the TOTP is not touched; the owner is told by mail |
+        | `changeEmail` | the login address becomes the one the link was made for | the old address is told by mail; the sessions stay open |
+
+        The password is checked **before** the link is touched: a refused password (`400`, issue `password_too_short`, ...) does not
+        use the link up.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, token]
+              properties:
+                purpose:
+                  type: string
+                  enum: [accountCreation, resetPassword, changeEmail]
+                  description: What the link is for, as the link says.
+                token:
+                  type: string
+                  description: The token of the link.
+                newPassword:
+                  type: string
+                  minLength: 10
+                  description: Required for `resetPassword` only. 10 characters at least, 72 bytes at most, no null character.
+      responses:
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
+        "403":
+          $ref: '#/components/responses/CrossOriginRefused'
+        "200":
+          description: The link was used up and did what it is for.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      purpose:
+                        type: string
+                        enum: [accountCreation, resetPassword, changeEmail]
+                      loginEmail:
+                        type: string
+                        description: The address to sign in with from now on.
+                        example: marie@example.org
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "409":
+          description: "`email_taken` — (`changeEmail`) another account has the new address since the link was made. The account keeps its address."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
   /token:
     post:
-      tags: [account]
+      tags: [auth]
+      operationId: createToken
       summary: Sign in, and get a token
       description: |-
         Exchanges an email and a password for a **token**. This is the only way to get one: the
@@ -819,8 +1022,8 @@ paths:
           `GET /token`, so make it recognisable: `backup script`, `WEB-APP moncycle.app`. The web app
           names its sessions `WEB-APP <the domain it was opened on>`.
         - `scope` — `readWrite` (default) or `readOnly`. A read-only token can use `GET`, `HEAD` and `OPTIONS`
-          and end its own session (`DELETE /token`); everything else, and `GET /totp` (it stores a
-          secret), answers `403` `read_only_token`. Signing in again with it is allowed.
+          and end its own session (`DELETE /token`); everything else answers `403` `read_only_token`. Signing in
+          again with it is allowed.
         - `expiresInDays` — 1 to 365. The token dies on that day **whatever its use**, and from that moment
           it opens nothing (`401`). Without it the token lives until it is destroyed, but the daily cron
           erases it after 40 days without use or a year after its creation.
@@ -849,7 +1052,7 @@ paths:
           |-- 401 invalid_credentials ... wrong email or password
           |-- 403 account_locked ........ too many failures, wait (see section 9)
           |-- 429 rate_limited .......... too many attempts from this IP, wait
-          '-- 400 invalid_parameter ..... a field of the token (name, scope, expiresInDays, cookie) is wrong; nothing was counted
+          '-- 400 validation_failed ..... a field is wrong (see details.issues); nothing was counted
         ```
 
         A captcha and a TOTP code can both be required at the same time. Send them together.
@@ -907,13 +1110,7 @@ paths:
                             type: boolean
                             description: Present and `true` when the **next** attempt on this account will need a captcha.
         "400":
-          description: |-
-            `missing_credentials` — `email` or `password` is absent, empty, not a string, or the email is malformed.
-            `invalid_parameter` — `name` is not a string or is over 256 characters, `scope` is not `readOnly` or `readWrite`, `expiresInDays` is not a whole number from 1 to 365, or `cookie` is not a boolean. Checked before the credentials: nothing is counted against the account or the address.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           description: |-
             `invalid_credentials` — wrong password, or no such account. The same code is used for both,
@@ -951,13 +1148,14 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
     get:
-      tags: [account]
+      tags: [auth]
+      operationId: listTokens
       summary: List the account's tokens
       description: |-
         Every token of the account that still opens something, the newest first: the browsers and
         apps signed in, and the tokens made for scripts. **The token itself is never shown** (only its
         hash is kept); what is shown is its first 5 characters, `prefix`: they tell the tokens of one app
-        apart, and `DELETE /token` takes them. A `prefix` is unique within the account, and it is no secret
+        apart, and `DELETE /token/{prefix}` takes them. A `prefix` is unique within the account, and it is no secret
         (the other 251 characters are the secret).
 
         What is shown of each is what the server saw, and what the client said:
@@ -980,12 +1178,9 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      tokens:
-                        type: array
-                        items:
-                          $ref: '#/components/schemas/Token'
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Token'
         "401":
           $ref: '#/components/responses/Unauthorized'
         "403":
@@ -996,29 +1191,30 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
     delete:
-      tags: [account]
-      summary: Log out, or revoke tokens
+      tags: [auth]
+      operationId: deleteToken
+      summary: Log out, or revoke every other token
       description: |-
-        **Without a body**: ends the session you are using. It deletes the token of this request and clears the
+        **Without a parameter**: ends the session you are using. It deletes the token of this request and clears the
         cookie (`HttpOnly`: only the server can). It is **idempotent**: a token that is already gone, or none at all,
         is a logout all the same and answers `204`, with the cookie cleared. A read-only token may do it.
 
-        **With a body** (`Content-Type: application/json`), one of:
+        **With `others=true`**: revokes **every token but the one you are using**. This is what to do when a device is
+        lost or a token leaked; `PATCH /account` with `newPassword` and `logoutOtherDevices` does the same with the
+        password. A read-only token cannot (`403` `read_only_token`), nor a demo session (`403` `demo_account`).
 
-        - `{"prefix": "abcde"}` — revokes the token that starts with these 5 characters (`prefix` in `GET /token`,
-          or in the answer of `POST /token`). Another account's token, or one that does not exist, is a
-          `404` `not_found` (a prefix is looked up in your own account only). Revoking your own `prefix` is a logout.
-        - `{"all": true}` — revokes **every token but the one you are using**. This is what to do when a device is lost or a
-          token leaked; `POST /account` with `newPassword` and `logoutOtherDevices` does the same with the password.
+        To revoke **one** token, name it in the address: `DELETE /token/{prefix}`.
 
-        A read-only token may revoke only itself. The demo accounts' tokens cannot be revoked by `prefix` or `all`
-        (`403` `demo_account`): they belong to every visitor.
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TokenRevokeRequest'
+        A `DELETE` takes **no body**: a body is refused (`400`, issue `body_not_allowed`), because many HTTP clients
+        cannot send one. What identifies the target is in the address.
+      parameters:
+        - name: others
+          in: query
+          required: false
+          description: "`true` to revoke every other token. Any other value is refused: leave the parameter out to log out."
+          schema:
+            type: boolean
+            enum: [true]
       responses:
         "204":
           description: Logged out. Also returned when you were not logged in.
@@ -1028,6 +1224,49 @@ paths:
               schema:
                 type: string
         "200":
+          description: The other tokens were revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RevokedTokens'
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "401":
+          description: "`unauthorized` — `others=true` was sent and the token is not valid."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "403":
+          description: "`read_only_token` — a read-only token revoking others. `demo_account` — a demo session. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+
+  /token/{prefix}:
+    delete:
+      tags: [auth]
+      operationId: revokeToken
+      summary: Revoke one token
+      description: |-
+        Revokes the token that starts with these 5 characters (`prefix` in `GET /token`, or in the answer of
+        `POST /token`). Another account's token, or one that does not exist, is a `404` `not_found`: a prefix is
+        looked up in your own account only. Revoking your own `prefix` is a logout (the cookie is cleared).
+
+        A read-only token may revoke only itself. The demo accounts' tokens cannot be revoked by `prefix`
+        (`403` `demo_account`): they belong to every visitor.
+
+        No body. `GET`, `POST` and the other methods answer `405` with `Allow: DELETE`.
+      parameters:
+        - $ref: '#/components/parameters/TokenPrefix'
+      responses:
+        "200":
           description: Revoked.
           content:
             application/json:
@@ -1035,24 +1274,11 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      revoked:
-                        type: integer
-                        description: How many tokens were revoked.
-                        example: 3
+                    $ref: '#/components/schemas/RevokedTokens'
         "400":
-          description: "`invalid_parameter` — the body has neither `prefix` nor `all`, has both, `prefix` is not exactly 5 letters or digits, or `all` is not `true`. `invalid_json` — see section 2."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
-          description: "`unauthorized` — a body was sent and the token is not valid."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/Unauthorized'
         "403":
           description: "`read_only_token` — a read-only token revoking another token. `demo_account` — see above. `cross_origin_refused` — see section 3 of the introduction."
           content:
@@ -1065,12 +1291,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
 
   /recover_password:
     post:
-      tags: [account]
+      tags: [auth]
+      operationId: recoverPassword
       summary: Send a link to choose a new password
       description: |-
         Emails the owner a **link to choose a new password**. **The password is not touched until the
@@ -1155,139 +1382,30 @@ paths:
                         type: boolean
                         enum: [true]
         "400":
-          description: |-
-            `missing_email` — `email` is absent or empty.
-            `invalid_email` — not a valid email address. Note: a *malformed* address is rejected,
-            while a well-formed unknown address answers `200`.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-
-  /verify_email:
-    post:
-      tags: [account]
-      summary: Use the link of a mail
-      description: |-
-        Uses the link that a mail carried: it **proves the address** of a new account
-        (`accountCreation`), **sets a new password** (`resetPassword`) or **changes the login
-        address** (`changeEmail`). No token is needed: the person may open the mail on another
-        device, and the link's token is the whole proof.
-
-        ### The link
-
-        A mail's link is a page of the app: `APP_URL` + `verify_email#purpose=<purpose>&t=<token>`.
-        The purpose and the token are in the **fragment**, which no server, log or `Referer`
-        ever sees, and a mail scanner that only fetches the link runs no script, so it uses
-        nothing up. The page posts them here. A client that is not a web page does the same: read
-        both from the link, post them.
-
-        - The token is 32 random bytes; the server keeps its SHA-256 only.
-        - **One slot per account:** a new link (a sign-up, a `POST /recover_password`, a
-          `POST /account` that changes `loginEmail`) replaces the one before it, whatever that one was for.
-        - A link is **single use** and checked against its purpose: the link of one action cannot do
-          another (`invalid_token`).
-        - It lives 3 days (`accountCreation`), 1 hour (`resetPassword`) or 1 day (`changeEmail`), then
-          answers `token_expired`.
-
-        ### What each purpose does
-
-        | `purpose` | Does | Also |
-        |---|---|---|
-        | `accountCreation` | the address is proved: the account can be signed in to | |
-        | `resetPassword` | sets `newPassword` | proves the address; the sessions that are open **stay open** and the TOTP is not touched; the owner is told by mail |
-        | `changeEmail` | the login address becomes the one the link was made for | the old address is told by mail; the sessions stay open |
-
-        The password is checked **before** the link is touched: a refused password (`422`) does not
-        use the link up.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [purpose, token]
-              properties:
-                purpose:
-                  type: string
-                  enum: [accountCreation, resetPassword, changeEmail]
-                  description: What the link is for, as the link says.
-                token:
-                  type: string
-                  description: The token of the link.
-                newPassword:
-                  type: string
-                  minLength: 10
-                  description: Required for `resetPassword` only. 10 characters at least, 72 bytes at most, no null character.
-      responses:
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
-        "200":
-          description: The link was used up and did what it is for.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      purpose:
-                        type: string
-                        enum: [accountCreation, resetPassword, changeEmail]
-                      loginEmail:
-                        type: string
-                        description: The address to sign in with from now on.
-                        example: marie@example.org
-        "400":
-          description: |-
-            `invalid_purpose` — `purpose` is absent, not a string, or none of the three.
-            `missing_token` — `token` is absent, empty or not a string.
-            `missing_fields` — `newPassword` is absent or not a string (`resetPassword`).
-            `invalid_token` — no link has this token: it may have been used already, replaced by a newer one, or made for another purpose.
-            `token_expired` — the link is past its time. It is not used up: ask for a new one.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "422":
-          description: |-
-            `password_too_short` — fewer than 10 characters.
-            `password_too_long` — more than 72 bytes.
-            `password_invalid` — the password holds a null character (`\u0000`).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "409":
-          description: "`email_taken` — (`changeEmail`) another account has the new address since the link was made. The account keeps its address."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
 
   /totp:
-    get:
-      tags: [account]
+    post:
+      tags: [auth]
+      operationId: startTotpSetup
       summary: "Two-factor: step 1, start the setup"
       description: |-
         Starts the setup of **TOTP** two-factor authentication (the 6-digit code from an app
-        such as Aegis, FreeOTP or Google Authenticator).
+        such as Aegis, FreeOTP or Google Authenticator). It is a `POST` because it **stores a new secret**.
 
         ### The three steps
 
         ```
-        GET    /totp          -> a new secret + a QR code      (state becomes "init")
-        POST   /totp {code}   -> confirm with one real code     (state becomes "active")
-        DELETE /totp?code=... -> turn it off                    (state becomes "disabled")
+        POST /totp                    -> a new secret + a QR code      (state becomes "init")
+        POST /totp/confirm {code}     -> confirm with one real code     (state becomes "active")
+        POST /totp/disable {code}     -> turn it off                    (state becomes "disabled")
         ```
 
-        Two-factor is **not active** after this call. It only becomes active after `POST /totp`
+        Two-factor is **not active** after this call. It only becomes active after `POST /totp/confirm`
         succeeds. Until then, login keeps working with the password alone. This way a user who
         loses the QR code mid-setup is never locked out.
+
+        The body is optional and has no field: send nothing, or `{}`.
 
         ### Using the response
 
@@ -1302,6 +1420,8 @@ paths:
         | `initSecret` | The raw base32 secret, for users who type it by hand. |
 
         `initSecret` and `otpauth` are as sensitive as a password. Never log them.
+
+        A read-only token is refused (`403` `read_only_token`), as for every `POST`.
       responses:
         "200":
           description: Setup started. The account state is now `init`.
@@ -1327,47 +1447,43 @@ paths:
                       qrcode:
                         type: string
                         description: A full SVG document, as a string.
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
         "409":
-          description: "`totp_already_enabled` — turn it off with `DELETE /totp` before setting it up again."
+          description: "`totp_already_enabled` — turn it off with `POST /totp/disable` before setting it up again."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
 
+  /totp/confirm:
     post:
-      tags: [account]
-      summary: "Two-factor: step 2, confirm and activate"
+      tags: [auth]
+      operationId: confirmTotp
+      summary: "Two-factor: step 2, turn it on with a code"
       description: |-
-        Confirms the setup started by `GET /totp`, by checking one code produced from the new
-        secret. **This is the call that actually turns two-factor on.**
-
-        From now on, `POST /token` needs `code` in addition to the password.
-
-        Call `GET /totp` first. Without a stored secret this call cannot succeed.
-
-        A wrong code answers `401` and changes nothing, so the user can simply try again. Codes
-        change every 30 seconds; a code that was correct a minute ago is no longer valid.
+        Confirms the setup with one real code from the authenticator app. From then on `POST /token` asks for a
+        `code`. The code is a string of digits (keep a leading zero: `"091710"`); a number is accepted too.
+        Spaces in a string are ignored.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              required: [code]
-              properties:
-                code:
-                  type: integer
-                  description: The 6-digit code shown by the authenticator app right now.
-                  example: 492013
+              $ref: '#/components/schemas/TotpCodeRequest'
       responses:
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
         "200":
-          description: Two-factor authentication is now active.
+          description: Two-factor authentication is on.
           content:
             application/json:
               schema:
@@ -1380,51 +1496,49 @@ paths:
                         type: string
                         enum: [active]
         "400":
-          description: "`totp_code_missing` — `code` is absent, empty, or not a positive number."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
-          description: |-
-            `unauthorized` — no valid token.
-            `totp_invalid` — the code does not match. Nothing was changed; the user can retry.
+          description: "`unauthorized` — no valid token. `totp_invalid` — the code is wrong or expired."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
         "409":
-          description: "`totp_already_enabled` — it is already active; there is nothing to confirm."
+          description: "`totp_already_enabled`."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
 
-    delete:
-      tags: [account]
+  /totp/disable:
+    post:
+      tags: [auth]
+      operationId: disableTotp
       summary: "Two-factor: turn it off"
       description: |-
-        Turns two-factor authentication off and **erases the stored secret**. The state becomes
-        `disabled`, not `never_used`, so you can still tell that the user once had it on.
+        Turns two-factor authentication off, with one real code from the authenticator app. The secret is erased.
 
-        A **valid current code is required**, as a query parameter. This is on purpose: someone
-        who steals a session cannot silently remove the second factor.
-
-        There is no recovery path here. A user who lost their authenticator app cannot disable
-        TOTP through the API and must contact support.
-      parameters:
-        - name: code
-          in: query
-          required: true
-          description: The 6-digit code shown by the authenticator app right now.
-          schema:
-            type: integer
-            example: 492013
+        It is a `POST` with the code in the body, not a `DELETE` with the code in the address: a one-time code does not
+        belong in a URL (it would be in the logs of every proxy), and `DELETE` takes no body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TotpCodeRequest'
       responses:
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
         "200":
-          description: Two-factor authentication is off and the secret is erased.
+          description: Two-factor authentication is off.
           content:
             application/json:
               schema:
@@ -1437,37 +1551,104 @@ paths:
                         type: string
                         enum: [disabled]
         "400":
-          description: "`totp_code_missing` — the `code` parameter is absent, empty, or not a positive number."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
-          description: |-
-            `unauthorized` — no valid token.
-            `totp_invalid` — the code does not match. Two-factor stays on.
+          description: "`unauthorized` — no valid token. `totp_invalid` — the code is wrong or expired."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
         "409":
-          description: "`totp_not_enabled` — two-factor was not active, so there is nothing to turn off."
+          description: "`totp_not_enabled`."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
 
   /account:
-    post:
+    get:
       tags: [account]
-      summary: Update the account (settings, login address, password)
+      operationId: getAccount
+      summary: The account and its settings
+      description: |-
+        Who the user is and their settings, in one small call. Make it after the sign-in and again when the app comes
+        back to the foreground: `method` and `temperatureTracking` tell you **which fields of a day to show**, so you
+        need them before you can draw anything.
+
+        The timeline is not here. The cycles (`allCyclesFirstDay`, `allPregnancyDates`) come with the days in
+        `GET /timeline_sync`, and the address of the news banner with `GET /server_info`.
+
+        ### Cheap to repeat: `ETag`
+
+        The answer carries a weak `ETag`. Send it back in `If-None-Match` and an account that did not change answers
+        `304`, with no body. (The `Cache-Control: no-store` of the API keeps a browser from doing this alone: a client
+        that wants it keeps the value and sends it itself.)
+
+        Nothing here is a secret: no password hash and no TOTP secret is ever returned.
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          description: The `ETag` of the last answer.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The account.
+          headers:
+            ETag:
+              description: Weak entity tag of the answer.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Account'
+        "304":
+          description: Unchanged since the `ETag` given. No body.
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+    patch:
+      tags: [account]
+      operationId: patchAccount
+      summary: Change the settings, the login address, the password
       description: |-
         **Every setting of the logged-in account is changed here**: its name, method, preferences,
         the addresses and the password.
 
-        **Unlike `POST /day`, this is a partial update.** Only the fields present in the body
-        are touched. Everything else keeps its value. Send a body with just the one setting you
-        want to change.
+        **This is a partial update**: only the fields present in the body are touched, everything else keeps its
+        value. (`PUT /day/{date}`, on the contrary, replaces a whole day.) An empty object `{}` is valid and changes
+        nothing. A field set to `null` is the same as a field that is not sent.
+
+        ### Strict: a wrong request is refused, and told in full
+
+        An **unknown** field, a **read-only** field of `GET /account` (`userId`, `inscriptionDate`, `totpState`) and a
+        **wrong value** are all refused with `400 validation_failed`, with every problem in `details.issues`.
+        Nothing is silently ignored any more, and nothing is changed when anything is wrong. See the introduction,
+        "Errors".
+
+        `method` and `temperatureTracking` are two fields: send only the one you change, the other keeps the value
+        the account has.
 
         ### What needs the password again
 
@@ -1477,169 +1658,58 @@ paths:
         | Field | What it does | Also needs |
         |---|---|---|
         | `newPassword` | sets the new password, at once (10 to 72 bytes, different from the current one) | `logoutOtherDevices: true` closes the other sessions |
-        | `notificationEmails` | the addresses that receive the finished cycles, the reminders and the warnings, with the login address. A list, `;` between two, 5 at most, `""` to empty it. Made at once; a notice goes to the login address | |
+        | `notificationEmails` | the addresses that receive the finished cycles, the reminders and the warnings, with the login address. A string, `;` between two, 5 at most, `""` to empty it. Made at once; a notice goes to the login address | |
         | `loginEmail` | **asks** to change the address that signs in. Nothing changes yet: a link goes to the **new** address and the change happens when it is used (`POST /verify_email`, purpose `changeEmail`, 1 day); the old address is told | the TOTP `code` when the account has one |
 
-        Without `password` the answer is `400` `missing_password`, with a wrong one `401`
-        `invalid_password`, and **nothing is changed**: everything is checked before anything is
-        written, so a refused request changes nothing at all. Sending the value the account
-        already has asks for no password (an unchanged `notificationEmails` is ignored; an
-        unchanged `loginEmail` is `400` `email_unchanged`). The sessions that are open stay open
+        Without `password` the answer is `400` (issue `password_required`), with a wrong one `401`
+        `invalid_password`, and **nothing is changed**: everything is checked before anything is written. Sending the
+        value the account already has asks for no password (an unchanged `notificationEmails` is ignored; an
+        unchanged `loginEmail` is refused, issue `email_unchanged`). The sessions that are open stay open
         when the login address changes. The two public demo accounts cannot change these three
         (`403` `demo_account`).
 
-        A wrong password or code here is not counted against the account (like `DELETE /totp`).
-
-        ### The other settings
-
-        The response lists what really changed in `fieldsUpdated`. Use it to confirm: a setting
-        from the list below that you sent but which does not appear there was **rejected or
-        ignored**, and the call still answered `200`. There is no validation error for a bad
-        value of those (the three above, which hand something over, are validated: `400`).
-
-        - `name` is ignored when it is not a string, is empty, or is longer than 255 characters.
-        - `birthYear` is ignored when it is not the current year or one of the 100 years before.
-        - `method` and `temperatureTracking` are stored together as one value. If you send only
-          one of the two, **the other falls back to its default** (`billings`, and `false`).
-          Always send both together. Both appear in `fieldsUpdated` under the single
-          name `method`.
+        A wrong password or code here is not counted against the account (like `POST /totp/disable`).
 
         ### The response
 
-        `loggedOutDevices` is there when `newPassword` was sent, `loginEmailLinkSent` when
-        `loginEmail` was: `false` means the mail with the link could not be sent. The link also goes
-        out for an address that another account has, as a mail telling its owner, with the same
+        `data` is the account after the change, as `GET /account` shows it. `meta` says what happened:
+        `fieldsUpdated` lists the settings that were written (`password` when `newPassword` was set; `loginEmail` is never
+        in it, because it changes when the link is used), `loggedOutDevices` is there when `newPassword` was sent,
+        `loginEmailLinkSent` when `loginEmail` was: `false` means the mail with the link could not be sent. The link
+        also goes out for an address that another account has, as a mail telling its owner, with the same
         answer: nobody can tell who has an account.
       requestBody:
         required: true
-        description: Every field is optional. An empty object `{}` is valid and changes nothing.
+        description: Every field is optional. `{}` is valid and changes nothing.
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                name:
-                  type: string
-                  maxLength: 255
-                  description: First name, or both first names when a couple shares the account. Ignored when empty or over 255 characters.
-                  example: Marie
-                password:
-                  type: string
-                  format: password
-                  description: The current account password. Required to change `newPassword`, `notificationEmails` or `loginEmail`; ignored otherwise.
-                newPassword:
-                  type: string
-                  format: password
-                  minLength: 10
-                  description: The new password. 10 characters at least, **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character, different from the current one. Needs `password`.
-                logoutOtherDevices:
-                  type: boolean
-                  default: false
-                  description: |-
-                    With `newPassword`: `true` closes every other session of the account (their tokens stop working,
-                    each of those devices has to log in again). The calling session stays open. The settings,
-                    the password change and the sign-out happen together or not at all.
-                loginEmail:
-                  type: string
-                  format: email
-                  description: The new login address. Spaces around it are ignored and it is stored in lower case. Needs `password` (and `code` with two-factor authentication). Takes effect when the link mailed to it is used.
-                  example: marie.new@example.org
-                code:
-                  type: string
-                  description: The TOTP code. Required with `loginEmail` when two-factor authentication is on; ignored otherwise.
-                  example: "123456"
-                notificationEmails:
-                  type: string
-                  description: The addresses that also receive the cycles by email, separated by `;` (5 at most, each valid, 1024 characters in all; lower case, duplicates and empty items dropped). Send `""` to empty the list. Needs `password`.
-                  example: partner@example.org;mother@example.org
-                method:
-                  type: string
-                  enum: [billings, fertilityCare]
-                  description: Tracking method. **Always send `temperatureTracking` with it.**
-                temperatureTracking:
-                  type: boolean
-                  description: Does the user also record basal temperature? **Always send `method` with it.**
-                birthYear:
-                  type: integer
-                  description: Year of birth, for anonymous statistics. Ignored unless it is the current year or up to 100 years earlier.
-                  example: 1994
-                timelineAscending:
-                  type: boolean
-                  description: |-
-                    Display preference only: `true` puts today at the top of the table. The API itself
-                    always returns days in ascending date order, whatever this is set to.
-                research:
-                  type: boolean
-                  description: Consent to contribute anonymous data to research programs.
-                sponsor:
-                  type: boolean
-                  description: Marks the account as a financial supporter of the project.
-                autoMailExport:
-                  type: boolean
-                  description: |-
-                    Send the export of each finished cycle by email (PDF, CSV and NFP file, to the login
-                    address and to `notificationEmails`). `true` by default for every account; `false` stops
-                    these emails.
-                lastWriteClientUtc:
-                  type: string
-                  format: date-time
-                  description: Your own clock, ISO 8601 UTC. The server uses its own clock if this is absent or invalid.
-                  example: "2026-03-10T15:30:45Z"
+              $ref: '#/components/schemas/AccountPatch'
+            examples:
+              rename:
+                summary: A setting
+                value:
+                  name: Marie
+              newPassword:
+                summary: A new password, closing the other sessions
+                value:
+                  password: the current passphrase
+                  newPassword: a new long passphrase
+                  logoutOtherDevices: true
       responses:
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          description: |-
-            `read_only_token` — the token is read-only.
-            `demo_account` — `newPassword`, `notificationEmails` or `loginEmail` on one of the two public demo accounts.
-            `cross_origin_refused` — a browser page of another origin sent this write (see section 3 of the introduction).
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
         "200":
-          description: |-
-            Request accepted. Read `fieldsUpdated` to see what really changed — it can be empty.
+          description: Done. Read `meta.fieldsUpdated` to see what really changed — it can be empty.
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      name:
-                        type: string
-                        description: The account name after the update.
-                      fieldsUpdated:
-                        type: array
-                        description: Names of the settings that were really changed (`password` when `newPassword` was set), empty when nothing was. `loginEmail` is never in it, because it changes when the link is used.
-                        items:
-                          type: string
-                          enum: [name, notificationEmails, method, birthYear, timelineAscending, research, sponsor, autoMailExport, password]
-                        example: [method]
-                      loggedOutDevices:
-                        type: integer
-                        description: Number of other sessions closed. Only when `newPassword` was sent; `0` unless `logoutOtherDevices` was `true`.
-                      loginEmailLinkSent:
-                        type: boolean
-                        description: Only when `loginEmail` was sent. `false` means the mail with the link could not be sent.
-                      lastWriteClientUtc:
-                        type: string
-                        format: date-time
-                        description: The timestamp that was stored, whether it came from you or from the server.
+                    $ref: '#/components/schemas/Account'
+                  meta:
+                    $ref: '#/components/schemas/AccountPatchMeta'
         "400":
-          description: |-
-            `invalid_json` — the body is not a JSON object.
-            `missing_password` — `newPassword`, `notificationEmails` or `loginEmail` would change and `password` is absent, empty or not a string.
-            `invalid_notification_emails` — `notificationEmails` is not a string of at most 5 valid addresses separated by `;`.
-            `invalid_email` — `loginEmail` is not a valid address.
-            `email_unchanged` — `loginEmail` is already the login address.
-            `invalid_parameter` — `newPassword` is not a non-empty string, or `logoutOtherDevices` is present but is not a JSON boolean.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           description: |-
             `unauthorized` — no valid token.
@@ -1650,31 +1720,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        "422":
+        "403":
           description: |-
-            `password_too_short` — `newPassword` has fewer than 10 characters.
-            `password_too_long` — more than 72 bytes.
-            `password_invalid` — it holds a null character (`\u0000`).
-            `password_unchanged` — it is the same as the current password.
+            `read_only_token` — the token is read-only.
+            `demo_account` — `newPassword`, `notificationEmails` or `loginEmail` on one of the two public demo accounts.
+            `cross_origin_refused` — a browser page of another origin sent this write (see section 3 of the introduction).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
 
-    delete:
+  /account/deletion:
+    post:
       tags: [account]
-      summary: Delete the account for good
+      operationId: deleteAccount
+      summary: Delete the account, for good
       description: |-
-        Deletes the logged-in account **permanently**. There is no undo and no grace period.
-        Days, descriptions, links and tokens all go with it, removed by database cascade.
+        Deletes the account for real: its days, labels and tokens go with it (database cascade). It needs the
+        password as confirmation. **It cannot be undone.**
 
-        The current password must be sent **in the body**, as a confirmation. Note that this
-        `DELETE` therefore carries a JSON body, which some HTTP clients do not send by default.
-
-        Offer `GET /all_of_my_data_plz` to the user before calling this, so they can keep a copy
-        of their data.
-
-        After `204`, throw your token away: it no longer exists.
+        It is a `POST` on `/account/deletion`, not a `DELETE` on `/account`: a `DELETE` takes no body (many HTTP
+        clients cannot send one), and the password has to travel somewhere.
       requestBody:
         required: true
         content:
@@ -1685,180 +1755,217 @@ paths:
               properties:
                 password:
                   type: string
-                  description: The current account password, as a confirmation.
+                  format: password
+                  description: The current password.
       responses:
+        "204":
+          description: The account is gone. The cookie is cleared.
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "401":
+          description: "`unauthorized` — no valid token. `invalid_password` — the password is wrong: nothing was deleted."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
-        "204":
-          description: Account deleted. No body. Your token is now invalid.
-        "400":
-          description: "`missing_password` (absent, empty or not a string) | `invalid_json`"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "401":
-          description: |-
-            `unauthorized` — no valid token.
-            `invalid_password` — wrong password. Nothing was deleted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
 
-  # ---------------------------------------------------------------------------
-  # OBSERVATIONS
-  # ---------------------------------------------------------------------------
-
-  /key_infos:
+  /timeline_sync:
     get:
-      tags: [observations]
-      summary: Account summary — call this first
+      tags: [timeline]
+      operationId: getTimelineSync
+      summary: What changed in the timeline since the last sync?
       description: |-
-        Everything a client needs at startup, in one call: who the user is, their settings, and
-        the shape of their timeline.
+        Brings a local copy of the timeline up to date: the days written since `since`, every label, the cycles and the
+        pregnancies. This is how several clients of the same account stay consistent without downloading the whole
+        timeline each time. (The account's settings are not here: `GET /account`.)
 
-        Call it right after login. `method` and `temperatureTracking` tell you **which fields of
-        a day to show**, so you need them before you can draw anything.
+        Read **section 8** of the introduction for the loop. In short:
 
-        `allCyclesFirstDay` is the list of every day flagged `cycleFirstDay: true`, newest
-        first. Together with `allPregnancyDates` it is enough to draw a cycle navigator without
-        downloading the whole timeline.
+        - take the cursor from `syncTimestamp` of the previous answer, **never from your own clock**; the very first call
+          sends no `since` at all, which reads from the start;
+        - repeat while `hasMore` is `true` (it is always `false` today, and the loop is part of the contract so that
+          paging can come without breaking anyone);
+        - the server subtracts a safety margin (120 seconds) and the bound is inclusive, so the
+          last days come back again: **replace what you hold, do not append**;
+        - a cleared day comes back empty, a deleted label is absent from `descriptions`, and a
+          change of cycle start brings back the days that follow it.
 
-        This endpoint is read-only and cheap. Nothing here is a secret: no password hash and no
-        TOTP secret is ever returned.
+        `days` is a flat array in date order. Each day is exactly what `GET /day/{date}` shows, `cycleStartDate` and
+        `cycleDay` included. `descriptions` is exactly `GET /description`. `allCyclesFirstDay` and `allPregnancyDates`
+        are **whole** every time (a few dozen dates): that is how a deletion reaches you.
+      parameters:
+        - name: since
+          in: query
+          required: false
+          description: |-
+            An RFC 3339 timestamp with a zone, normally the `syncTimestamp` of the previous call. **Leave it out
+            (or empty) the first time**: the sync then starts at `1970-01-01T00:00:00Z` and returns the whole timeline.
+            A zone is required (`Z` or `+02:00`, which is converted to UTC); a bare `2026-03-10 15:30:45` is refused.
+            In a URL, write the `+` of an offset as `%2B`.
+          schema:
+            type: string
+            format: date-time
+          example: "2026-03-10T15:30:45Z"
       responses:
         "200":
-          description: OK
+          description: OK. `days` can be empty, which simply means "no day changed".
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    $ref: '#/components/schemas/KeyInfos'
+                    $ref: '#/components/schemas/TimelineSync'
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /day:
     get:
-      tags: [observations]
-      summary: Read days
+      tags: [timeline]
+      operationId: listDays
+      summary: Read several days
       description: |-
-        Reads days from the timeline. The result is **an object keyed by date**, so you can look
-        a date up directly: `data["2026-03-10"]`.
+        Reads days from the timeline, **at most 100 per call** (a long list of dates makes a long URL). To read one
+        day use `GET /day/{date}`; to read everything use `GET /timeline_sync`.
 
-        ### Three ways to ask
+        ### Two ways to ask
 
         | Parameters | What you get |
         |---|---|
-        | none | **every** day stored on the account |
-        | `date=2026-03-10,2026-03-11` | exactly those dates |
-        | `start_date=...&end_date=...` | the days stored in that range, both ends **included** |
+        | `dates=2026-03-10,2026-03-11` | exactly those dates, **one entry each, empty days included** (1 to 100, duplicates answered once) |
+        | `from=2026-03-01&to=2026-03-31` | the days stored in that range, both ends **included** (at most 100 days from `from` to `to`) |
 
-        You may combine `date` with a range. The results are merged into one object.
+        `dates` and a range together, or neither, are refused (the message lists the accepted forms). The answer is a
+        **flat array sorted by date, oldest first**, `[]` when nothing matched.
 
-        ### Two behaviours worth knowing
-
-        **1. `date` never returns "not found".** If you ask for a date with no data, you get a
-        full day object with empty values instead of a `404`. A client can therefore render any
-        date without a special case:
-
-        ```json
-        { "data": { "2026-03-15": { "date": "2026-03-15", "stampColor": null, "isPeak": false, "comment": "", "...": null } } }
-        ```
-
-        **2. A range only returns days that exist.** It does not pad the gaps. So `date` gives
-        you one entry per date you asked for, while a 30-day range can come back with 4 entries.
-        Fill the gaps in your client if your view needs a continuous month.
-
-        ### One quirk to handle
-
-        When there is **no matching data at all**, `data` is an empty **array** `[]` instead of
-        an empty object `{}`:
-
-        ```json
-        { "data": [] }
-        ```
-
-        This comes from how PHP encodes an empty array as JSON. It is not a different shape to
-        support — in a typed language, treat an empty array here as an empty map.
-
-        Days always come back in **ascending date order**, whatever `timelineAscending` says in
-        the account settings: that flag is only a display preference for the web app.
+        A range only returns days that exist: it does not pad the gaps. `dates` gives you one entry per date you asked
+        for, so a client can render any date without a special case. Days always come in **ascending date order**,
+        whatever `timelineAscending` says in the account: that flag is only a display preference.
       parameters:
-        - name: date
+        - name: dates
           in: query
+          required: false
           description: |-
-            One or more dates `YYYY-MM-DD`, separated by commas. Spaces around them are allowed.
-            Every date you list is returned, even when it holds no data.
+            One to 100 dates `YYYY-MM-DD`, separated by commas. Spaces around them are allowed.
           schema:
             type: string
-            pattern: '^\s*\d{4}-\d{2}-\d{2}(\s*,\s*\d{4}-\d{2}-\d{2})*\s*$'
           example: "2026-03-10,2026-03-11"
-        - name: start_date
+        - name: from
           in: query
-          description: First date of the range, included. **Must be used together with `end_date`.**
+          required: false
+          description: First date of the range, included. **Goes with `to`.**
           schema:
             type: string
             format: date
-            pattern: '^\s*\d{4}-\d{2}-\d{2}\s*$'
           example: "2026-03-01"
-        - name: end_date
+        - name: to
           in: query
-          description: Last date of the range, included. **Must be used together with `start_date`.**
+          required: false
+          description: Last date of the range, included. **Goes with `from`**, not before it, at most 100 days after it (both ends counted).
           schema:
             type: string
             format: date
-            pattern: '^\s*\d{4}-\d{2}-\d{2}\s*$'
           example: "2026-03-31"
       responses:
         "200":
-          description: |-
-            An object keyed by date. Can be an empty array `[]` when nothing matched — see the
-            description above.
+          description: The days, oldest first.
           content:
             application/json:
               schema:
                 type: object
                 properties:
                   data:
-                    type: object
-                    additionalProperties:
+                    type: array
+                    items:
                       $ref: '#/components/schemas/Day'
         "400":
-          description: |-
-            `invalid_date` — a date is not a real `YYYY-MM-DD` date.
-            `invalid_date_range` — you sent only one of `start_date` / `end_date`.
+          $ref: '#/components/responses/ValidationFailed'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /day/{date}:
+    get:
+      tags: [timeline]
+      operationId: getDay
+      summary: Read one day
+      description: |-
+        Reads one day. **It never answers `404`**: a date with nothing stored is a full day object with empty values,
+        so a client can render any date without a special case.
+
+        ```json
+        { "data": { "date": "2026-03-15", "stampColor": null, "isPeak": false, "comment": "", "...": null } }
+        ```
+
+        The day carries the computed `cycleStartDate` and `cycleDay`.
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
+      responses:
+        "200":
+          description: The day, empty when nothing is stored for the date.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Day'
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "404":
+          $ref: '#/components/responses/NotFound'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
-    post:
-      tags: [observations]
+    put:
+      tags: [timeline]
+      operationId: putDay
       summary: Write one day (replaces the whole day)
       description: |-
-        Creates or replaces one day. The date in the body is the identifier — there is no id to
-        pass and no separate "create" and "update" call.
+        Creates or replaces one day. **The date is in the address** — there is no id to pass and no separate "create"
+        and "update" call. `PUT` is idempotent: sending the same write twice is harmless.
 
         ### Read this before your first write
 
         **This is not a partial update.** The body must carry the *complete* state of the day.
-        Any field you leave out is written as empty or `false`. There is no `PATCH`.
+        Any field you leave out is written as empty or `false`. There is no `PATCH` for a day.
 
         ```
-        correct:   GET the day -> change one field -> POST the whole object back
-        wrong:     POST {"date": "...", "comment": "new"}      <- clears everything else
+        correct:   GET the day -> change one field -> PUT the whole object back
+        wrong:     PUT {"comment": "new"}      <- clears everything else
         ```
+
+        The day you read can be sent back as it is: the fields the server computes (`cycleStartDate`, `cycleDay`,
+        `lastWriteDb`) are **accepted and dropped**, and a `date` in the body must be the date of the address (else
+        `date_mismatch`). Any other field the day does not have is refused (`unknown_field`, with a "did you mean"
+        when it is close). A field set to `null` is the same as a field that is not sent.
 
         The response body is the day as the server stored it, including the computed
         `cycleStartDate` and `cycleDay`. Use it to refresh your local copy — you do not need a
-        second `GET`.
+        second `GET`. `201` (with a `Location`) when the day was new, `200` when it replaced one.
 
         ### Starting a cycle
 
@@ -1873,24 +1980,16 @@ paths:
         existing label and keeps its original type.
 
         The day is the full state, so a label you do not send back is unlinked, `freeOther`
-        included: read the day, change what you mean to, and post all of it. A client that does
+        included: read the day, change what you mean to, and put all of it. A client that does
         not know `freeOther` and omits it silently unlinks the day's untyped labels.
 
-        ### Values the server quietly ignores
+        ### Values are checked, not dropped
 
-        Validation here is minimal. Only the date is checked strictly. These cases are **not**
-        errors — the value is simply dropped:
-
-        | What you send | What is stored |
-        |---|---|
-        | `stampColor` outside Red / Green / Yellow / White | no colour |
-        | `codifiedArrow` outside Up / Down / Right | `null` |
-        | `temperature` of `0` or less | `null` |
-        | `temperatureTime` without a valid `temperature` | `null` |
-        | `counterStart` of `0` or less | `null` |
-
-        So check your spelling: a typo in `stampColor` loses the stamp without telling you.
-        Compare the response body with what you sent if you are unsure.
+        A value the day cannot hold is refused with `400 validation_failed`, with **every** problem in
+        `details.issues` (`field`, `code`, `message`): a `stampColor` outside Red / Green / Yellow / White, a
+        `codifiedArrow` outside Up / Down / Right, a code outside the FertilityCare notation, a `temperature` that is
+        not a number from 0 to 99.99 (`0` means none), a `counterStart` that is not a whole number from 0 to 255, a
+        flag that is not `true` or `false`, a text over its limit. Nothing is stored when anything is wrong.
 
         ### A write that arrives late
 
@@ -1902,70 +2001,56 @@ paths:
         twice is harmless. When you get this answer, drop the change, `GET` the day again and show
         it to the user.
 
-        A write that carries no `lastWriteClientUtc` is stamped with the server's clock, so it is
-        never late. A stamp later than the server's clock does not shut other writers out: for
-        this comparison a stored day is never taken to be later than the server's clock when it
-        was written.
+        `lastWriteClientUtc` is an RFC 3339 timestamp **with a zone**: `Z`, or an offset that is converted to UTC.
+        A write that carries none is stamped with the server's clock, so it is never late. A stamp later than the
+        server's clock does not shut other writers out: for this comparison a stored day is never taken to be later
+        than the server's clock when it was written.
 
         ### Side effect
 
         Writing a day marks the account as active again. This matters because accounts with no
         activity for 4 years are deleted automatically.
+      parameters:
+        - $ref: '#/components/parameters/DatePath'
       requestBody:
         required: true
-        description: The **complete** day. `date` is required; everything else is optional but omitting it clears it.
+        description: The **complete** day, without its `date` (or with the date of the address). Everything is optional but omitting it clears it.
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/Day'
             examples:
               billings:
-                summary: Billings — first day of a cycle
+                summary: Billings — first day of a cycle (PUT /day/2026-03-10)
                 value:
-                  date: "2026-03-10"
                   cycleFirstDay: true
                   stampColor: Red
                   freeMucusSensation: [dry]
                   comment: cramps in the morning
                   lastWriteClientUtc: "2026-03-10T07:12:00Z"
               billingsPeak:
-                summary: Billings — peak day, with temperature
+                summary: Billings — peak day, with temperature (PUT /day/2026-03-22)
                 value:
-                  date: "2026-03-22"
                   stampColor: White
-                  stampBaby: true
                   isPeak: true
-                  counterStart: 3
-                  freeMucusSensation: [slippery]
-                  freeMucusObservation: [clear and stretchy]
-                  temperature: 36.75
+                  freeMucusObservation: [stretchy]
+                  temperature: 36.8
                   temperatureTime: "06:45:00"
-                  sexUnion: true
               fertilityCare:
-                summary: FertilityCare — codified day
+                summary: FertilityCare — codes (PUT /day/2026-03-12)
                 value:
-                  date: "2026-03-22"
-                  stampColor: White
-                  stampBaby: true
-                  isPeak: true
-                  codifiedMucusSensation: "10"
-                  codifiedMucusObservation: KL
-                  codifiedNumberObservations: X2
+                  stampColor: Green
+                  codifiedMucusSensation: "10WL"
+                  codifiedMucusObservation: CK
                   codifiedArrow: Up
-              notObserved:
-                summary: A day the user did not observe
-                value:
-                  date: "2026-03-14"
-                  dayNotObserved: true
       responses:
-        "415":
-          $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
-        "200":
-          description: |-
-            The day already existed and was replaced. You also get `200` for a date you deleted
-            earlier, because `DELETE` keeps the row — see `DELETE /day`.
+        "201":
+          description: The day was new. `Location` is its address.
+          headers:
+            Location:
+              description: "`/api/day/{date}`."
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -1973,8 +2058,8 @@ paths:
                 properties:
                   data:
                     $ref: '#/components/schemas/Day'
-        "201":
-          description: A new day was created on the timeline.
+        "200":
+          description: The day replaced the one stored.
           content:
             application/json:
               schema:
@@ -1983,130 +2068,83 @@ paths:
                   data:
                     $ref: '#/components/schemas/Day'
         "400":
-          description: |-
-            `invalid_json` — the body is not a JSON object.
-            `invalid_date` — `date` is absent, malformed, or not a real calendar date (for example
-            `2026-02-30`).
-            `invalid_day` — the day cannot be stored; `details.issues` lists every problem found: a
-            `comment` or a free-text label over 256 characters, a `stampColor`, `codifiedArrow` or
-            FertilityCare note outside its vocabulary, a `temperature` outside 0–99.99, a
-            `temperatureTime` that is not a time of day (`hh:mm` or `hh:mm:ss`), a `counterStart`
-            outside 0–255, or FertilityCare notes that do not fit once packed (32 characters). Nothing is
-            stored when there is one. The FertilityCare codes are accepted in any case and stored
-            upper-case; control characters are removed from the texts.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
-        "409":
-          description: |-
-            `stale_write` — the stored day was written after this change was made (its
-            `lastWriteClientUtc` is older). Nothing was stored. See "A write that arrives late".
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "405":
-          description: "`method_not_allowed` — only `GET`, `POST` and `DELETE` are supported on `/day`."
+          $ref: '#/components/responses/MethodNotAllowed'
+        "409":
+          description: "`stale_write` — this day was written more recently than this change (see \"A write that arrives late\"). Nothing was stored."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
     delete:
-      tags: [observations]
+      tags: [timeline]
+      operationId: deleteDay
       summary: Clear one day
       description: |-
-        Clears the content of one day: every field, and the free-text labels linked to it.
+        Clears a day: every field goes back to empty and the day's labels are unlinked. The row stays, empty, with the
+        time it was cleared — that is how `GET /timeline_sync` tells the other clients that the day is gone.
+        Clearing a date that was never written is a success (`204`).
 
-        ### It clears, it does not remove
-
-        The day **stays on the timeline** as an empty day. This has three visible consequences:
-
-        - the date still appears in `GET /day`, with all values empty;
-        - a later `POST` on that date answers `200`, not `201`;
-        - `GET /sync` reports it as a changed, empty day, which is how other clients learn about
-          the deletion. That is why the row is kept: it carries the time it was cleared.
-
-        ### What it clears
-
-        **The labels are unlinked from the day.** `freeMucusSensation`, `freeMucusObservation`
-        and `freeOther` come back empty, and the `useCount` of those labels goes down. The
-        labels themselves stay in `GET /description`: deleting one is `DELETE /description`.
-
-        **The cycle flag is cleared**, so deleting a day that started a cycle merges that cycle
-        into the previous one. Every later day gets a new `cycleStartDate` and `cycleDay`. Check
-        before deleting a day where `cycleFirstDay` is `true`.
-
-        On a day that exists, `POST /day` with only the date does the same. On a date that was
-        never written, `DELETE` does nothing and `POST` creates an empty day.
-
-        The call is idempotent, and a date that was never written is not an error.
+        `lastWriteClientUtc` has the same meaning as on `PUT`: a clear **made before** the last write of the day is
+        refused with `409 stale_write`. A `DELETE` takes no body, so the stamp is a query parameter.
       parameters:
-        - name: date
-          in: query
-          required: true
-          description: The date to clear, `YYYY-MM-DD`.
-          schema:
-            type: string
-            format: date
-            pattern: '^\s*\d{4}-\d{2}-\d{2}\s*$'
-          example: "2026-03-10"
+        - $ref: '#/components/parameters/DatePath'
         - name: lastWriteClientUtc
           in: query
           required: false
-          description: |-
-            Your clock when the user cleared the day, ISO 8601 UTC, kept as the time of the
-            deletion. Defaults to the server's time. A client that sends its changes later (it
-            was offline) gives the time they were made. A day written after that moment is not
-            cleared: `409 stale_write`, as for `POST /day`.
+          description: When the clear was made, on your clock. RFC 3339 with a zone. The server's clock when absent.
           schema:
             type: string
             format: date-time
-          example: "2026-03-10T07:12:00Z"
+          example: "2026-03-10T15:30:45Z"
       responses:
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
         "204":
-          description: Cleared. No body. Also returned for a date that held nothing.
+          description: The day is clear.
         "400":
-          description: "`invalid_date` — `date` is absent, or not a real `YYYY-MM-DD` date."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
-        "409":
-          description: |-
-            `stale_write` — the stored day was written after the moment given in
-            `lastWriteClientUtc`. It was not cleared: `GET` it again.
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "409":
+          description: "`stale_write` — the day was written more recently than this clear. Nothing was cleared."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /description:
-    # NOTE: the path stays singular (not /descriptions) because the JS frontend calls this URL.
-    # Renaming it would break the frontend, so it is left as is on purpose.
     get:
-      tags: [observations]
+      tags: [timeline]
+      operationId: listDescriptions
       summary: List the free-text labels
       description: |-
-        Lists every free-text label of the account, **most used first** (`useCount` descending).
-        This order is meant to be used directly: show the list as it comes, and the labels the
-        user picks most often are at the top.
-
-        `useCount` is the number of days currently linked to the label. A label with
-        `useCount: 0` is unused, and safe to delete.
-
-        Labels are created for you by `POST /day`, so a client usually only reads this endpoint.
-        Call it to fill a picklist, and after a rename or a delete to refresh the list.
+        Every label of the account, most used first (`useCount`: the number of days that carry it). A bare array.
       responses:
         "200":
-          description: OK. An empty array when the account has no labels yet.
+          description: The labels.
           content:
             application/json:
               schema:
@@ -2116,29 +2154,26 @@ paths:
                     type: array
                     items:
                       $ref: '#/components/schemas/Description'
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
     post:
-      tags: [observations]
-      summary: Create or rename a free-text label
+      tags: [timeline]
+      operationId: createDescription
+      summary: Create a label
       description: |-
-        One call does two jobs:
+        Creates a label. You rarely need to: a name sent in a day is created for you (see `PUT /day/{date}`). It exists
+        for a picklist ("most used first") and to prepare labels before they are used.
 
-        - **no `id`** → create a new label;
-        - **with `id`** → rename that label, or change its type.
-
-        A rename applies **everywhere at once**. Every day linked to the label shows the new
-        name immediately, because days point at the label by id, not by name.
-
-        You rarely need this to create a label: `POST /day` already creates any unknown name you
-        send. Use this endpoint for the "manage my labels" screen.
-
-        Names are **unique per account** and **case-sensitive**. `"Dry"` and `"dry"` can both
-        exist. A name already in use answers `409`.
-
-        Note that the response does **not** contain `useCount`. Call `GET /description` when you
-        need the counts again.
+        Names are **unique per account** and **case-sensitive**: a name that exists is `409 duplicate_name`. The type
+        is `sensation` or `observation` (`undefined` exists for the labels the v15 migration could not class: to classify
+        one, `PATCH` it).
       requestBody:
         required: true
         content:
@@ -2150,37 +2185,82 @@ paths:
                 name:
                   type: string
                   maxLength: 256
-                  description: The label text. Unique per account, case-sensitive. Leading and trailing spaces and control characters are removed, and the cleaned text is the one checked for a duplicate and for the length.
-                  example: clear and stretchy
+                  example: stretchy
                 type:
-                  type: string
-                  enum: [undefined, observation, sensation]
-                  description: "`sensation` = what the user feels. `observation` = what the user sees."
-                id:
-                  type: integer
-                  description: The label to rename or retype. Omit it to create a new label.
-                  example: 58
+                  $ref: '#/components/schemas/DescriptionType'
                 lastWriteClientUtc:
                   type: string
                   format: date-time
-                  description: Your own clock, ISO 8601 UTC. The server uses its own clock if this is absent or invalid.
-                  example: "2026-03-10T15:30:45Z"
+                  description: Your own clock, RFC 3339 with a zone. The server's clock when absent.
       responses:
+        "201":
+          description: Created. `Location` is its address.
+          headers:
+            Location:
+              description: "`/api/description/{id}`."
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/DescriptionWritten'
+        "400":
+          $ref: '#/components/responses/ValidationFailed'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "409":
+          description: "`duplicate_name` — a label of this account already has this name."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /description/{id}:
+    patch:
+      tags: [timeline]
+      operationId: patchDescription
+      summary: Rename or retype a label
+      description: |-
+        Changes the `name` and / or the `type` of a label, **everywhere at once**: every day that carries it shows the new
+        name or the new list (`freeMucusSensation` or `freeMucusObservation`) from then on, and comes back in the next
+        `GET /timeline_sync`. Send at least one of the two; what you do not send stays.
+      parameters:
+        - $ref: '#/components/parameters/DescriptionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 256
+                  example: very stretchy
+                type:
+                  $ref: '#/components/schemas/DescriptionType'
+                lastWriteClientUtc:
+                  type: string
+                  format: date-time
+                  description: Your own clock, RFC 3339 with a zone. The server's clock when absent.
+      responses:
         "200":
-          description: The existing label was renamed or retyped.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    $ref: '#/components/schemas/DescriptionWritten'
-        "201":
-          description: A new label was created.
+          description: Changed.
           content:
             application/json:
               schema:
@@ -2189,164 +2269,76 @@ paths:
                   data:
                     $ref: '#/components/schemas/DescriptionWritten'
         "400":
-          description: |-
-            `missing_fields` — `name` or `type` is absent or empty (a name of spaces only is empty).
-            `invalid_name` — `name` is not a string, or is over 256 characters once cleaned.
-            `invalid_id` — `id` is not an integer.
-            `invalid_type` — `type` is not one of the three allowed values.
-            `invalid_json` — the body is not a JSON object.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
+          $ref: '#/components/responses/ValidationFailed'
         "401":
           $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
         "404":
-          description: "`not_found` — no label with this `id` on your account."
+          description: "`not_found` — no label of this account has this id."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
         "409":
-          description: "`duplicate_name` — another label of this account already has this exact name."
+          description: "`duplicate_name` — another label of this account already has this name."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "415":
+          $ref: '#/components/responses/UnsupportedMediaType'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
     delete:
-      tags: [observations]
-      summary: Delete a free-text label
+      tags: [timeline]
+      operationId: deleteDescription
+      summary: Delete a label
       description: |-
-        Deletes a label **permanently, and unlinks it from every day at once**.
-
-        This is a real delete, not a clear. It is the one destructive operation in this group,
-        so check `useCount` from `GET /description` first and warn the user when it is not `0`.
-        The days themselves are kept; only the label disappears from them.
-
-        **Other clients learn it through `GET /sync`.** `descriptions` there always lists every
-        label, so the deleted one is missing, and the days that carried it come back without it
-        (see introduction, section 8).
+        Deletes a label **and its links to the days**: the days that carried it lose it, and come back in the next
+        `GET /timeline_sync` without it.
       parameters:
-        - name: id
-          in: query
-          required: true
-          description: The label to delete.
-          schema:
-            type: integer
-          example: 58
+        - $ref: '#/components/parameters/DescriptionId'
       responses:
-        "403":
-          $ref: '#/components/responses/CrossOriginRefused'
         "204":
-          description: Deleted. No body.
+          description: Deleted.
         "400":
-          description: |-
-            `missing_id` — the `id` parameter is absent or empty.
-            `invalid_id` — `id` is not an integer.
+          $ref: '#/components/responses/ValidationFailed'
+        "401":
+          $ref: '#/components/responses/Unauthorized'
+        "403":
+          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
-        "401":
-          $ref: '#/components/responses/Unauthorized'
         "404":
-          description: "`not_found` — no label with this `id` on your account."
+          description: "`not_found` — no label of this account has this id."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
-  /sync:
-    get:
-      tags: [observations]
-      summary: What changed since the last sync?
-      description: |-
-        Brings a local copy of the account up to date: the days written since `fromTimestamp`,
-        every label, and the account summary. This is how several clients of the same account
-        stay consistent without downloading the whole timeline each time.
-
-        Read **section 8** of the introduction for the loop. In short:
-
-        - take the cursor from `syncTimestamp` of the previous answer, never from your own clock;
-          the very first call sends no `fromTimestamp` at all, which reads from the start;
-        - the server subtracts a safety margin (120 seconds) and the bound is inclusive, so the
-          last days come back again: **replace what you hold, do not append**;
-        - a cleared day comes back empty, a deleted label is absent from `descriptions`, and a
-          change of cycle start brings back the days that follow it.
-
-        `days` is a flat array in date order, not an object keyed by date like `GET /day`. Each
-        day is exactly what `GET /day` shows, `cycleStartDate` and `cycleDay` included.
-        `descriptions` is exactly `GET /description`. `keyInfos` is exactly `GET /key_infos`.
-      parameters:
-        - name: fromTimestamp
-          in: query
-          required: false
-          description: |-
-            A UTC timestamp, normally the `syncTimestamp` of the previous call. **Leave it out
-            (or empty) the first time**: the sync then starts at `1970-01-01T00:00:00Z` and
-            returns the whole timeline. Both ISO 8601 (`2026-03-10T15:30:45Z`) and the bare form
-            (`2026-03-10 15:30:45`) are accepted. Any timezone offset you send is ignored, and the
-            value is read as UTC.
-          schema:
-            type: string
-            format: date-time
-          example: "2026-03-10T15:30:45Z"
-      responses:
-        "200":
-          description: OK. `days` can be empty, which simply means "no day changed".
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      syncTimestamp:
-                        type: string
-                        format: date-time
-                        description: |-
-                          The server clock when it started to answer. Send it as `fromTimestamp`
-                          next time, once you have merged this answer.
-                        example: "2026-03-10T15:31:02Z"
-                      days:
-                        type: array
-                        description: |-
-                          Changed days, in date order, as a flat array. A cleared day is there
-                          with every field empty.
-                        items:
-                          $ref: '#/components/schemas/Day'
-                      descriptions:
-                        type: array
-                        description: |-
-                          **Every** label of the account, not only the changed ones. A label that
-                          is not in the list does not exist any more.
-                        items:
-                          $ref: '#/components/schemas/Description'
-                      keyInfos:
-                        $ref: '#/components/schemas/KeyInfos'
-        "400":
-          description: "`invalid_timestamp` — `fromTimestamp` is sent but is not a valid UTC timestamp."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
-        "401":
-          $ref: '#/components/responses/Unauthorized'
-
-  # ---------------------------------------------------------------------------
-  # FILES
-  # ---------------------------------------------------------------------------
-
-  /export:
+  /export/{format}:
     get:
       tags: [files]
+      operationId: exportFile
       summary: Export a period as NFP, CSV or PDF
       description: |-
         Downloads a period of the timeline as a file. Three formats, three purposes:
 
-        | `type` | Content type | Purpose |
+        | `format` (in the address) | Content type | Purpose |
         |---|---|---|
         | `nfp` | `application/json` | **Portable data.** The NFP file format, to move data to another app, and what `POST /import` reads. See the `NfpFile` schema. |
         | `csv` | `text/csv; charset=utf-8` | A spreadsheet, one row per day, for a quick look at the values. |
@@ -2354,25 +2346,25 @@ paths:
 
         ### Reading errors from this endpoint
 
-        This endpoint is older than the JSON API. **It does not use the `error` envelope.**
-        Failures answer a plain-text message, in French, with content type `text/html`. So test
-        the HTTP status, not the body.
-
-        Unauthenticated requests answer `401` with **no body** and a `Location: auth` header.
+        A failure is the usual `error` envelope, in English, with a stable `code`: `validation_failed` (a missing or
+        malformed date, a `from` after `to`, a format that is none, a parameter nobody reads), `no_data_in_period`
+        (`404`: nothing is recorded between the two dates), `unauthorized` (`401`). A client that saves the file should
+        check the status first: only a `200` is a file.
 
         ### Rules on the parameters
 
-        - `start_date` must be **strictly before** `end_date`. Equal dates are rejected. So you
-          cannot export a single day.
-        - The period must contain at least one recorded day, otherwise you get `400`.
-        - For `type=nfp` the export is widened backwards to the **first day of the cycle**
-          containing `start_date`, so a cycle is never exported cut in half. The `csv` and `pdf`
+        - `from` and `to` are both **included**, and `from` may be equal to `to`: one day is a period.
+        - The period must contain at least one recorded day, otherwise you get `404 no_data_in_period`.
+        - For `nfp` the export is widened backwards to the **first day of the cycle**
+          containing `from`, so a cycle is never exported cut in half. The `csv` and `pdf`
           formats use exactly the dates you asked for.
-        - `anonymous=1` affects `pdf` and `nfp`: it leaves the user's name off the chart, and
+        - `anonymous=true` affects `pdf` and `nfp`: it leaves the user's name off the chart, and
           omits the `userInformation` block from the NFP file. The observations themselves are
-          unchanged. This is what you want before sharing either with a practitioner.
-        - `json_in_page=1` only affects `nfp`: it returns indented JSON inline instead of
-          triggering a file download. Useful for a quick look in a browser or in curl.
+          unchanged. This is what you want before sharing either with a practitioner. It is accepted, and
+          does nothing, for `csv`.
+        - `inline=true` only affects `nfp`: it returns indented JSON inline instead of
+          triggering a file download. Useful for a quick look in a browser or in curl. Accepted, and
+          without effect, for `csv` and `pdf`.
 
         ### What a CSV export contains
 
@@ -2439,7 +2431,7 @@ paths:
         ### What an NFP export contains
 
         `fileInformation` (this app and its version), `userMethodPreferences.preferredMethod`,
-        `userInformation` unless `anonymous=1`, and the cycles of the period — split at each
+        `userInformation` unless `anonymous=true`, and the cycles of the period — split at each
         cycle first day, each one a full run of dates with gaps written as `{}`.
 
         Re-importing an exported file reproduces the account exactly, with three expected
@@ -2450,61 +2442,57 @@ paths:
 
         This holds for every account, including ones carrying shapes the file format calls
         invalid — `POST /import` warns about those rather than refusing them, precisely so that
-        what this app exports it can read back. See "A file from `GET /export?type=nfp` always
+        what this app exports it can read back. See "A file from `GET /export/nfp` always
         imports" on `POST /import`.
 
         The response carries `Content-Disposition: attachment`, so a browser saves a file named
-        `moncycle_app_<date>.<ext>` — except for `type=nfp` with `json_in_page=1`.
+        `moncycle_app_<date>.<ext>` — except for `nfp` with `inline=true`.
       parameters:
-        - name: type
-          in: query
+        - name: format
+          in: path
           required: true
           description: The file format.
           schema:
             type: string
             enum: [nfp, csv, pdf]
-        - name: start_date
+        - name: from
           in: query
           required: true
-          description: First date, `YYYY-MM-DD`. Must be **strictly before** `end_date`.
+          description: First date, `YYYY-MM-DD`, included.
           schema:
             type: string
             format: date
-            pattern: '^\d{4}-\d{2}-\d{2}$'
           example: "2026-03-01"
-        - name: end_date
+        - name: to
           in: query
           required: true
-          description: Last date, `YYYY-MM-DD`.
+          description: Last date, `YYYY-MM-DD`, included. Not before `from`.
           schema:
             type: string
             format: date
-            pattern: '^\d{4}-\d{2}-\d{2}$'
           example: "2026-03-31"
-        - name: json_in_page
-          in: query
-          required: false
-          description: "`type=nfp` only. `1` = return indented JSON inline. `0` = download a `.nfp` file."
-          schema:
-            type: integer
-            enum: [0, 1]
-            default: 0
         - name: anonymous
           in: query
           required: false
           description: |-
-            `type=pdf` and `type=nfp`. `1` = leave the user's name off the chart, and omit
-            `userInformation` from the NFP file.
+            `pdf` and `nfp`. `true` = leave the user's name off the chart, and omit
+            `userInformation` from the NFP file. `false`, `1` and `0` are read too.
           schema:
-            type: integer
-            enum: [0, 1]
-            default: 0
+            type: boolean
+            default: false
+        - name: inline
+          in: query
+          required: false
+          description: "`nfp` only. `true` = return indented JSON inline. `false` = download a `.nfp` file."
+          schema:
+            type: boolean
+            default: false
       responses:
         "200":
           description: The file.
           headers:
             Content-Disposition:
-              description: "`attachment; filename=\"moncycle_app_<date>.<ext>\"`. Absent when `json_in_page=1`."
+              description: "`attachment; filename=\"moncycle_app_<date>.<ext>\"`. Absent when `inline=true`."
               schema:
                 type: string
           content:
@@ -2523,23 +2511,24 @@ paths:
                 type: string
                 format: binary
         "400":
-          description: |-
-            A plain-text message in French, **not** the `error` envelope. Causes: a missing or
-            malformed date; `start_date` not before `end_date`; a `type` outside the three values;
-            `anonymous` or `json_in_page` outside `0` / `1`; or no recorded day in the period.
-
-            Note that `anonymous` is now validated for every `type`, not only `pdf`.
-          content:
-            text/html:
-              schema:
-                type: string
-                example: "ERREUR: la 'start_date' doit être antérieure à la 'end_date'."
+          $ref: '#/components/responses/ValidationFailed'
         "401":
-          description: "Not authenticated. No body, and a `Location: auth` header."
+          $ref: '#/components/responses/Unauthorized'
+        "404":
+          description: "`no_data_in_period` — there is no recorded day between `from` and `to`. `not_found` — no format in the address."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+        "405":
+          $ref: '#/components/responses/MethodNotAllowed'
+        "503":
+          $ref: '#/components/responses/ServiceUnavailable'
 
   /import:
     post:
       tags: [files]
+      operationId: importNfp
       summary: Import an NFP file into the account
       description: |-
         Reads an NFP file and writes its cycles into the logged-in account.
@@ -2548,7 +2537,7 @@ paths:
         > report failures in its own `err_code` / `err_message` / `err_list` shape. It now
         > writes, answers an `ImportReport` inside the standard `data` envelope, and reports
         > failures with the standard `error` envelope. `override` now does something, and
-        > `dryRun=1` replaces the old check-only behaviour with a full preview: it reports what
+        > `dryRun=true` replaces the old check-only behaviour with a full preview: it reports what
         > the write would do, down to which days the account already holds.
 
         The body is the NFP file itself, which is JSON: send it with
@@ -2571,10 +2560,10 @@ paths:
 
         ### Days that already have data
 
-        `override=0` (the default) leaves those dates untouched and lists them in `daysSkipped`.
-        `override=1` replaces them whole — including their free-text labels — exactly like a
-        `POST /day`, which also carries the full state of a day. Either way they are counted in
-        `daysAlreadyInAccount`, and `dryRun=1` fills all three without writing, so the choice
+        `override=false` (the default) leaves those dates untouched and lists them in `daysSkipped`.
+        `override=true` replaces them whole — including their free-text labels — exactly like a
+        `PUT /day/{date}`, which also carries the full state of a day. Either way they are counted in
+        `daysAlreadyInAccount`, and `dryRun=true` fills all three without writing, so the choice
         can be made with the dates in hand.
 
         A day the file leaves empty (`{}`) is a gap: it is not written, and it does not count as
@@ -2593,7 +2582,7 @@ paths:
           union).
         - `warnings` — accepted and imported, but worth showing the user: a cycle whose
           `method` differs from the account's, or one of the file shapes listed under
-          "A file from `GET /export?type=nfp` always imports" below.
+          "A file from `GET /export/nfp` always imports" below.
 
         A cycle of **any** `method` imports, `symptothermic_fr` included: the fields every
         method shares are kept, and the rest is reported.
@@ -2624,9 +2613,9 @@ paths:
 
         `userInformation` and `userMethodPreferences` are read but **never applied**. A file
         cannot rename the account, change its address, or switch its method — that is what
-        `POST /account` is for. Both appear in `ignoredFields`.
+        `PATCH /account` is for. Both appear in `ignoredFields`.
 
-        ### A file from `GET /export?type=nfp` always imports
+        ### A file from `GET /export/nfp` always imports
 
         Whatever this app writes, it reads back. That is a property the endpoint is built to
         hold, not a coincidence: anything `/export` can emit and the import would rather not
@@ -2675,29 +2664,17 @@ paths:
           in: query
           required: false
           description: |-
-            `0` leaves dates that already have data alone and reports them in `daysSkipped`.
-            `1` replaces them. It is read on a dry run too, which answers the lists the way the
+            `false` (`0`) leaves dates that already have data alone and reports them in `daysSkipped`.
+            `true` (`1`) replaces them. It is read on a dry run too, which answers the lists the way the
             value given would have them.
           schema:
-            type: integer
-            enum: [0, 1]
-            default: 0
-        - name: overide
-          in: query
-          required: false
-          deprecated: true
-          description: |-
-            The first, misspelled name of `override`, still read so that a client written for it
-            keeps working. When both are sent, `override` is the one used. Use `override`.
-          schema:
-            type: integer
-            enum: [0, 1]
-            default: 0
+            type: boolean
+            default: false
         - name: dryRun
           in: query
           required: false
           description: |-
-            `1` answers what a real import would do, **without writing anything**.
+            `true` (`1`) answers what a real import would do, **without writing anything**.
 
             Every check runs, and the account is read to resolve what stage 4 would otherwise
             only discover as it writes, so the report is the one the real run would answer —
@@ -2711,7 +2688,7 @@ paths:
             `duplicatedDaysInFile` listing the dates two cycles of the file share. See the
             `400` response.
 
-            So: send `dryRun=1` to show the user what is at stake and let them decide on
+            So: send `dryRun=true` to show the user what is at stake and let them decide on
             `override`, then send the same file again without it.
           schema:
             type: integer
@@ -2757,7 +2734,7 @@ paths:
 
             | `code` | Meaning |
             |---|---|
-            | `invalid_parameter` | `override` or `dryRun` is not `0`/`1` |
+            | `validation_failed` | a query parameter is wrong: unknown, `override` or `dryRun` not `true`/`false`/`1`/`0`, a `lastWriteClientUtc` that is no timestamp (see `error.details.issues`) |
             | `empty_body` | no request body |
             | `invalid_encoding` | the body is not valid UTF-8 |
             | `invalid_json` | not JSON, too deeply nested, or the top level is not an object |
@@ -2812,11 +2789,12 @@ paths:
   /all_of_my_data_plz:
     get:
       tags: [files]
+      operationId: getRawData
       summary: Download everything (GDPR)
       description: |-
         Returns **all** data held about the logged-in account, as one CSV file. This covers the
         GDPR right of access, and it is also the right thing to offer a user before
-        `DELETE /account`.
+        `POST /account/deletion`.
 
         The file is not a clean table. It is three blocks, one after another, each with its own
         header row:
@@ -2833,7 +2811,7 @@ paths:
         strings appear as `abc [masqué] xyz`.
 
         This is a human-readable dump for the user, not a machine format. To move data to
-        another app, use `GET /export?type=nfp`.
+        another app, use `GET /export/nfp`.
       responses:
         "200":
           description: The CSV file.
@@ -2900,6 +2878,102 @@ components:
               code: cross_origin_refused
               message: This request comes from a page that is not allowed to write to this API.
 
+    ValidationFailed:
+      description: |-
+        `validation_failed` — the request says something the server cannot accept: an unknown field, a value of the wrong
+        type or out of range, a date that is not one, a body on a request that takes none... **Every** problem found is in
+        `error.details.issues`, with the field it is about, a stable `code` and a message in English (see the introduction,
+        "Errors that tell the whole story"). Nothing was done.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorEnvelope'
+          example:
+            error:
+              code: validation_failed
+              message: "The request is not valid: 2 problems (see details.issues). First: Unknown field 'stampColour'. Did you mean 'stampColor'?"
+              details:
+                issues:
+                  - field: stampColour
+                    code: unknown_field
+                    message: "Unknown field 'stampColour'. Did you mean 'stampColor'?"
+                  - field: temperature
+                    code: wrong_type
+                    message: "'temperature' must be a decimal number, got string."
+
+    MethodNotAllowed:
+      description: "`method_not_allowed` — this address does not take this method. The `Allow` header lists the ones it takes."
+      headers:
+        Allow:
+          description: The methods this address takes, for example `GET, PATCH`.
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: method_not_allowed
+              message: "Method PUT is not supported here. Supported: GET, PATCH."
+
+    NotFound:
+      description: "`not_found` — this address does not exist (an unknown path after the name of the endpoint)."
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: not_found
+              message: This URL does not exist.
+
+    ServiceUnavailable:
+      description: |-
+        `maintenance` — the operator put the server in maintenance; nothing was read or done, try again later.
+        `schema_mismatch` — the database is not at the version this code needs; nothing works until the operator runs
+        the migrations. `GET /server_info` says which of the two.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+          example:
+            error:
+              code: maintenance
+              message: The server is under maintenance. Try again later.
+
+  parameters:
+
+    DatePath:
+      name: date
+      in: path
+      required: true
+      description: A real calendar date, `YYYY-MM-DD`. It is the identifier of the day.
+      schema:
+        type: string
+        format: date
+      example: "2026-03-10"
+
+    DescriptionId:
+      name: id
+      in: path
+      required: true
+      description: The `id` of a label, as `GET /description` gives it (a whole number from 1).
+      schema:
+        type: integer
+        minimum: 1
+      example: 58
+
+    TokenPrefix:
+      name: prefix
+      in: path
+      required: true
+      description: "The first 5 characters of a token (`prefix` in `GET /token`): letters and digits."
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9]{5}$'
+      example: aB3x9
+
   schemas:
 
     Error:
@@ -2913,8 +2987,9 @@ components:
             A stable slug, meant for your program. It does not change, so you can branch on it
             safely. Each endpoint lists the codes it can return.
 
-            Codes you may meet anywhere: `unauthorized` (no valid token), `invalid_json` (the body
-            is not a JSON object), `unexpected_error` (a server fault — retry, then report it with
+            Codes you may meet anywhere: `unauthorized` (no valid token), `validation_failed` (the request
+            says something the server cannot accept: see `details.issues`), `invalid_json` (the body
+            is not a JSON object), `method_not_allowed`, `not_found`, `schema_mismatch` (status `503`), `unexpected_error` (a server fault — retry, then report it with
             the `X-Request-Id` of the response), `maintenance` (the server is in maintenance, status
             `503`: nothing was read or done, try again later).
           example: invalid_credentials
@@ -2998,20 +3073,6 @@ components:
             after a refused attempt, ask for a new one.
           example: 1790000000.9f2c6b1e0d4a8f7c3b5e2a1d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b
 
-    TokenRevokeRequest:
-      type: object
-      description: Exactly one of `prefix` and `all`.
-      properties:
-        prefix:
-          type: string
-          pattern: '^[A-Za-z0-9]{5}$'
-          description: The token to revoke, by its first 5 characters (`prefix` in `GET /token`). Your own is a logout.
-          example: aB3x9
-        all:
-          type: boolean
-          enum: [true]
-          description: Revoke every token but the one of this request.
-
     Token:
       type: object
       description: A token of the account, as `GET /token` and `POST /token` show it. The token itself is not part of it.
@@ -3020,7 +3081,7 @@ components:
           type: string
           nullable: true
           description: |-
-            The first 5 characters of the token: they tell the tokens of one app apart, and `DELETE /token` names a token by them.
+            The first 5 characters of the token: they tell the tokens of one app apart, and `DELETE /token/{prefix}` names a token by them.
             Unique within the account. `null` only for a token made before v15 that started like another one of its account
             (it can only be revoked with `all`).
           example: aB3x9
@@ -3066,9 +3127,11 @@ components:
             The day the token dies: the date asked for with `expiresInDays`, else a year after `createdAt`
             (a token without a date is also erased after 40 days without use).
 
-    KeyInfos:
+    Account:
       type: object
-      description: The account summary returned by `GET /key_infos`.
+      description: |-
+        The account and its settings, as `GET /account` shows them (and `PATCH /account` answers). `userId`, `inscriptionDate` and
+        `totpState` are read-only: sent in a `PATCH`, they are refused.
       properties:
         userId:
           type: integer
@@ -3118,21 +3181,6 @@ components:
           description: |-
             Is the export of each finished cycle sent by email (PDF, CSV and NFP file)? `true` by
             default.
-        allCyclesFirstDay:
-          type: array
-          description: |-
-            Every date flagged `cycleFirstDay: true`, **newest first**. Enough to draw a cycle
-            navigator without downloading the timeline.
-          items:
-            type: string
-            format: date
-          example: ["2026-03-10", "2026-02-11", "2026-01-14"]
-        allPregnancyDates:
-          type: array
-          description: "Every date flagged `booleanPregnancyDetected: true`, newest first."
-          items:
-            type: string
-            format: date
         totpState:
           type: string
           enum: [never_used, disabled, init, active, unknown]
@@ -3142,7 +3190,7 @@ components:
             | Value | Meaning |
             |---|---|
             | `active` | On. `POST /token` needs a `code`. |
-            | `init` | `GET /totp` was called but never confirmed. Login still works with the password alone. |
+            | `init` | `POST /totp` was called but never confirmed. Login still works with the password alone. |
             | `disabled` | It was on, and the user turned it off. |
             | `never_used` | Never set up. |
             | `unknown` | No state stored. A brand-new account reports this; treat it exactly like `never_used`. |
@@ -3151,24 +3199,15 @@ components:
           format: date-time
           nullable: true
           description: When the account settings were last written, from the client clock. `null` if never.
-        newsUrl:
-          type: string
-          format: uri
-          nullable: true
-          description: |-
-            The https page the web app reads its news banner from: the `NEWS_URL` setting of the instance
-            (the official instance's page unless the operator changed it). `null` when it is off, and
-            for any value that is not an https URL. Not about the account: it is the same for everyone.
-          example: https://www.moncycle.app/actu.html
 
     Day:
       type: object
       description: |-
         One day of the timeline — the central object of this API. Used by `GET /day`,
-        `POST /day` and `GET /sync`.
+        `GET /day/{date}`, `PUT /day/{date}` and `GET /timeline_sync`.
 
         **On write, send the whole object.** Any field you leave out is cleared. See
-        `POST /day`.
+        `PUT /day/{date}`. The read-only fields below can be left in when you send a day back: they are dropped.
 
         Three groups of fields:
 
@@ -3186,14 +3225,15 @@ components:
           type: string
           format: date
           description: |-
-            `YYYY-MM-DD`. This is the identifier of the day. **Required on write**; ignored in the
-            body on read. Must be a real calendar date.
+            `YYYY-MM-DD`. This is the identifier of the day. On write it is the date of the address
+            (`PUT /day/{date}`): leave it out of the body, or send the same date (else `date_mismatch`).
           example: "2026-03-10"
 
         cycleStartDate:
           type: string
           format: date
           nullable: true
+          readOnly: true
           description: |-
             **Read-only, computed.** The first day of the cycle this date belongs to: the closest
             day at or before it with `cycleFirstDay: true`. `null` when no cycle has started yet.
@@ -3201,6 +3241,7 @@ components:
         cycleDay:
           type: integer
           nullable: true
+          readOnly: true
           description: |-
             **Read-only, computed.** Position of this date inside its cycle, starting at `1`.
             `null` when `cycleStartDate` is `null`.
@@ -3256,7 +3297,7 @@ components:
         booleanPregnancyDetected:
           type: boolean
           default: false
-          description: A pregnancy was detected on this date. These dates are also listed in `GET /key_infos`.
+          description: A pregnancy was detected on this date. These dates are also listed in `GET /timeline_sync` (`allPregnancyDates`).
 
         freeMucusSensation:
           type: array
@@ -3356,21 +3397,23 @@ components:
           format: date-time
           nullable: true
           description: |-
-            Your own clock, ISO 8601 UTC. The server uses its own clock if this is absent or
-            invalid. It is stored and returned as given; `GET /sync` does not use it.
+            Your own clock, RFC 3339 with a zone (`Z` or an offset, converted to UTC). The server uses its own clock if
+            this is absent or outside what it can store; a value that is not a timestamp is refused. It decides which of
+            two writes of a day is the latest; `GET /timeline_sync` does not use it.
           example: "2026-03-10T07:12:00Z"
         lastWriteDb:
           type: string
           format: date-time
           nullable: true
+          readOnly: true
           description: |-
             **Read-only.** The server clock at the last write of the day, or of a label it
-            carries. `GET /sync` selects days on this field.
+            carries. `GET /timeline_sync` selects days on this field.
           example: "2026-03-10T07:12:03Z"
 
     Description:
       type: object
-      description: A reusable free-text label, as returned by `GET /description` and `GET /sync`.
+      description: A reusable free-text label, as returned by `GET /description` and `GET /timeline_sync`.
       properties:
         id:
           type: integer
@@ -3395,7 +3438,7 @@ components:
     DescriptionWritten:
       type: object
       description: |-
-        What `POST /description` returns. It is the same label as `Description`, but with
+        What `POST /description` and `PATCH /description/{id}` return. It is the same label as `Description`, but with
         `lastWriteClientUtc` instead of `useCount`. Call `GET /description` when you need the
         counts.
       properties:
@@ -3419,7 +3462,7 @@ components:
       type: object
       description: |-
         The **NFP file format**: a portable JSON file for moving cycle data between NFP apps.
-        Produced by `GET /export?type=nfp`, read and written by `POST /import`.
+        Produced by `GET /export/nfp`, read and written by `POST /import`.
 
         It is not the live API shape, and it carries its own version number, independent of the
         app version. Only `schemaVersion` `"1.0"` is supported.
@@ -3427,7 +3470,7 @@ components:
         ### Reading older files
 
         Three variants of version 1.0 are in circulation. `POST /import` accepts all three;
-        `GET /export` always writes the first.
+        `GET /export/nfp` always writes the first.
 
         | | current | early draft | moncycle.app 14 |
         |---|---|---|---|
@@ -3529,7 +3572,7 @@ components:
         the per-cycle `method` is what decides how a cycle is read.
 
         **On import this block is read but never applied** — the account's method is only
-        changed from `POST /account`. It is reported in `ignoredFields`.
+        changed from `PATCH /account`. It is reported in `ignoredFields`.
       properties:
         preferredMethod:
           type: string
@@ -3641,7 +3684,7 @@ components:
             The user's free notes. Joined with newlines into the single `comment` of the live
             `Day`, which holds **256 characters** — a longer result rejects the file.
 
-            `GET /export` also writes the day's labels with no type yet (`freeOther`) here, as one
+            `GET /export/nfp` also writes the day's labels with no type yet (`freeOther`) here, as one
             last entry joined with `", "`. A name that would take the day past the 256 characters
             is left out of the file, so that an export always imports.
           items:
@@ -3689,7 +3732,7 @@ components:
             `booleanCervixMucus` or `booleanCervixAperture` on the same day.
 
             `day_timeline` has no such rule: `day_not_observed` is one column among the rest,
-            and a day can carry it next to a stamp or a label, so `GET /export` writes that
+            and a day can carry it next to a stamp or a label, so `GET /export/nfp` writes that
             combination. `POST /import` therefore **accepts** it, keeps both exactly as the
             account had them, and reports the contradiction in `warnings`.
           example: true
@@ -3825,16 +3868,11 @@ components:
       properties:
         dryRun:
           type: boolean
-          description: True when `dryRun=1` was sent, so nothing was written.
+          description: True when `dryRun=true` was sent, so nothing was written.
           example: false
         override:
           type: boolean
           description: The `override` value that was applied.
-          example: false
-        overide:
-          type: boolean
-          deprecated: true
-          description: The same value as `override`, under its first, misspelled name. Read `override`.
           example: false
         schemaVersion:
           type: string
@@ -3948,6 +3986,308 @@ components:
             - "[file] userInformation: the account's own identity is never changed by an import."
             - "[2007-01-25] codifiedManualFertility: fertility is computed for display, not stored."
 
+    ValidationIssue:
+      type: object
+      description: One thing wrong in a request.
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          description: |-
+            Where. A body field (`stampColor`, `freeMucusSensation[2]`), `query.<name>` for a query parameter,
+            `path.<name>` for a part of the address, `body` for the body as a whole.
+          example: stampColor
+        code:
+          type: string
+          description: A stable slug to branch on.
+          enum: [unknown_field, read_only_field, missing_field, wrong_type, invalid_value, out_of_range, too_long, too_many, invalid_date, invalid_timestamp, invalid_email, date_mismatch, body_not_allowed, password_required, password_too_short, password_too_long, password_invalid, password_unchanged, email_unchanged, invalid_range]
+          example: invalid_value
+        message:
+          type: string
+          description: A sentence in English. It names the field and says what is expected; it never holds the value of a password, a code or a text.
+          example: "'stampColor' must be one of Green, Red, Yellow, White, or null."
+
+    ValidationErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details]
+          properties:
+            code:
+              type: string
+              enum: [validation_failed]
+            message:
+              type: string
+              description: A summary for a human (the first problem, and how many there are).
+            details:
+              type: object
+              required: [issues]
+              properties:
+                issues:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/ValidationIssue'
+
+    ServerInfo:
+      type: object
+      description: What `GET /server_info` says. Fields may be added; none is ever renamed or removed.
+      properties:
+        app:
+          type: string
+          example: moncycle.app
+        apiVersion:
+          type: integer
+          description: The version of this contract. A client that finds a number greater than the one it was written for must stop and ask the user to update.
+          example: 2
+        serverVersion:
+          type: string
+          description: The release that runs (`15dev` on a development tree).
+          example: "15"
+        build:
+          type: string
+          format: date
+          nullable: true
+          description: The build date; `null` on a development tree.
+        commit:
+          type: string
+          nullable: true
+          description: The short git commit of the build; `null` on a development tree.
+        schemaVersion:
+          type: integer
+          nullable: true
+          description: The version the database says it is at (`key_value`, row `schema_version`). `null` in maintenance (the database is not opened) or when it says none.
+          example: 15
+        status:
+          type: string
+          enum: [ok, maintenance, schema_mismatch]
+        registrationEnabled:
+          type: boolean
+          description: Does this instance accept new accounts?
+        demoEnabled:
+          type: boolean
+          description: Are the two public demo accounts on?
+        captchaAvailable:
+          type: boolean
+          description: "`false` when the instance has no `CAPTCHA_SECRET`: register and recover_password answer `503 captcha_unavailable`."
+        newsUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: |-
+            The https page the web app reads its news banner from: the `NEWS_URL` setting of the instance. `null` when it is off, and
+            for any value that is not an https URL.
+          example: https://www.moncycle.app/actu.html
+        limits:
+          type: object
+          description: The numbers a form can check before it sends anything.
+          properties:
+            passwordMinBytes:
+              type: integer
+              example: 10
+            passwordMaxBytes:
+              type: integer
+              example: 72
+            accountNameMaxChars:
+              type: integer
+              example: 255
+            registerCommentMaxChars:
+              type: integer
+              example: 255
+            notificationEmailsMax:
+              type: integer
+              example: 5
+            birthYearMaxAge:
+              type: integer
+              description: A birth year is this year or up to this many years back.
+              example: 100
+            tokenNameMaxChars:
+              type: integer
+              example: 256
+            tokenExpiresInDaysMin:
+              type: integer
+              example: 1
+            tokenExpiresInDaysMax:
+              type: integer
+              example: 365
+            dayCommentMaxChars:
+              type: integer
+              example: 256
+            descriptionNameMaxChars:
+              type: integer
+              example: 256
+            counterStartMax:
+              type: integer
+              example: 255
+            temperatureMin:
+              type: number
+              example: 0
+            temperatureMax:
+              type: number
+              example: 99.99
+            queryDaysMax:
+              type: integer
+              description: How many dates (`dates`) or days (`from` to `to`) one `GET /day` reads.
+              example: 100
+            requestBodyMaxBytes:
+              type: integer
+              description: The biggest request body any endpoint takes.
+              example: 262144
+
+    TimelineSync:
+      type: object
+      properties:
+        syncTimestamp:
+          type: string
+          format: date-time
+          description: |-
+            The server clock when it started to answer. Send it as `since` next time, once you have merged this answer.
+          example: "2026-03-10T15:31:02Z"
+        hasMore:
+          type: boolean
+          description: "`true` when there is more to fetch: call again with `since` = `syncTimestamp`. Always `false` today."
+        days:
+          type: array
+          description: |-
+            Changed days, in date order, as a flat array. A cleared day is there with every field empty.
+          items:
+            $ref: '#/components/schemas/Day'
+        descriptions:
+          type: array
+          description: |-
+            **Every** label of the account, not only the changed ones. A label that is not in the list does not exist any more.
+          items:
+            $ref: '#/components/schemas/Description'
+        allCyclesFirstDay:
+          type: array
+          description: |-
+            Every date flagged `cycleFirstDay: true`, **newest first**, whole every time. Enough to draw a cycle navigator.
+          items:
+            type: string
+            format: date
+          example: ["2026-03-10", "2026-02-11", "2026-01-14"]
+        allPregnancyDates:
+          type: array
+          description: "Every date flagged `booleanPregnancyDetected: true`, newest first, whole every time."
+          items:
+            type: string
+            format: date
+
+    AccountPatch:
+      type: object
+      description: |-
+        Every field is optional. A field that is not in this list is refused (`unknown_field`), and so are the read-only fields
+        of `Account` (`userId`, `inscriptionDate`, `totpState`).
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: First name, or both first names when a couple shares the account. Not empty, at most 255 characters.
+          example: Marie
+        password:
+          type: string
+          format: password
+          description: The current account password. Required to change `newPassword`, `notificationEmails` or `loginEmail`; ignored otherwise.
+        newPassword:
+          type: string
+          format: password
+          minLength: 10
+          description: The new password. 10 characters at least, **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character, different from the current one. Needs `password`.
+        logoutOtherDevices:
+          type: boolean
+          default: false
+          description: |-
+            With `newPassword` (sending it as `true` without `newPassword` is refused): `true` closes every other session of the
+            account (their tokens stop working, each of those devices has to log in again). The calling session stays open.
+            The settings, the password change and the sign-out happen together or not at all.
+        loginEmail:
+          type: string
+          format: email
+          description: The new login address. Spaces around it are ignored and it is stored in lower case. Needs `password` (and `code` with two-factor authentication). Takes effect when the link mailed to it is used.
+          example: marie.new@example.org
+        code:
+          type: string
+          description: The TOTP code. Required with `loginEmail` when two-factor authentication is on; ignored otherwise.
+          example: "123456"
+        notificationEmails:
+          type: string
+          description: The addresses that also receive the cycles by email, separated by `;` (5 at most, each valid, 1024 characters in all; lower case, duplicates and empty items dropped). Send `""` to empty the list. Needs `password`.
+          example: partner@example.org;mother@example.org
+        method:
+          type: string
+          enum: [billings, fertilityCare]
+          description: Tracking method. Exactly one of the two values. `temperatureTracking` keeps its value when you do not send it.
+        temperatureTracking:
+          type: boolean
+          description: Does the user also record basal temperature? `method` keeps its value when you do not send it.
+        birthYear:
+          type: integer
+          description: Year of birth, for anonymous statistics. The current year or up to 100 years earlier.
+          example: 1994
+        timelineAscending:
+          type: boolean
+          description: |-
+            Display preference only: `true` puts today at the top of the table. The API itself
+            always returns days in ascending date order, whatever this is set to.
+        research:
+          type: boolean
+          description: Consent to contribute anonymous data to research programs.
+        sponsor:
+          type: boolean
+          description: Marks the account as a financial supporter of the project.
+        autoMailExport:
+          type: boolean
+          description: |-
+            Send the export of each finished cycle by email (PDF, CSV and NFP file, to the login
+            address and to `notificationEmails`). `true` by default for every account; `false` stops
+            these emails.
+        lastWriteClientUtc:
+          type: string
+          format: date-time
+          description: Your own clock, RFC 3339 with a zone. The server's clock when absent.
+          example: "2026-03-10T15:30:45Z"
+
+    AccountPatchMeta:
+      type: object
+      properties:
+        fieldsUpdated:
+          type: array
+          description: Names of the settings that were written (`password` when `newPassword` was set). Empty when nothing was. `loginEmail` is never in it, because it changes when the link is used.
+          items:
+            type: string
+            enum: [name, notificationEmails, method, birthYear, timelineAscending, research, sponsor, autoMailExport, password]
+          example: [method]
+        loggedOutDevices:
+          type: integer
+          description: Number of other sessions closed. Only when `newPassword` was sent; `0` unless `logoutOtherDevices` was `true`.
+        loginEmailLinkSent:
+          type: boolean
+          description: Only when `loginEmail` was sent. `false` means the mail with the link could not be sent.
+
+    TotpCodeRequest:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          description: The one-time code of the authenticator app, as a string of digits (a leading zero matters). A number is accepted too.
+          example: "091710"
+
+    RevokedTokens:
+      type: object
+      properties:
+        revoked:
+          type: integer
+          description: How many tokens were revoked.
+          example: 3
+
+    DescriptionType:
+      type: string
+      enum: [undefined, observation, sensation]
+      description: "`sensation` = what the user feels. `observation` = what the user sees. `undefined` = neither was recorded (the labels the v15 migration could not class)."
+      example: sensation
+
   securitySchemes:
 
     HTTPtoken:
@@ -3960,7 +4300,7 @@ components:
         Authorization: Bearer <token>
         ```
 
-        Use this for apps, scripts and mobile clients. It wins over the cookie if both are sent.
+        Use this for apps, scripts and mobile clients. It wins over the cookie if both are sent, and is then the only credential looked at.
         A token made without `expiresInDays` is purged after 40 days without use, or when it is a year old;
         one made with it dies on that day. `DELETE /token` destroys the one you send.
 

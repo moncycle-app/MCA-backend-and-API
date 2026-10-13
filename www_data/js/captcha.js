@@ -82,7 +82,7 @@ var moncycle_captcha = (function () {
 			}).fail(function (jqXHR) {
 				if (mine !== requested) return;
 				clear();
-				const code = ((jqXHR.responseJSON || {}).error || {}).code;
+				const code = moncycle_store.error_code(jqXHR);
 				// an address the server finds incomplete is not a failure of the captcha: there is just no picture yet
 				if (options.error) options.error(code === "invalid_email" ? "" : load_errors[code] || "Le captcha n'a pas pu être chargé.");
 			});
