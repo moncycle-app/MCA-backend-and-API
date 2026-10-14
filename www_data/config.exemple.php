@@ -82,7 +82,7 @@ define("LOGIN_IP_MAX_ATTEMPTS", 30);
 // 503 captcha_unavailable. Several instances behind one address must share the same value.
 define("CAPTCHA_SECRET", "");
 
-// Logs (lib/log.php, README "Logs").
+// Logs (lib/log.php, docs/logs.md).
 // The least severe level written: off, error, warning, info, debug.
 define("LOG_LEVEL", "info");
 // The categories written: auth, account, data, export, mail, system, http. Empty: all.

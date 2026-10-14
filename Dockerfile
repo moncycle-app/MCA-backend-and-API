@@ -12,7 +12,7 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 RUN a2enmod headers rewrite \
 	&& a2dismod -f status autoindex auth_basic authn_file authz_user access_compat env setenvif
 
-# no Apache access log: the app writes its own (lib/log.php, README "Logs"), whose `http.request` line
+# no Apache access log: the app writes its own (lib/log.php, docs/logs.md), whose `http.request` line
 # has no query string, where this one has `DELETE /api/totp?code=<TOTP code>` and the dates of a read.
 # ErrorLog stays (stderr). The build fails if a CustomLog directive is left (apache2.conf has a comment that names it).
 RUN sed -i '/CustomLog/d' /etc/apache2/sites-available/*.conf /etc/apache2/conf-available/*.conf \
@@ -47,7 +47,7 @@ ENV APP_SCRIPT_ALLOW="127.0.0.1 ::1"
 ENV NEWS_URL="https://www.moncycle.app/actu.html"
 # the daily job (cron.php at 3:30, container time zone) runs inside the container, and so does the hourly reset of the
 # demo accounts when DEMO_ENABLED (a setting of the app, off by default); false to run them from the host (README,
-# "Security") or not at all.
+# "Cron") or not at all.
 ENV CRON_ENABLED="true"
 ENV COMPOSER_ALLOW_SUPERUSER=1
 

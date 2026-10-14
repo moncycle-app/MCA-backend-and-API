@@ -97,7 +97,7 @@ define("LOGIN_IP_MAX_ATTEMPTS", env_int("LOGIN_IP_MAX_ATTEMPTS", 30));
 // challenges in flight, and several instances behind one address must share the same value.
 define("CAPTCHA_SECRET", env_string("CAPTCHA_SECRET"));
 
-// Logs (lib/log.php, README "Logs"). A value that is not one of the allowed ones takes the default:
+// Logs (lib/log.php, docs/logs.md). A value that is not one of the allowed ones takes the default:
 // a typo never turns the log off.
 // The least severe level written: off, error, warning, info, debug.
 define("LOG_LEVEL", env_choice("LOG_LEVEL", LOG_LEVEL_VALUES, "info"));

@@ -9,11 +9,11 @@
 
 // The app's own log: what happened, to which account, to which row, from where -- never the
 // content. The app holds personal data, so a line says "account 21 wrote day 4412", not what the day
-// holds; what is never logged is in README.md ("Logs"), and log_scrub() is how a message that may
+// holds; what is never logged is in docs/logs.md, and log_scrub() is how a message that may
 // carry an address or an SQL fragment is made fit for it.
 //
 // One line per event: a flat JSON object (or "key=value" text), to stdout, stderr or a file
-// (LOG_OUTPUT). The events are LOG_EVENTS (constants.php), the keys their glossary in the README.
+// (LOG_OUTPUT). The events are LOG_EVENTS (constants.php), the keys their glossary in docs/logs.md.
 //
 // Logging never breaks a request: nothing here throws, writes to the response or queries the
 // database. An unwritable file, an unencodable value or a bad setting is swallowed.
@@ -159,7 +159,7 @@ function log_ip(string $ip): ?string {
 // Writing an event
 // ---------------------------------------------------------------------------
 
-// Logs an event of LOG_EVENTS. $fields are its own keys (see the README glossary); a "uid" or "sid"
+// Logs an event of LOG_EVENTS. $fields are its own keys (see the glossary of docs/logs.md); a "uid" or "sid"
 // among them wins over the request's. $level overrides the event's, for the one whose outcome
 // decides it. Nothing is written when the level or the category is not kept.
 function log_event(string $event, array $fields = [], ?string $level = null): void {

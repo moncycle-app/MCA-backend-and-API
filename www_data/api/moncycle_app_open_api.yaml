@@ -11,10 +11,8 @@ info:
     an account. It is the backend of the moncycle.app web app. Other clients (mobile apps,
     scripts, research tools) can use the same API.
 
-    This page is written to be read from top to bottom the first time. After that, use it as a
-    reference. Plain English is used on purpose, so that non-native speakers can read it
-    quickly. Domain words (peak day, stamp, Billings…) are explained in the
-    **Glossary** at the end.
+    Read this page from top to bottom the first time, then use it as a reference. Domain words
+    (peak day, stamp, Billings…) are explained in the **Glossary** at the end.
 
     ---
 
@@ -49,7 +47,7 @@ info:
     `cycleFirstDay: true`. To correct a wrong cycle start, you write that same day again with
     `cycleFirstDay: false`. Everything after it moves to the previous cycle automatically.
 
-    This is the whole mindset of the API. Keep it in mind and the rest follows.
+    That is the whole mindset of the API.
 
     ## 2. Rules for every response
 
@@ -71,25 +69,22 @@ info:
     Show `message` to a human, or log it. Never parse it. An optional `details` object may
     carry extra context.
 
-    **Rule 3 — the HTTP status code is real.** `200` means it worked. `401` means you are not
-    logged in. `409` means a conflict. `413` means the request body is over 256 KB, whichever
-    endpoint it was sent to. `415` means a write was not sent as JSON, and `403` with the code
-    `cross_origin_refused` means a browser page of another origin tried to write (both in
-    section 3). `503` with the code `maintenance` means the operator put the server in
-    maintenance: every endpoint answers it, whatever the method, before it reads or writes
-    anything, and nothing was done; try again later. The only one that does not is
-    `GET /server_info`, which answers `200` with `status: "maintenance"` so that a client can say what is
-    going on. `503` with `schema_mismatch` means the database is not at the version this code needs: nothing
-    works until the operator runs the migrations. Check the status first, then the body.
+    **Rule 3 — the HTTP status code is real.** `200` means it worked, `401` that you are not logged in,
+    `409` a conflict, `413` that the request body is over 256 KB (whichever endpoint it was sent to), `415` that
+    a write was not sent as JSON, and `403` with the code `cross_origin_refused` that a browser page of another
+    origin tried to write (both in section 3). `503` with the code `maintenance` means the operator put the
+    server in maintenance: every endpoint answers it before it reads or writes anything, so nothing was done;
+    try again later. Only `GET /server_info` stays up, with `status: "maintenance"`, so that a client can say
+    what is going on. `503` with `schema_mismatch` means the database is not at the version this code needs:
+    nothing works until the operator runs the migrations. Check the status first, then the body.
 
     **Rule 4 — `meta` is about the answer, not part of it.** A few answers carry a sibling `meta` next to `data`
     (`PATCH /account`: what was changed). It is how information can be added to a list later without turning the list
     into an object.
 
-    **Every response carries an `X-Request-Id` header** (but `GET /health_check`). It is
-    the id the server's own log uses for that request: quote it when you report a problem. You
-    may send your own in an `X-Request-Id` request header (letters, digits and `._:-`, 64
-    characters at most) and it is used instead; anything else is ignored and the server makes one.
+    **Every response carries an `X-Request-Id` header** (but `GET /health_check`): the id the server's log
+    uses for that request, to quote when you report a problem. You may send your own in an `X-Request-Id`
+    request header (letters, digits and `._:-`, 64 characters at most); anything else is ignored.
 
     A method an endpoint does not take answers `405 method_not_allowed` with an `Allow` header. A `401` carries
     `WWW-Authenticate: Bearer`. A `201` carries a `Location`.
@@ -127,10 +122,8 @@ info:
 
     - `field` says where: the name of a body field (`stampColor`, `freeMucusSensation[2]`), `query.from` for a query
       parameter, `path.date` for a part of the address.
-    - `code` is a stable slug you can branch on: `unknown_field`, `read_only_field`, `missing_field`, `wrong_type`,
-      `invalid_value`, `out_of_range`, `too_long`, `too_many`, `invalid_date`, `invalid_timestamp`, `invalid_email`,
-      `invalid_range`, `date_mismatch`, `body_not_allowed`, `password_required`, `password_too_short`,
-      `password_too_long`, `password_invalid`, `password_unchanged`, `email_unchanged`.
+    - `code` is a stable slug you can branch on (`unknown_field`, `wrong_type`, `out_of_range`, `too_long`,
+      `invalid_date`…; the full list is the `ValidationIssue` schema).
     - `message` is a sentence for a human that names the field, says what came (a type, never the value of a
       password, a code or a text) and what is expected (the type, the allowed values, the limit).
 
@@ -175,15 +168,14 @@ info:
     - A token lives until you destroy it (`DELETE /token`) or the server purges it. Made without
       `expiresInDays`, it is deleted by the daily cron when it has **not been used for 40 days**, or is
       **more than a year old**, whatever its use. Made with `expiresInDays`, it dies on that day whatever
-      its use, and from that moment it opens nothing. The next call with it answers `401`: sign in again.
-      The cookie is set for 5 years (the same day as the token, with `expiresInDays`), so it can outlive its token.
-    - There is no refresh step.
+      its use, and opens nothing from then on. The next call with it answers `401`: sign in again. There is
+      no refresh step. The cookie is set for 5 years (the same day as the token, with `expiresInDays`), so it
+      can outlive its token.
     - `DELETE /token` destroys **one** token (the one you used); `DELETE /token/{prefix}` destroys the token that starts
       with these 5 characters, `DELETE /token?others=true` every other one, and `GET /token` lists them
-      (prefix, name, scope, dates, user agent, network).
+      (prefix, name, scope, dates, user agent, network). One account can hold many tokens (one per device), with no limit.
     - A token has a **scope**: `readWrite`, or `readOnly` (it reads, and can end its own session).
-      Nothing else limits a token: there are no roles, and a read-write token can do everything its account can.
-    - One account can hold many valid tokens at the same time (one per device), with no limit.
+      There are no roles: a read-write token can do everything its account can.
     - Missing or wrong token on a protected endpoint → `401` with code `unauthorized`.
     - **Every body is JSON.** Send `Content-Type: application/json` (a parameter such as
       `; charset=utf-8` is fine) with every `POST`, `PUT` and `PATCH`, and with
@@ -208,9 +200,8 @@ info:
     # -> 200 {"data":{"app":"moncycle.app","apiVersion":2,"status":"ok","registrationEnabled":true,"limits":{...},...}}
     ```
 
-    Creating an account needs a captcha. The server keeps nothing about it: `POST /captcha` gives
-    a picture and a signed **token**, and you send the token back with what the human read.
-    No cookie is involved.
+    Creating an account needs a captcha, which the server keeps nowhere: `POST /captcha` gives a picture
+    and a signed **token**, and you send the token back with what the human read (no cookie).
 
     ```bash
     # 1. Ask for a challenge for this address: a picture (a data URI) and a token.
@@ -228,10 +219,10 @@ info:
     # -> 202 {"data":{"sent":true}}
     ```
 
-    **No password is ever sent by email.** The user chooses it here (10 to 72 bytes). The account cannot
-    be signed in to until its address is proved: the mail holds a link (a page of the app, with a token
-    in its fragment) that the page posts to `POST /verify_email` with `purpose: "accountCreation"`. Until
-    then `POST /token` answers `403 email_not_verified`.
+    The user chooses the password here (10 to 72 bytes). The account cannot be signed in to until its
+    address is proved: the mail holds a link (a page of the app, with a token in its fragment) that the page
+    posts to `POST /verify_email` with `purpose: "accountCreation"`. Until then `POST /token` answers
+    `403 email_not_verified`.
 
     Then log in and keep the token:
 
@@ -292,19 +283,18 @@ info:
     | A time of day | `hh:mm:ss` | `06:45:00` |
     | A timestamp | RFC 3339, **with a zone**; the server always answers in UTC with `Z` | `2026-03-10T05:32:48Z` |
 
-    What you send as a timestamp (`lastWriteClientUtc`, `since`) is an RFC 3339 timestamp **with a zone**: `Z`, or an
-    offset such as `+02:00`, which the server **converts to UTC** (`2026-03-10T07:32:48+02:00` is `05:32:48Z`).
-    Fractional seconds are accepted (`2026-03-10T05:32:48.123Z`, what a browser's `toISOString()` writes). A time with
-    no zone, and the bare `2026-03-10 05:32:48`, are refused (`invalid_timestamp`). In a URL, write the `+` of an
-    offset as `%2B`. Convert to local time in your client.
+    A timestamp you send (`lastWriteClientUtc`, `since`) is RFC 3339 **with a zone**: `Z`, or an offset such as
+    `+02:00`, which the server **converts to UTC** (`2026-03-10T07:32:48+02:00` is `05:32:48Z`). Fractional seconds
+    are accepted (what a browser's `toISOString()` writes); a time with no zone, or the bare `2026-03-10 05:32:48`,
+    is refused (`invalid_timestamp`). In a URL, write the `+` of an offset as `%2B`. Convert to local time in your
+    client.
 
     Two timestamps appear on days, descriptions and the account:
 
-    - **`lastWriteClientUtc`** — *your* clock. You send it. If you omit it, or it is outside what the server can
-      store (a clock far in the past or the future), the server writes its own clock instead. A value that is not a
-      timestamp at all is an error. It is stored and returned as you gave it, in UTC. On a
-      day, it also decides which write is the latest: see "A write that arrives late" on
-      `PUT /day/{date}`.
+    - **`lastWriteClientUtc`** — *your* clock, which you send. Omitted, or outside what the server can store (a
+      clock far in the past or the future), it is replaced by the server's clock; a value that is not a timestamp
+      is an error. It is stored and returned in UTC. On a day, it also decides which write is the latest: see
+      "A write that arrives late" on `PUT /day/{date}`.
     - **`lastWriteDb`** — the server clock. Read-only. The server always sets it. This is the
       field `GET /timeline_sync` is based on, so a wrong clock on your side cannot make you miss anything.
 
@@ -349,8 +339,8 @@ info:
     - A name keeps the type it was first created with. If "dry" already exists as an
       `observation`, sending it inside `freeMucusSensation` links the existing `observation`
       label. It does not create a second one.
-    - A label can have no type yet (`type: "undefined"`). These are the texts the v15 migration
-      could not class. A day shows them in `freeOther`, and keeps them only if you send them
+    - A label can have no type yet (`type: "undefined"`): nobody said whether it is a sensation or an
+      observation. A day shows such labels in `freeOther`, and keeps them only if you send them
       back there. To classify one, `PATCH /description/{id}` with the new `type`: every
       day that carries it then shows it in `freeMucusSensation` or `freeMucusObservation`.
 
@@ -387,12 +377,11 @@ info:
     What the server does for you, so that this loop is enough:
 
     - **The server clock decides, not yours.** Days are selected on `lastWriteDb`, and
-      `syncTimestamp` comes from the same clock. A client whose clock is wrong misses nothing. **Take the cursor from
-      `syncTimestamp` only**, never from your own clock, and treat it as a value to hand back, not to compute with.
+      `syncTimestamp` comes from the same clock, so a client with a wrong clock misses nothing. **Take the cursor from
+      `syncTimestamp` only**, and hand it back as it is.
     - **A safety margin is taken for you.** The server reads from 120 seconds *before*
-      `since`: a write is stamped when it starts but only seen when it is committed, and
-      the bound is inclusive anyway. So the last days of a sync come back in the next one.
-      **Your merge must tolerate a day received twice** — replacing it is enough.
+      `since` (a write is stamped when it starts but seen when it is committed), so the last days of a sync
+      come back in the next one. **Your merge must tolerate a day received twice** — replacing it is enough.
     - **Deletions are reported.** `DELETE /day/{date}` does not remove the row: the day stays, empty,
       with the time it was cleared, and comes back in `days` with every field empty. A deleted
       label is absent from `descriptions`, which always lists all of them: forget the ones that
@@ -401,9 +390,8 @@ info:
     - **A change of cycle reports the cycle.** Setting or clearing `cycleFirstDay` changes the
       `cycleStartDate` and `cycleDay` of every following day up to the next first day. Those days
       come back too, so you never have to compute a cycle yourself.
-    - **Nothing is paged yet.** The answer is as big as the changed days (about 500 bytes a day). The
-      first call returns the whole timeline, and `hasMore` is `false`; a client that loops on `hasMore` already
-      handles the day it is not.
+    - **Nothing is paged yet.** The answer is as big as the changed days (about 500 bytes a day) and `hasMore`
+      is `false`; a client that loops on `hasMore` is ready for the day it is not.
 
     ## 9. Login protection
 
@@ -427,10 +415,9 @@ info:
     correct password, so a third party cannot lock someone out.
 
     One exception: an account with **two-factor authentication on**. Once the password is known,
-    the one-time code is all that is left to guess, so a wrong code is counted like a wrong
-    password and, from the lockout threshold on, the code is no longer looked at: even the right
-    one is refused with `403` `account_locked`. Someone who knows the password can therefore keep
-    such an account locked while they keep trying.
+    only the one-time code is left to guess, so a wrong code counts like a wrong password and,
+    from the lockout threshold on, even the right code is refused with `403` `account_locked`.
+    Someone who knows the password can therefore keep such an account locked while they keep trying.
 
     ## 10. Privacy by design
 
@@ -448,8 +435,7 @@ info:
       database cascade. It needs the password as confirmation.
     - An account with no activity for 4 years is deleted automatically.
     - The server's log says what happened, to which account and to which row, never the content:
-      no password, token, e-mail address, query string, observation or description text. The
-      log of the operator who hosts the app is theirs to rotate and to keep short.
+      no password, token, e-mail address, query string, observation or description text.
 
     ## 11. Glossary
 
@@ -689,7 +675,7 @@ paths:
         Creates an account with the password the caller gives, and **emails a link that proves the
         address**. The account cannot be signed in to until the link is used (`POST /verify_email`,
         purpose `accountCreation`): `POST /token` answers `403 email_not_verified` meanwhile. An account
-        whose address is not proved within 7 days is erased. No password is ever sent by email.
+        whose address is not proved within 7 days is erased.
 
         ### The answer does not say whether the address is new
 
@@ -855,8 +841,7 @@ paths:
         for what it was made for: a different purpose, address or network, an altered expiry or
         a token that was used up all answer `captcha_invalid`, with no clue as to which.
 
-        The response carries `Cache-Control: no-store`. Only `POST` is accepted (the former
-        `GET /captcha`, which answered a JPEG and set a cookie, is gone).
+        The response carries `Cache-Control: no-store`. Only `POST` is accepted.
       security: []
       requestBody:
         required: true
@@ -1220,7 +1205,7 @@ paths:
           description: Logged out. Also returned when you were not logged in.
           headers:
             Set-Cookie:
-              description: Expires `MONCYCLEAPP_TOKEN` (and the legacy `MONCYCLEAPP_JETTON`).
+              description: Expires `MONCYCLEAPP_TOKEN`.
               schema:
                 type: string
         "200":
@@ -1644,8 +1629,8 @@ paths:
 
         An **unknown** field, a **read-only** field of `GET /account` (`userId`, `inscriptionDate`, `totpState`) and a
         **wrong value** are all refused with `400 validation_failed`, with every problem in `details.issues`.
-        Nothing is silently ignored any more, and nothing is changed when anything is wrong. See the introduction,
-        "Errors".
+        Nothing is silently ignored, and nothing is changed when anything is wrong. See the introduction,
+        "Errors that tell the whole story".
 
         `method` and `temperatureTracking` are two fields: send only the one you change, the other keeps the value
         the account has.
@@ -2172,7 +2157,7 @@ paths:
         for a picklist ("most used first") and to prepare labels before they are used.
 
         Names are **unique per account** and **case-sensitive**: a name that exists is `409 duplicate_name`. The type
-        is `sensation` or `observation` (`undefined` exists for the labels the v15 migration could not class: to classify
+        is `sensation` or `observation` (`undefined` is a label nobody classified yet: to classify
         one, `PATCH` it).
       requestBody:
         required: true
@@ -2382,11 +2367,10 @@ paths:
         | 3, 4 (FertilityCare) | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `codifiedBleedingObservation` `codifiedMucusSensation` `codifiedMucusObservation` `codifiedNumberObservations` `codifiedPainObservations` `codifiedArrow` [`temperature` `temperatureTime`] `isPeak` `sexUnion` `booleanPregnancyDetected` `comments` |
 
         - `temperature` and `temperatureTime` only for methods 1 and 4.
-        - `comments` holds the day's comment, then the free text the v15 migration could not
-          class as sensation or observation (descriptions of type `undefined`, the `freeOther`
-          of a `Day`), joined with `, ` and added after the comment with ` | ` between the two
-          (`cramps | old text, another`). They never replace the comment, and have no column of
-          their own. The PDF charts do the same in their comment column (Billings) or cell
+        - `comments` holds the day's comment, then the labels with no type yet (descriptions of
+          type `undefined`, the `freeOther` of a `Day`), joined with `, ` and added after the
+          comment with ` | ` between the two (`cramps | some text, another`). They never replace
+          the comment, and have no column of their own. The PDF charts do the same in their comment column (Billings) or cell
           (FertilityCare), and so does the NFP file, as one more entry of the day's `comments`.
 
         Values:
@@ -2533,12 +2517,9 @@ paths:
       description: |-
         Reads an NFP file and writes its cycles into the logged-in account.
 
-        > **Changed in 15.** This endpoint used to validate only, answer `{"import": "ok"}` and
-        > report failures in its own `err_code` / `err_message` / `err_list` shape. It now
-        > writes, answers an `ImportReport` inside the standard `data` envelope, and reports
-        > failures with the standard `error` envelope. `override` now does something, and
-        > `dryRun=true` replaces the old check-only behaviour with a full preview: it reports what
-        > the write would do, down to which days the account already holds.
+        It answers an `ImportReport` inside the standard `data` envelope, and reports failures with the
+        standard `error` envelope. `dryRun=true` is a full preview: it reports what the write would do, down
+        to which days the account already holds.
 
         The body is the NFP file itself, which is JSON: send it with
         `Content-Type: application/json`. Any other type is refused with `415`.
@@ -3082,7 +3063,7 @@ components:
           nullable: true
           description: |-
             The first 5 characters of the token: they tell the tokens of one app apart, and `DELETE /token/{prefix}` names a token by them.
-            Unique within the account. `null` only for a token made before v15 that started like another one of its account
+            Unique within the account. `null` for a token whose first characters another token of the account shares
             (it can only be revoked with `all`).
           example: aB3x9
         name:
@@ -3308,9 +3289,8 @@ components:
             `freeMucusObservation` is reused and keeps its original type — names are unique per
             account whatever their type. Names are case-sensitive.
 
-            In the NFP **file** format these labels are an array too. Files written by
-            moncycle.app 14 held one comma-joined string instead; `POST /import` still reads
-            those.
+            In the NFP **file** format these labels are an array too; `POST /import` also reads
+            the form older files use, one comma-joined string.
           items:
             type: string
             maxLength: 256
@@ -3325,8 +3305,7 @@ components:
         freeOther:
           type: array
           description: |-
-            **Billings only.** Labels with no type yet, from the v15 migration. Classify them with
-            `POST /description` and the label `id`.
+            **Billings only.** Labels with no type yet. Classify them with `PATCH /description/{id}`.
 
             Always present on read, empty when the day has none. On write it is part of the full
             state of the day like the two other lists: leave it out and these labels are unlinked.
@@ -4285,7 +4264,7 @@ components:
     DescriptionType:
       type: string
       enum: [undefined, observation, sensation]
-      description: "`sensation` = what the user feels. `observation` = what the user sees. `undefined` = neither was recorded (the labels the v15 migration could not class)."
+      description: "`sensation` = what the user feels. `observation` = what the user sees. `undefined` = not classified yet."
       example: sensation
 
   securitySchemes:

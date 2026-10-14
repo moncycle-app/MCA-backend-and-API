@@ -1,405 +1,321 @@
-# MONCYCLE.APP
+# moncycle.app
 
-A menstrual cycle tracking app designed for natural birth control methods (aka natural family planning).
+A menstrual cycle tracking app designed for natural birth control methods (aka natural family planning): a web app and an HTTP API
+that you can host yourself.
 
-More info 👉 [https://moncycle.app](https://moncycle.app)  
+Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-profit organisation.
 
-Source code 👉 [https://github.com/moncycle-app/backend-api-web-app](https://github.com/moncycle-app/backend-api-web-app)  
+[Website](https://moncycle.app) · [Source code](https://github.com/moncycle-app/backend-api-web-app)
 
-Support us on Tipeee 👉 [https://fr.tipeee.com/moncycleapp](https://fr.tipeee.com/moncycleapp)  
+- [What is in this repository](#what-is-in-this-repository)
+- [Install](#install): [Docker](#with-docker) · [without Docker](#without-docker) · [YunoHost](#yunohost)
+- [Settings](#settings)
+- [Running an instance](#running-an-instance): [cron](#cron) · [demo accounts](#demo-accounts) · [maintenance](#maintenance-mode) · [upgrading](#upgrading) · [logs](#logs)
+- [Security](#security)
+- [API](#api)
+- [Development](#development)
+- [License](#license)
 
----
+## What is in this repository
 
-### License
+| Path | What |
+|---|---|
+| `www_data/` | The whole app, and the web server's document root: the web app (static pages and scripts, no build step), the HTTP API (`api/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`). |
+| `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description. |
+| `server_conf/` | What the Docker image runs on: Apache and PHP settings, the entrypoint, the crontabs. Also a router to run the app on PHP's built-in server. |
+| `docs/` | Security, deployment, upgrading and the log reference. |
+| `Dockerfile`, `docker-compose.exemple.yml` | The image and a compose file to start from. |
 
-Creative Commons **CC BY-NC-SA**  
+Requirements: **PHP 8.4**, **MariaDB 11.1** (tested with 11.1.3) and an SMTP server (implicit TLS, port 465) for the mails that verify
+an address, reset a password and report new sign-ins.
 
-Attribution – Non-Commercial Use – Share Alike  
+## Install
 
-Full license details 👉 [https://creativecommons.org/licenses/by-nc-sa/4.0/](https://creativecommons.org/licenses/by-nc-sa/4.0/)  
+### With Docker
 
-Legal code 👉 [https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.fr](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.fr)  
+The image is [jeanio/moncycle.app](https://hub.docker.com/r/jeanio/moncycle.app). It makes its own schema on the first start, runs the
+daily cron by itself, and serves plain HTTP on port 80.
 
----
+1. **Create an empty MariaDB database and a user** with all privileges on it. Nothing to load: when the database has no table, the
+   first start of the container makes the schema ([`schema.sql`](www_data/script/db/schema.sql), and the demo accounts if
+   `DEMO_ENABLED`), after waiting up to a minute for the database to answer. A database that has tables is left as it is.
+2. **Copy [`docker-compose.exemple.yml`](docker-compose.exemple.yml)** and set `APP_URL` (with a trailing `/`), the `DB_*` and
+   `SMTP_*` variables and the two secret files (`db_password`, `smtp_password`). The SMTP server is required: sign-up and password
+   links travel by mail. Every setting is in [Settings](#settings).
+3. **Start it:** `docker compose up -d`, then `curl -fsS http://127.0.0.1:8080/api/health_check` must answer
+   `{"data":{"status":"oookkk"}}`.
+4. **Put a reverse proxy in front.** The container serves plain HTTP on `127.0.0.1:8080`: add TLS, and set `TRUSTED_PROXIES` to the
+   proxy's address, or every visitor looks like the same address to the login throttling. See [docs/deployment.md](docs/deployment.md).
+5. **Nothing to do for the cron:** the container runs it every day (see [Cron](#cron)).
 
-### Installation
+Then open `APP_URL`, create an account (a captcha, then a link by mail) and write a first day.
 
-To self-host your own instance of Moncycle.app, you can use:  
-- [YunoHost](https://install-app.yunohost.org/?app=moncycle)  
-- [Docker](https://hub.docker.com/r/jeanio/moncycle.app)  
+### Without Docker
 
-> **Note for Docker users:** The first launch of the container makes the schema ([www_data/script/db/schema.sql](www_data/script/db/schema.sql), and the demo accounts if `DEMO_ENABLED`) in a database that has no table; you only create the empty database and its user. The container also runs the daily cron itself (see [Security](#security)).  
+You need PHP 8.4 with the extensions `gd` (with FreeType and JPEG: the captcha is a picture), `pdo_mysql`, `mbstring`, `openssl`,
+`iconv`, `ctype`, `fileinfo` and `json`; [Composer](https://getcomposer.org); and a MariaDB server. `composer install` names any
+extension that is missing.
 
----
+This is the shortest way to a running instance, on PHP's built-in web server. It is meant to look at the app or to develop on it, not
+to host it: for a real site read [Without Docker, in production](docs/deployment.md#without-docker-in-production).
 
-### Quick start
+1. **Get the code and its dependencies.**
 
-A running instance, with Docker, in five steps:
+   ```sh
+   git clone https://github.com/moncycle-app/backend-api-web-app.git moncycle
+   cd moncycle/www_data
+   composer install --no-dev
+   ```
 
-1. **Database.** Create an empty MariaDB 11.1 database and a user for it (all privileges on that database). Nothing to load: the first start of the container makes the schema (`www_data/script/db/schema.sql`), and the demo accounts (`demo.sql`) if `DEMO_ENABLED` is on, when the database has no table, waits up to a minute for the database to answer, and leaves a database that has tables as it is. Outside Docker, load it yourself: `mariadb -u <user> -p <database> < www_data/script/db/schema.sql`.
-2. **Compose file.** Copy [docker-compose.exemple.yml](docker-compose.exemple.yml) and set `APP_URL` (with a trailing `/`), the `DB_*` and `SMTP_*` variables and the two secret files (`db_password`, `smtp_password`). SMTP is required: the password of a new account is sent by mail. All the settings are in [Docker Environment Variables](#docker-environment-variables).
-3. **Start it.** `docker compose up -d`, then `curl -fsS http://127.0.0.1:8080/api/health_check` must answer `{"data":{"status":"oookkk"}}`.
-4. **Reverse proxy.** The container serves plain HTTP on `127.0.0.1:8080`: put TLS in front, and set `TRUSTED_PROXIES` to the proxy's address, or every visitor is one address to the login throttling. See [Security](#security) and [Deployments](#deployments).
-5. **Cron.** Nothing to do: the container runs `script/cron.php` every day at 3:30 (its time zone: set `TZ`, it is UTC otherwise). `CRON_ENABLED=false` turns that off, if you run it yourself from the host. See [Security](#security) for what it does.
+   The timeline's chart library comes from outside Composer. Fetch it the way the [`Dockerfile`](Dockerfile) does (same version and
+   checksum; `shasum -a 256` on macOS):
 
-Then open `APP_URL`, create an account (a captcha, then the password arrives by mail) and write a first day. Upgrading from an older version: [Upgrading](#upgrading).
+   ```sh
+   mkdir -p vendor/chartjs
+   curl -fsSL -o vendor/chartjs/chart.js https://cdn.jsdelivr.net/npm/chart.js@4.5.1
+   echo "48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a  vendor/chartjs/chart.js" | sha256sum -c -
+   ```
 
----
+2. **Create the database and its user.**
 
-### System Requirements
+   ```sql
+   CREATE DATABASE moncycle CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+   CREATE USER 'moncycle'@'localhost' IDENTIFIED BY 'a-long-password';
+   GRANT ALL PRIVILEGES ON moncycle.* TO 'moncycle'@'localhost';
+   ```
 
-Tested with:  
-- **PHP 8.4**  
-- **MariaDB 11.1.3**  
+3. **Write the settings.** Copy `config.exemple.php` to `config.php` (still in `www_data/`) and edit it. At least:
 
-The web app keeps its database connection open between requests (one per Apache worker, 30 at most per container, see `MaxRequestWorkers` in `server_conf/zz-moncycleapp.conf`): MariaDB's `max_connections` (151 by default) must cover the workers of every app container plus the cron. `php script/db_perf.php` (command line, read-only) measures the link and checks that this is safe.
+   | Setting | Value |
+   |---|---|
+   | `APP_URL` | `http://127.0.0.1:8000/`, with a trailing `/` (it builds the links in mails) |
+   | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_ID`, `DB_PASSWORD` | the database above |
+   | `REGISTRATION_ENABLED`, `LOGIN_ENABLED` | `true` (the example ships with both off) |
+   | `PHP_SECURE_COOKIES` | `false` while you use plain HTTP |
+   | `CAPTCHA_SECRET` | 32 characters or more, random (`openssl rand -base64 48`): without it sign-up and password recovery answer `503 captcha_unavailable` |
+   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_MAIL`, `SMTP_PASSWORD` | your mail server, for sign-up and password links |
+   | `DEMO_ENABLED` | `true` to sign in with the two demo buttons and no mail server (see [Demo accounts](#demo-accounts)) |
 
----
+   `config.docker.php` is the same file driven by environment variables, with the names of [Settings](#settings): copy it to
+   `config.php` instead if you prefer to export them.
 
-### API documentation
+4. **Make the schema.** From `www_data/script/`, `php db_init.php` loads [`schema.sql`](www_data/script/db/schema.sql) into the empty
+   database (and the demo accounts if `DEMO_ENABLED`). It leaves a database that has tables as it is.
 
-The HTTP API is described in OpenAPI 3.0: [www_data/api/moncycle_app_open_api.yaml](www_data/api/moncycle_app_open_api.yaml). **The spec is the contract:** a change to an endpoint and its YAML go in the same commit.
+5. **Start the server** from the root of the repository:
 
-- **Interactive:** Swagger UI, served by the API itself at `<API origin>/api/`. That is `<APP_URL>api/` when the web app and the API share an origin, which is the default; for the official instance, [https://tableau.moncycle.app/api/](https://tableau.moncycle.app/api/). "Try it out" uses your session: log in on the same instance first.
-- **Raw spec:** `<API origin>/api/moncycle_app_open_api.yaml`, for code generators, Postman or Insomnia.
+   ```sh
+   php -S 127.0.0.1:8000 -t www_data server_conf/php-server-router.php
+   ```
 
-Quick start, in four lines:
+   and open <http://127.0.0.1:8000/>. The router gives the built-in server what Apache does for the app: the pages and the API are
+   asked for without their extension, and files that are not public answer 403. The app's log goes to the terminal.
 
-0. `GET /api/server_info` (public) first: it says which `apiVersion` the server speaks, whether it is `ok` or in maintenance, and the limits to check a form with.
-1. `POST /api/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}` (a 201). The token is shown once; `GET /api/token` lists the account's tokens (each with its `prefix`, the first 5 characters of the token), `DELETE /api/token` logs out, `DELETE /api/token/{prefix}` revokes one, `DELETE /api/token?others=true` all the others.
-2. Send that token on every other call as `Authorization: Bearer <token>`.
-3. Answers are `{"data": ...}` or `{"error": {"code": "...", "message": "..."}}`. **Bodies must be `Content-Type: application/json`** (any other type is a 415).
+6. **Run the cron** if you want the mails and the clean-up: see [Cron](#cron).
 
-```
+### YunoHost
+
+An app for [YunoHost](https://install-app.yunohost.org/?app=moncycle) is available.
+
+## Settings
+
+With Docker, a setting is an environment variable. Without Docker it is the `define()` line of the same name in `www_data/config.php`
+([`config.exemple.php`](www_data/config.exemple.php) lists them with their comments). An unset or empty variable takes its default;
+**required** ones have none and the app does not work without them. Booleans read `true`/`false`, `on`/`off`, `yes`/`no` or `1`/`0`,
+in any case.
+
+The `config.php` written by hand must start with `require_once __DIR__ . "/constants.php";`, as the example does: the internal
+constants of the app (database codes, API vocabularies, limits, PDF layouts) are all in [`constants.php`](www_data/constants.php).
+
+**Your instance**
+
+| Setting | Default | Description |
+|---|---|---|
+| `APP_URL` | `https://tableau.moncycle.app/` | Public URL of your instance, **with a trailing `/`**. It builds the links in mails and the TOTP QR code: set it, or they point to the official instance. |
+| `REGISTRATION_ENABLED` | `true` | Allow account creation. |
+| `LOGIN_ENABLED` | `true` | Allow sign-in. |
+| `DEMO_ENABLED` | `false` | The two public demo accounts. See [Demo accounts](#demo-accounts). |
+| `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
+| `NEWS_URL` | `https://www.moncycle.app/actu.html` | The https page shown as the news banner (`h4`, `p`, `b`, `i`, `br`, `ul`, `li`, `a` and `time` only). **Empty: no banner and no request to anybody.** It is added to the CSP's `connect-src`, so give a URL with no query or fragment. |
+| `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
+
+**Database and mail**
+
+| Setting | Default | Description |
+|---|---|---|
+| `DB_HOST` | **required** | MariaDB host. |
+| `DB_PORT` | `3306` | MariaDB port. |
+| `DB_NAME` | **required** | Database name. |
+| `DB_ID` | **required** | Database login. |
+| `DB_PASSWORD_FILE` † | – | Path of a file holding the database password, typically a Docker secret (`/run/secrets/db_password`). Wins over `DB_PASSWORD` when the file is readable. |
+| `DB_PASSWORD` | – | Database password in clear. Set it or `DB_PASSWORD_FILE`. |
+| `SMTP_HOST` | **required** | SMTP server host. |
+| `SMTP_PORT` | `465` | SMTP port (implicit TLS only, no STARTTLS). |
+| `SMTP_MAIL` | **required** | Sender address, also the SMTP login. |
+| `SMTP_PASSWORD_FILE` † | – | Path of a file holding the SMTP password. Wins over `SMTP_PASSWORD` when the file is readable. |
+| `SMTP_PASSWORD` | – | SMTP password in clear. Set it or `SMTP_PASSWORD_FILE`. |
+
+**Network and cookies** (see [docs/deployment.md](docs/deployment.md))
+
+| Setting | Default | Description |
+|---|---|---|
+| `TRUSTED_PROXIES` | – | Reverse proxies in front of the app (addresses or CIDR ranges, comma separated) whose `X-Forwarded-For` is believed. Empty: the client is the peer of the connection. |
+| `WEB_APP_ORIGINS` | – | Browser origins (`https://app.example.org`, comma separated) allowed to write to the API besides its own host and `APP_URL`'s. Any other origin gets a 403. |
+| `COOKIE_SAMESITE` | `strict` | `SameSite` of the session cookie: `strict`, `lax` or `none` (`none` needs `PHP_SECURE_COOKIES`, otherwise it is `lax`). |
+| `PHP_SECURE_COOKIES` | `true` | Send cookies over HTTPS only. Turn off for plain-HTTP development. |
+| `APP_SCRIPT_ALLOW` † | `127.0.0.1 ::1` | IPs allowed to call `script/` over HTTP, space separated; everyone else gets a 403. |
+
+**Login protection** (see [docs/security.md](docs/security.md#login-protection))
+
+| Setting | Default | Description |
+|---|---|---|
+| `CAPTCHA_SECRET` | made at start-up (Docker) | The key that signs the captcha challenges: random, **32 characters or more**. Empty or shorter: the captcha is closed, and sign-up, password recovery and the sign-in of an account that must answer a captcha answer `503 captcha_unavailable`. Instances behind one address must share it. |
+| `LOGIN_ATTEMPTS_DECAY_MINUTES` | `60` | Failed logins on an account older than this restart the count; `0` counts nothing, so no captcha and no lockout. |
+| `LOGIN_CAPTCHA_THRESHOLD` | `3` | Failed logins after which a captcha is asked; `0` never asks. |
+| `LOGIN_LOCKOUT_THRESHOLD` | `15` | Failed logins after which a wrong password locks the account; `0` never locks. |
+| `LOGIN_IP_MAX_ATTEMPTS` | `30` | Failed logins, and failed captchas of sign-up and recovery, from one IP before `429`; `0` for no limit. |
+
+**Exports**
+
+| Setting | Default | Description |
+|---|---|---|
+| `CSV_SEP` | `;` | Separator of the CSV exports (with `;` temperatures use a decimal comma, otherwise a point). |
+| `PDF_BILLINGS_BORDERS` | `true` | Draw the lines of the Billings PDF chart; `false` gives a chart with no line at all. |
+
+**Logs** (see [docs/logs.md](docs/logs.md))
+
+| Setting | Default | Description |
+|---|---|---|
+| `LOG_LEVEL` | `info` | Least severe level written: `off`, `error`, `warning`, `info` or `debug`. |
+| `LOG_CATEGORIES` | all | Categories written: `auth`, `account`, `data`, `export`, `mail`, `system`, `http`. Empty: all. |
+| `LOG_OUTPUT` | `stdout` | `stdout`, `stderr`, or the absolute path of a file (in Docker, a file in `/var/log/moncycle`). |
+| `LOG_FORMAT` | `json` | `json` (one object per line) or `text` (for a person reading a terminal). |
+| `LOG_IP` | `full` | The client address in the log: `full`, `truncate` (`a.b.c.0`) or `none`. |
+| `LOG_REQUEST_ID_HEADER` | `X-Request-Id` | Request header whose value, when plain, is the request id of the log. Empty: never read one. |
+
+**PHP in the Docker image** † (read by `php.ini`; leave one out rather than empty: an empty value is not replaced by the default)
+
+| Setting | Default | Description |
+|---|---|---|
+| `PHP_CACHE` | `1` | `1` enables OPcache and the browser-cache headers; `Off` disables every cache (development). With OPcache on, restart the container after each edit of a bind-mounted `www_data`. |
+| `PHP_SHOW_ERR` | `Off` | `On` shows PHP errors in the browser; they are always logged. |
+| `PHP_ERROR_REPORTING` | `24575` | PHP `error_reporting` **as a number**: `24575` is `E_ALL` without deprecations, `32767` is `E_ALL`. |
+| `PHP_ASSERTIONS` | `-1` | PHP `zend.assertions`: `-1` compiles assertions out (production), `1` enables them. |
+
+† Docker image only: with no Docker, these are the web server's or `php.ini`'s business (see [docs/deployment.md](docs/deployment.md#without-docker-in-production)).
+
+## Running an instance
+
+### Cron
+
+`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers `/api/pub_stat` answers,
+sends the cycle mails, the reminders to accounts that went quiet and the deletion warnings, and **deletes** the accounts that have been
+inactive for 4 years and those whose address was never verified after 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`,
+`ACCOUNT_UNVERIFIED_DELETE_DAYS` in [`constants.php`](www_data/constants.php)).
+
+- **With Docker** the container runs it at 3:30 in its time zone (`TZ`, UTC when unset); its output goes to `docker logs`.
+  `CRON_ENABLED=false` schedules nothing: do that if you run it from the host, or it runs twice a day and sends every mail twice.
+- **By hand**, as the web user, from the `script/` directory (the scripts open `../config.php` relative to it):
+
+  ```sh
+  docker exec -u www-data -w /var/www/html/script <container> php cron.php
+  # without Docker, as the web user:  cd www_data/script && php cron.php
+  ```
+
+  A cron entry of the host does the same: `30 3 * * * cd /path/to/www_data/script && php cron.php`.
+- **`php cron.php --dry-run`** reads and prints what a run would do (who would be mailed, which accounts and how many tokens would be
+  deleted) and sends, deletes and writes nothing. Any other argument is refused with exit status 2. Do not run the real thing on a
+  database you have not backed up.
+- Not once a day is a problem: more often sends duplicate mails, less often leaves expired tokens and misses mails. It has no time
+  limit on the command line. It refuses to run in [maintenance mode](#maintenance-mode).
+
+### Demo accounts
+
+Accounts 2 (`demo.bill@moncycle.app`, Billings) and 3 (`demo.fc@moncycle.app`, FertilityCare) are public: the password is `demo`, and
+the sign-in page has a button for each. They are made by [`demo.sql`](www_data/script/db/demo.sql). `DEMO_ENABLED` (off by default) is
+their switch:
+
+- **On.** They can sign in. Every hour, on the hour, `script/demo_reset.php` deletes the two accounts and makes them again in one
+  transaction, with days dated from the day of the run: whatever a visitor wrote is gone, and **a visitor is signed out at the next
+  hour**. The Docker image schedules it unless `CRON_ENABLED=false`; if you run the cron from the host, add
+  `0 * * * * docker exec -u www-data -w /var/www/html/script <container> php demo_reset.php`. `php demo_reset.php --dry-run` says what
+  it would do and writes nothing.
+- **Off.** Signing in to them is refused (`403 account_disabled`), a session that is open on one stops working at once, and nothing
+  resets them. The accounts stay in the database.
+
+The schema does not contain them: with `DEMO_ENABLED` on they are made when the container first fills an empty database (or
+`db_init.php` does), and again at every reset. Turning it on later, on a database that already has tables, makes them at the next
+full hour.
+
+### Maintenance mode
+
+`MAINTENANCE_MODE=true` (restart the container to change it) puts the back end in maintenance:
+
+- **The API.** Every endpoint answers `503` with `{"error": {"code": "maintenance", ...}}` before it opens the database: nothing can
+  be read or written, whoever is signed in, and the downloads included. The one exception is `GET /api/server_info`, which answers
+  `200` with `"status": "maintenance"` so that a client can tell its user. The static pages stay up. **A container healthcheck must
+  accept the 503 of `health_check` as alive**, or a server in maintenance is restarted as dead: the one in
+  [`docker-compose.exemple.yml`](docker-compose.exemple.yml) does.
+- **The cron** refuses to run, dry run included, and exits with status 1.
+- **Not affected:** the migrations (what you run in maintenance) and `script/stat.php`.
+
+### Upgrading
+
+Dump the database, try the migration on a copy, run `vN-1_to_vN` in a container of the new image, and check the `schema_version`. The
+steps, and what the v14 to v15 migration does to your data, are in [docs/upgrading.md](docs/upgrading.md).
+
+### Logs
+
+The app writes its own structured log, to `stdout` by default (`docker logs`). A line says what happened, to which account and which
+row, and never the content: no password, token, address, text or query string. Rotation and retention are yours. The format, every
+key and every event are in [docs/logs.md](docs/logs.md).
+
+## Security
+
+The short version: a token is the only credential and the server keeps only its hash; writes from other sites are refused; stored
+text is never rendered as HTML and no inline script runs; the captcha is signed and kept nowhere; failed logins are throttled per
+account and per address; no password is ever stored in the clear. The details, and what an operator has to do, are in
+[docs/security.md](docs/security.md) and [docs/deployment.md](docs/deployment.md).
+
+## API
+
+The HTTP API is described in OpenAPI 3.0: [`www_data/api/moncycle_app_open_api.yaml`](www_data/api/moncycle_app_open_api.yaml). **The
+spec is the contract:** a change to an endpoint and its YAML go in the same commit.
+
+- **Interactive:** Swagger UI, served by the API itself at `<APP_URL>api/`; for the official instance,
+  [tableau.moncycle.app/api/](https://tableau.moncycle.app/api/). "Try it out" uses your session: sign in on the same instance first.
+- **Raw spec:** `<APP_URL>api/moncycle_app_open_api.yaml`, for code generators, Postman or Insomnia.
+
+In four lines:
+
+0. `GET /api/server_info` (public) first: the `apiVersion` the server speaks, whether it is `ok` or in maintenance, and the limits to
+   check a form with.
+1. `POST /api/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
+   token is shown once.
+2. Send it on every other call as `Authorization: Bearer <token>`.
+3. Answers are `{"data": ...}` or `{"error": {"code": "...", "message": "..."}}`. **Bodies must be `Content-Type: application/json`.**
+
+```sh
 TOKEN=$(curl -s -H 'Content-Type: application/json' -d '{"email":"you@example.org","password":"..."}' https://YOUR.HOST/api/token | jq -r .data.token)
 curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/account
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X PUT -d '{"stampColor":"Red"}' https://YOUR.HOST/api/day/2026-09-20
 ```
 
----
+## Development
 
-### Security
+- **Without Docker:** the [built-in server](#without-docker) above. Set `PHP_SECURE_COOKIES` to `false`, and `DEMO_ENABLED` to `true` to
+  sign in without a mail server.
+- **With Docker:** the image is production by default, so forgetting a setting never turns debugging on. Development is opt-in with
+  one env file: copy [`dev.env.example`](dev.env.example) to `dev.env` and give it to the container (`docker run --env-file dev.env`,
+  or `env_file: ./dev.env` in compose). It shows PHP errors, reports everything, enables assertions, turns off OPcache and every
+  HTTP cache, lets cookies travel over plain HTTP and logs at `debug` level in the readable `text` format. The code is baked into the
+  image, so a deploy is a rebuild (`composer install` honours `composer.lock`; update the dependencies on purpose with
+  `composer update`, and commit the lock); for development, bind-mount `www_data`.
+- **Conventions and layout:** [AGENT.md](AGENT.md) describes where code goes and the rules the codebase keeps, for people as much as
+  for coding agents.
+- There is no automated test suite in this repository: check a change by calling the endpoints.
 
-- `script/` (cron, stats, migrations) answers only to the container itself: `APP_SCRIPT_ALLOW` (default `127.0.0.1 ::1`) is the list of IPs allowed in, everyone else gets a 403. Behind a reverse proxy Apache sees the proxy's address, not the caller's, so do not open it to an IP unless Apache gets the real client address.  
-- `script/cron.php` runs **once per day**. The Docker image does it: its entrypoint starts [supercronic](https://github.com/aptible/supercronic) as the web user, with the schedule of [server_conf/moncycle.crontab](server_conf/moncycle.crontab) (`30 3 * * *`, in the container's time zone, `TZ`), and its output goes to `docker logs`, with the app's own lines for the run: `system.cron_started`, one `system.cron_step` per step, `system.cron_ended` with its counters and `ok` (see [Logs](#logs)). `CRON_ENABLED=false` does not schedule it; **do that if you run it from the host** (below), or it runs twice a day and sends duplicate emails. Run by hand, from the host, through the container, **as the web user**: `docker exec -u www-data <container> php /var/www/html/script/cron.php`. It purges expired session tokens and old login attempts, stores the numbers `/api/pub_stat` answers, sends the cycle mails, the reminders to accounts that went quiet and the deletion warnings, and **deletes the accounts that have been inactive for `ACCOUNT_INACTIVITY_DELETE_YEARS` years** (4, in [constants.php](www_data/constants.php); RGPD retention). It also deletes the accounts whose address was never verified after `ACCOUNT_UNVERIFIED_DELETE_DAYS` days (7): nobody could sign in to them. Do not run it on a database you have not backed up (**`php /var/www/html/script/cron.php --dry-run`** reads and prints what a run would do, who would be mailed, which accounts and how many tokens would be deleted, and sends, deletes and writes nothing; any other argument is refused with exit status 2; it is off over HTTP). It fails in [maintenance mode](#maintenance-mode). The demo accounts have a job of their own, every hour (see [Demo accounts](#demo-accounts)). As `www-data`, because `docker exec` runs as root otherwise, and a log file that root created first cannot be appended to by the web server (see [Logs](#logs)):  
-  - More than once per day → may send duplicate emails.  
-  - Less than once per day → expired tokens may not be deleted on time, causing missed emails.  
-  - Through the CLI it has no time limit (`max_execution_time` is 30 s over HTTP, which can cut it short with many accounts).  
-- Apache refuses (403) what is not public: `config*.php`, `constants.php`, `lib/`, `vendor/` (except the three libraries the pages load), `composer.*`, `*.sql`, `*.md`.  
-- Logs: the app writes its own (see [Logs](#logs)), to `docker logs` by default, next to Apache's and PHP's errors. There is no Apache access log in the image: it recorded query strings (a TOTP code, the dates of a read). The logs hold IP addresses and account ids: rotate them (see `docker-compose.exemple.yml`).  
-- **What stops a page of another site from writing with your session.** The session is an `HttpOnly` cookie, `SameSite=Strict` (`COOKIE_SAMESITE`). On top of it every write (`POST`, `PUT`, `PATCH`, `DELETE`) that a browser sends is checked against its `Origin` header (or `Sec-Fetch-Site` when there is none): the server's own host, `APP_URL` and `WEB_APP_ORIGINS` pass, any other page gets `403 cross_origin_refused`, login and password recovery included. Bodies must be `Content-Type: application/json` (a 415 otherwise), which a form of another site cannot send. A request with none of these headers (curl, a script, a mobile app) is not a browser's and is not refused.  
-- **Tokens.** The only credential is a token, a random 256-character string stored as its SHA-256. `POST /api/token` is the sign-in: it always takes the credentials (password, TOTP code, captcha once the account asks for one, all under the throttling of a login), so a stolen session cannot make itself another token without the password. It takes `name` (the client's own word, 256 characters at most, shown as text), `scope` (`readWrite`, the default, or `readOnly`: a read-only token gets a 403 `read_only_token` on any method that is not `GET`, `HEAD` or `OPTIONS`; it may still end its own session), `expiresInDays` (1 to 365: the token dies on that day whatever its use, and from that moment it opens nothing, the cron only erases it; without it a token is erased after 40 days unused or a year after its creation) and `cookie` (`true`: the browser's session is also set as the `HttpOnly` cookie; otherwise no cookie is set, so a token made on the account page cannot replace the session it was made from). **The token is always in the answer, the web app's included**, so a script that injects code into the page could read it: `script-src 'self'` is what stands in the way. `GET /api/token` shows the account its tokens: the `prefix` (the first 5 characters of the token, kept in the clear in `auth_token.auth_token_prefix`, unique per account: they tell the tokens of one app apart, and the account page shows them; the other 251 characters stay unknown to the server, which keeps only their SHA-256), name, scope, creation and last use (a last use is written at most every 5 minutes), expiry, the user agent and the network of the address (`a.b.c.0`, or the first 48 bits of an IPv6 address) at creation and at last use. The database keeps the user agent and the address **whole** for as long as the token lives (`auth_token.ip_address`, `ip_address_use`): they are personal data, say so in your privacy policy, and they go with the token when it is revoked, expires or the account is deleted. The name and the user agent are what the client says: they help their owner find a device, they prove nothing. `DELETE /api/token` with no body ends the caller's own session whatever state its token is in, and clears the cookie (only the server can); with `{"prefix": "abcde"}` it revokes the token that starts with these 5 characters (looked up in the caller's own account only: no database id is in the API), with `{"all": true}` every token but the caller's own. The demo accounts (a shared account whose password is public) have neither the list nor the revocation of other tokens. **Every sign-in is announced by mail** to the account's own address (the demo accounts excepted): name, the first characters of the token (`prefix`: they tell which line of the account page's list the mail is about), scope, expiry and user agent, no address. The mail is sent before the answer, so a slow SMTP server slows the sign-in down (10 s at most); a mail that cannot be sent never fails it (`mail.failed`).  
-- **What stops a stored text from running in the page.** What a user can store (the account name, a comment, a label, whether typed or imported from a file) is written into the page as text, never as HTML, and the pages of the image are served with a Content-Security-Policy whose `script-src` is `'self'`: no inline script runs. The news banner is the only HTML from outside, and it is rebuilt from an allow-list of tags (`NEWS_URL`).  
-- **Two-factor authentication and the lockout.** A wrong TOTP code after a right password counts like a wrong password. Past `LOGIN_LOCKOUT_THRESHOLD` an account with a TOTP code refuses even the right password and code until the failures decay, so that the code cannot be guessed. Whoever knows the password can keep such an account locked while they keep trying.  
-- **The captcha keeps nothing.** `POST /api/captcha` gives a picture and a token `<exp>.<mac>`; the mac is an HMAC-SHA256, keyed with `CAPTCHA_SECRET`, of the purpose (`register`, `recover`, `login`), the address, the expiry (5 minutes), the answer, the caller's network (the IP cut to /24, or /64 for IPv6) and a state of the account that its own use changes: for `register` and `recover` the stored password and the link pending in the account's slot (a link made, used or replaced ends the token: one mail per captcha, whether the address has an account or not), the failure counters for `login` (a refused attempt ends it). There is no row, no column and no cookie. A token that is wrong in any way answers one `captcha_invalid`, and the same 403 whether the account exists or not. Of the requests that arrive together with one token, one passes: `register` (for an address that has an account), `recover_password` and the login of an account that must answer a captcha hold the account row from the check to the write (the login, for the length of its bcrypt, only when its captcha is valid), and whatever tests a password moves the failure counters the token is tied to, so one password is tried per solved captcha. A login that succeeds ends the failures, and a request that reads the account after it finds one that asks for no captcha: it signs in on its password alone, like any login. **Closed by default:** `CAPTCHA_SECRET` empty or under 32 characters answers `503 captcha_unavailable` to everything that needs a captcha. The Docker image makes a random one at start-up when none is given, so a restart voids the challenges in flight and nothing else; **several instances behind one address must be given the same `CAPTCHA_SECRET`**, or a token made by one is refused by the other. A captcha that fails counts as an attempt against the caller's IP address like a failed login (`LOGIN_IP_MAX_ATTEMPTS`, `429 rate_limited`); one that passes gives its attempt back.  
-- **No password is ever sent by mail.** The sign-up takes the password (10 to 72 bytes: bcrypt reads 72 and drops the rest, so a longer one is refused). A new account cannot be used until its address is proved: `POST /api/token` answers `403 email_not_verified`, but only to someone who gave the right password (a wrong one or an unknown address answer the usual `401 invalid_credentials`, so a sign-in tells nothing about an account it cannot open), and that refusal counts as no failed attempt. **The address is proved, a password chosen again and the login address changed by one kind of link**, mailed to the address and used at `POST /api/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`; `newPassword` goes with `resetPassword` only. The link is a page of the app with the purpose and the token in its fragment (`APP_URL` + `verify_email#purpose=...&t=...`): a fragment reaches no server, log or `Referer`, and a mail scanner that only fetches the link runs no script, so it uses nothing up. The token is 32 random bytes; the database keeps its SHA-256 only (`user_account.email_token_hash`), with what it is for, when it dies (3 days to verify, 1 hour to choose a password, 1 day to change the address) and, for a change of address, the address it leads to. **An account has one slot**: a new link replaces the one before it, whatever that one was for, and a link is single use and checked against its purpose (the link of one action does not do another). **That means anyone who can ask for a password reset can cancel a link that is waiting** (a verification, a change of address); there is no cooldown. It is accepted: the person asked for a new link gets a mail with one, and for a verification the new link, a reset, proves the address as well. What stops it from being a flood is the captcha, which is tied to the pending link and so is good for one mail, and the throttling per IP address. `POST /api/register` answers the same `202 {"sent": ...}` whether the address is new or already has an account (verified or not): it never touches an existing account, whatever the request says, and mails its owner a link to choose a new password instead of the one to verify. Everything the request can get wrong (a field, the password) is said before the address is looked up; the bcrypt hash is made either way. `POST /api/recover_password` only mails a reset link; **the password stays what it is until the link is used**, so asking for one locks nobody out. Using a reset link sets the password, proves the address and empties the slot; **it does not close the sessions that are open, nor touch the TOTP**: a mail tells the owner that the password changed (they can close the other sessions from the account page). A password changed with `POST /api/account` ends a reset link that is waiting, and leaves a change of address alone. The cron erases an account whose address was never proved after 7 days (`ACCOUNT_UNVERIFIED_DELETE_DAYS`). **Every setting of the account is changed by `POST /api/account`**, and the three that hand the account or its cycles over want the current password again, sent as `password`: `newPassword` (set at once; `logoutOtherDevices` closes the other sessions), `notificationEmails` (the addresses that receive the cycles, reminders and warnings with the login address: `;` between two, 5 at most, made at once, a notice goes to the login address) and `loginEmail` (the login address, which every recovery rests on; it also wants the TOTP `code` when there is one). The request is checked whole before anything is written, so a refused one changes nothing. `loginEmail` only *asks*: a link goes to the **new** address and the change happens when it is used; the current address is told, an address that another account has gets a mail saying so, no link, and the same answer, and the sessions stay open. A wrong password or code here is not counted, like those of `DELETE /api/totp`. The two demo accounts cannot change these three (`403 demo_account`). `POST /api/recover_password` still sleeps 1 to 5 s on purpose and holds one of the 30 workers meanwhile: rate-limit it at the edge (below).
+## License
 
-**Limits** (`server_conf/`):  
-- Apache: request body 256 KB (a request to `/api/` whose `Content-Length` is larger gets a 413 `file_too_large` in the API's JSON envelope before any handler runs, so PHP never starts and logs nothing; `LimitRequestBody` is the same wall for a body sent in chunks, which has no `Content-Length`), 30 s `Timeout`, 30 workers of ~21 MB each. Without that early refusal PHP starts, logs "POST Content-Length of N bytes exceeds the limit" and reads a JSON body into memory: measured, a 20 MB body is read in full and one of 33 MB ends in a `memory_limit` fatal error (500).  
-- PHP: `memory_limit` 32M (do not lower it without measuring the peak memory of a multi-year export), `max_execution_time` 30, `file_uploads` Off.  
-- `post_max_size` (256K) is coupled with `NFP_LIMIT_BODY_BYTES` in [constants.php](www_data/constants.php) and with Apache's `LimitRequestBody` and `Content-Length` test in [zz-moncycleapp.conf](server_conf/zz-moncycleapp.conf): change the three or none. It does **not** cap a raw JSON body (read from `php://input`): the cap is Apache's 256K and, for `/api/import`, the app's own check of the same size.  
-
-**What the reverse proxy in front must do** (the image serves plain HTTP and is made to sit behind one):  
-- TLS and an http → https redirect. The image sends `Strict-Transport-Security` itself when the request carries `X-Forwarded-Proto: https`: make the proxy set that header. If the proxy already sends HSTS, remove that line from `server_conf/zz-moncycleapp.conf` to avoid a duplicate.  
-- Rate-limit `/api/token`, `/api/register`, `/api/recover_password` and `/api/captcha` (a captcha costs a JPEG to draw and is kept nowhere). `/api/recover_password` sleeps 1 to 5 s on purpose and holds one of the 30 workers meanwhile.  
-- Tell the app the proxy's address: set `TRUSTED_PROXIES` to it (an address or a CIDR range, comma separated) and have the proxy send the real client address in `X-Forwarded-For` (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` with nginx). Without it every visitor has the proxy's address: the login throttling (`LOGIN_IP_MAX_ATTEMPTS`, 30 failures in 15 minutes per address) becomes one limit for everyone, so 30 failed logins from anywhere answer 429 to all, and the `ip` of the log is the proxy. The header is believed only when the peer is in `TRUSTED_PROXIES`, read from its right end, skipping trusted addresses: what the client itself wrote on the left is ignored. It is never believed from anyone else, whatever the header says: a visitor who could choose their own address would dodge the throttling with a new one at every attempt, or put the failures on somebody else's. The value is the address the **container** sees the proxy from, which is not always the one you know it by: a proxy on the host reaches a published port from the gateway of the Docker network (`172.x.0.1`), a proxy in another container from that container's address. If the `ip` of the log lines (or `login_attempt_ip.ip_address`) shows an address of your Docker network instead of visitors', that address is the one to put in `TRUSTED_PROXIES` (its network's range, e.g. `172.18.0.0/16`, if it can change). A CDN in front of the proxy adds its own address to the chain: list its ranges too, or the first one the app meets from the right, the CDN's, is taken for the visitor. `APP_SCRIPT_ALLOW` is unchanged, it is Apache's own `Require ip` and still sees the proxy's address.  
-- Do not log query strings or paths: `GET /api/day/2026-09-20`, `GET /api/day?from=`, `GET /api/timeline_sync?since=` and `DELETE /api/token/{prefix}` carry dates and token prefixes, and the dates of a read are health data. The image's own Apache log was removed for that reason, and the app's own log names the endpoint (`/api/day`), never the arguments of the URL. (A TOTP code is in the body of `POST /api/totp/confirm` and `/disable`, never in a URL.)  
-- A body limit of 256 KB (`client_max_body_size 256k` with nginx): the same as Apache's, so a request that is too large is refused at the edge before it costs a worker.  
-- Block `/script/` too (defence in depth).  
-
----
-
-### Deployments
-
-**The default: the web app and the API on one origin.** The container serves the pages and `/api/` from the same host, `APP_URL`. A reverse proxy that routes `/api` to another backend still shows the browser one origin, so it needs nothing here but `TRUSTED_PROXIES`. The session cookie is `SameSite=Strict`, which costs nothing in this setup.
-
-**What the image does not do: serve the web app from another origin than its API.** Every URL in the pages is relative (`api/...`) and the API sends no CORS header, so a browser page on another origin cannot call it. What is there is the groundwork, so that nothing assumes one origin:
-
-- `APP_URL` and `WEB_APP_ORIGINS` name the browser origins that may *write* (the `Origin` check, see [Security](#security)): the origin of `APP_URL`, plus the ones you list, plus the API's own host (the `Host` header of the request: if your proxy rewrites it, `APP_URL` is what lets your own pages through).
-- `COOKIE_SAMESITE` sets the cookie's `SameSite`. `strict` (the default) is right for the pages and the API on the same site, sibling subdomains of one domain included, for requests a script makes as well as for links. A web app on **another site** needs `lax` (page navigations only) or `none` (requests from scripts, which needs `PHP_SECURE_COOKIES=true`), and relies on the browser not blocking third-party cookies: treat that as fragile.
-- Clients that are not browsers (a mobile app, a script) send no `Origin`, use `Authorization: Bearer <token>` and work from anywhere.
-
-**The Content-Security-Policy** is sent by the image for the pages it serves (`server_conf/zz-moncycleapp.conf`): `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' <NEWS_URL>; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'`. Pages served by anything else need the same policy from their own server, and a front end that calls an API on another origin adds that origin to its `connect-src`. Swagger UI is one of the image's pages and is covered by the same policy.
-
----
-
-### Upgrading
-
-Migrations are `www_data/script/migration/vN-1_to_vN.sql`, with a `.php` runner when the data has to move too; run them in order, one version at a time.
-
-1. **Dump the database first** (`mariadb-dump`), and try the migration on a copy of it: time it, and read its output. MariaDB commits at every `ALTER TABLE`, `CREATE TABLE` and `RENAME`, so the transaction of the script protects the data steps only, not the schema ones. A run that fails half way is undone by restoring the dump, never by running the script again.
-2. Stop the old container, or point the proxy away from it, or start the new one with `MAINTENANCE_MODE=true` (see [Maintenance mode](#maintenance-mode)).
-3. Run the migration **inside a container of the new image** (it already has the database settings): `docker exec -w /var/www/html/script/migration <container> php v14_to_v15.php`. The script reads `./v14_to_v15.sql` from its working directory, hence `-w`; `script/` answers only to `127.0.0.1` over HTTP, so run it through the CLI as above.
-4. Outside Docker, a `config.php` written by hand needs the settings the new version adds: copy them from `config.exemple.php` (v15: `MAINTENANCE_MODE`, `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `DEMO_ENABLED`, `CAPTCHA_SECRET`; the login ones before them). A missing one is a fatal "Undefined constant". The Docker image reads them from its environment and needs nothing.
-5. Start the new image, log in, write a day, export it, log out, and read `docker logs` for `system.exception`.
-
-**The version of the schema.** The row `schema_version` of `key_value` says which migration the database is at (`schema.sql` makes it, and every migration ends by setting it to its own number: `UPDATE key_value SET value = N WHERE \`key\` = 'schema_version'`). The code checks it at every request (`SCHEMA_VERSION` in `constants.php`): a database that says another number is not served, every endpoint answers `503 schema_mismatch` and `GET /api/server_info` says `status: "schema_mismatch"`. A database that was migrated to v15 before this row existed has none: add it once, `INSERT INTO key_value (\`key\`, \`value\`) VALUES ('schema_version', 15);`.
-
-**The API was reshaped before its first stable release (v15).** The routes and the rules of the HTTP contract changed together, so a client written for the earlier v15 drafts has to be rewritten; see `www_data/api/moncycle_app_open_api.yaml`, section 2 ("Compatibility") first. In short: `GET /api/server_info` (replaces the static version file; the first call of every client, with `apiVersion`), `GET /api/account` and `PATCH /api/account` (replace the account summary and `POST /api/account`), `GET /api/timeline_sync?since=` (replaces the old sync, and no longer carries the account), `GET /api/day/{date}`, `PUT /api/day/{date}`, `DELETE /api/day/{date}` and `GET /api/day?from=&to=` or `?dates=` (at most 100 days), `PATCH` and `DELETE /api/description/{id}`, `DELETE /api/token/{prefix}` and `?others=true`, `POST /api/totp`, `/totp/confirm`, `/totp/disable`, `POST /api/account/deletion`, `GET /api/export/{format}?from=&to=` (errors in the JSON envelope), `override` spelled right. Every input problem is a `400 validation_failed` with the list of `details.issues` (the `422` is gone); an unknown field is refused; timestamps are RFC 3339 with a zone; `GET /api/pub_stat` is in the envelope (`accounts`, `cycles`, `observations`); `DELETE` takes no body.
-
-**v14 to v15** is a large one: it renames the tables and columns to English, moves the `sensation` text of each day into `description` rows linked to it (and drops the `sensation` column at the end of the script), hashes the session tokens, and stores login addresses in lower case (`account_email_normalise`: `Alice@X.test` and `alice@x.test` become one account). v14 compared addresses exactly, so two accounts could already differ only by the case of theirs. For each such address the script keeps one account, preferring an enabled account, then one that has authenticated, then the one holding more days, then the one used more recently, then the oldest; and for each of the others: **if the two hold no day on the same date, it is merged** (its days move to the kept account, which keeps its own settings, password and sessions; the other's go), **otherwise it is deleted** with its days and tokens. Its output gives the reason of every choice. A line `REVIEW` marks a merge that drops the settings of an account used more recently than the one kept (or of another method), and a deletion that takes days with it or an account used more recently than the one kept: read those on the copy of step 1, and decide by hand (from the dump) if one is wrong. It also gives `key_value` a primary key. And it gives every token the first 5 characters of the token as its `prefix` (taken while the script hashes the plain tokens, the last time they are there; two tokens of one account that start alike leave the second one with none, a line `REVIEW` says so: it can then only be revoked with `all`) and a scope, an optional expiry date and the user agent and address of its client (the old `AUTH | <user agent>` name is split into the user agent and the name `Session`; the country code, always `FR` and never known, is emptied). And it drops the captcha from the database: the rows of `auth_token` that held one (no account) and its `captcha` column go, and `auth_token.no_user_account` becomes `NOT NULL`.
-
-**The captcha changed, for the web app and for any API client.** It no longer uses a cookie or a stored answer: `POST /api/captcha` `{"purpose":"register|recover|login","email":"..."}` answers `{"data":{"image":"data:image/jpeg;base64,...","token":"<exp>.<mac>","expiresAt":...}}`, and the call it guards carries the answer in `captcha` and the token in `captchaToken`. `GET /api/captcha` (a JPEG and a `Set-Cookie`) is gone (405), `POST /api/register` and `POST /api/recover_password` now need a captcha (recover had none), and the login still asks for one after `LOGIN_CAPTCHA_THRESHOLD` failures. New error codes: `captcha_expired` (403), `captcha_unavailable` (503), `rate_limited` (429) on register and recover. **Set `CAPTCHA_SECRET`** (32 characters or more, random: `openssl rand -base64 48`) in the environment of every instance, or register, recover_password and the captcha of a login answer `503 captcha_unavailable`; the Docker image makes one at start-up if you do not, which is enough for a single container. The code length goes from 5 to 6 characters. A client written for the old flow breaks: see the `/captcha` entry of the OpenAPI spec. The sign-in also stops treating a session of a public demo account as "already authenticated": whoever holds one can sign in as someone else.
-
-**Sign-up and password recovery changed, for the web app and for any API client.** No password is sent by mail any more. `POST /api/register` takes a `password` (10 to 72 bytes; a refused password is a `400 validation_failed` whose issues are `password_too_short`, `password_too_long` or `password_invalid`), makes an account that cannot sign in until its address is proved (`403 email_not_verified` at `POST /api/token`), and answers `202 {"data":{"sent":true|false}}` instead of `201 {userId, email, name, welcomeEmailSent}`; `409 account_exists` is gone: an address that already has an account gets the same answer and a mail with a link to choose a new password. `POST /api/recover_password` answers as before but only mails a link; the password is not touched until the link is used. The links open a page of the app (`verify_email`) that posts to the new `POST /api/verify_email` (purposes `accountCreation`, `resetPassword`, `changeEmail`). **`POST /api/password_change` and `POST /api/email_change` are gone**: `PATCH /api/account` takes `newPassword` (with the current one as `password`, and `logoutOtherDevices`) and `loginEmail`, and `secondaryEmail` is now `notificationEmails`, a list of addresses separated by `;`. In `GET /api/account`, `email` is now `loginEmail` and `secondaryEmail` is `notificationEmails`. The password rule is the same everywhere (10 to 72 bytes). In the database `email1` is `login_email` and `email2` is `notification_emails` (now 1024 characters wide). The migration adds five columns to `user_account` (`email_verified_at`, `email_token_hash`, `email_token_purpose`, `email_token_expires_at`, `email_token_new_email`), marks every existing account as verified, and renames `email1` and `email2`. An API client that registers accounts must now ask its user for the password, and tell them to open the mail.
-
-### Demo accounts
-
-Accounts 2 (`demo.bill@moncycle.app`, Billings) and 3 (`demo.fc@moncycle.app`, FertilityCare) are public: the password is `demo`, and the sign-in page has a button for each. They are made by [www_data/script/db/demo.sql](www_data/script/db/demo.sql) and exist only if you load it. `DEMO_ENABLED` (off by default) is their switch:
-
-- **On.** They can sign in. Every hour, on the hour, `script/demo_reset.php` runs `demo.sql`: it deletes the two accounts (their days, descriptions and sessions with them) and makes them again, in one transaction, with days dated from the day of the run. Whatever a visitor wrote in them is gone, and so are their sessions: **a visitor is signed out at the next hour**. The Docker image schedules it (the entrypoint starts a second scheduler on [server_conf/moncycle-demo.crontab](server_conf/moncycle-demo.crontab), in the container's time zone) unless `CRON_ENABLED=false`; if you run the cron from the host, add `0 * * * * docker exec -u www-data <container> php /var/www/html/script/demo_reset.php` to it. It is a script of its own because `script/cron.php` sends mail and erases accounts, and must run once a day only. `php demo_reset.php --dry-run` says what it would do and writes nothing.
-- **Off.** Signing in to them is refused (`403 account_disabled`, like a deactivated account), a session that is open on one stops working at once (`401`), and nothing resets them (`demo_reset.php` does nothing, and the image does not even schedule it). The accounts stay in the database; nothing deletes them.
-
-The schema does not contain them: with `DEMO_ENABLED=true` they are made when the container first fills an empty database, and again at every reset. Turning `DEMO_ENABLED` on later, on a database that already has tables, makes them at the next full hour (the container is restarted for the variable anyway, and the hourly job starts with it), or when you load `demo.sql` yourself.
-
-### Maintenance mode
-
-`MAINTENANCE_MODE=true` (an environment variable in Docker, `define("MAINTENANCE_MODE", true);` in a hand-written `config.php`; restart the container to change it) puts the back end in maintenance:
-
-- **The API.** Every endpoint answers `503` and `{"error": {"code": "maintenance", "message": ...}}` before it opens the database: nothing can be read or written, whoever is logged in, login, registration and the downloads (`/export/{format}`, `/all_of_my_data_plz`) included, and the visit counters do not move. The answer is the JSON envelope on every endpoint, a file or a redirect included, `GET /api/health_check` too (it opens no database in maintenance). One endpoint stays up: `GET /api/server_info` answers `200` with `"status": "maintenance"` (and no `schemaVersion`: the database is not opened), so that a client can tell its user. The static files (the pages) stay up too. **A container healthcheck must accept the 503 of `health_check` as alive**, or a server in maintenance is restarted as dead: the example of [docker-compose.exemple.yml](docker-compose.exemple.yml) does.
-- **The cron.** `script/cron.php` refuses to run, dry run included: it does not open the database and sends nothing, writes `system.cron_ended` with `ok:false` and `msg:"maintenance"` (level `error`), exits with status 1 (503 when called over HTTP) and prints `MAINTENANCE_MODE is on`.
-- **Not affected:** the migrations (`script/migration/`), which are what you run in maintenance, and `script/stat.php`.
-
-The web app does not know the code yet: its calls fail like any 5xx.
-
----
-
-### Docker Environment Variables
-
-An unset or empty variable takes its default; **required** ones have none and the app does not work without them.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | **required** | MariaDB server hostname. |
-| `DB_PORT` | `3306` | MariaDB server port. |
-| `DB_NAME` | **required** | MariaDB database name. |
-| `DB_ID` | **required** | MariaDB login. |
-| `DB_PASSWORD_FILE` | – | Path of a file holding the MariaDB password, typically a Docker secret (`/run/secrets/db_password`). Preferred over `DB_PASSWORD`, which it overrides when the file is readable. |
-| `DB_PASSWORD` | – | MariaDB password in clear; set it or `DB_PASSWORD_FILE`. |
-| `SMTP_HOST` | **required** | SMTP server hostname, used for the address-verification, already-registered, password-link, password-changed, login-address-change, notification-addresses notice, new-sign-in, cycle, reminder and deletion-warning mails. |
-| `SMTP_PORT` | `465` | SMTP server port (implicit TLS only, no STARTTLS). |
-| `SMTP_MAIL` | **required** | Sender address, also used as the SMTP login. |
-| `SMTP_PASSWORD_FILE` | – | Path of a file holding the SMTP password, typically a Docker secret. Preferred over `SMTP_PASSWORD`, which it overrides when the file is readable. |
-| `SMTP_PASSWORD` | – | SMTP password in clear; set it or `SMTP_PASSWORD_FILE`. |
-| `APP_URL` | `https://tableau.moncycle.app/` | Public URL of your instance, **with a trailing `/`**: it builds the links in mails and the TOTP QR code. Set it, or the links point to the official instance. |
-| `REGISTRATION_ENABLED` | `true` | Allow account creation. Formerly `CREATION_COMPTE`, still read. |
-| `LOGIN_ENABLED` | `true` | Allow login. Formerly `CONNEXION_COMPTE`, still read. |
-| `CRON_ENABLED` | `true` | The container runs `script/cron.php` every day at 3:30 (its time zone, `TZ`), and the hourly demo reset when `DEMO_ENABLED`. `false` schedules nothing: run them from the host instead, never both. Read by the entrypoint of the image only. See [Security](#security). |
-| `DEMO_ENABLED` | `false` | The two public demo accounts (ids 2 and 3, password `demo`). On: they can sign in and `script/demo_reset.php` loads `script/db/demo.sql` every hour, which puts them back as it makes them (a visitor is signed out at the next hour). Off: nobody can sign in to them, their open sessions stop working, and nothing resets them. See [Demo accounts](#demo-accounts). |
-| `MAINTENANCE_MODE` | `false` | Maintenance: every endpoint of the API answers `503` with the error code `maintenance`, before it reads or writes anything (the health check excepted), and `script/cron.php` fails. See [Maintenance mode](#maintenance-mode). |
-| `CSV_SEP` | `;` | Separator of the CSV exports (with `;` temperatures use a decimal comma, otherwise a point). |
-| `PDF_BILLINGS_BORDERS` | `true` | Draw the lines of the Billings PDF chart; `false` gives a chart with no line at all. |
-| `LOGIN_ATTEMPTS_DECAY_MINUTES` | `60` | Failed logins on an account older than this restart the count; `0` counts nothing, so no captcha and no lockout. |
-| `LOGIN_CAPTCHA_THRESHOLD` | `3` | Failed logins on an account after which a captcha is asked; `0` never asks. |
-| `LOGIN_LOCKOUT_THRESHOLD` | `15` | Failed logins on an account after which a wrong password locks it; `0` never locks. |
-| `LOGIN_IP_MAX_ATTEMPTS` | `30` | Failed logins, and failed captchas of register and recover_password, from one IP before HTTP 429; `0` for no limit. |
-| `CAPTCHA_SECRET` | made at start-up | The key that signs the captcha challenges: random, **32 characters or more** (`openssl rand -base64 48`). Empty or shorter: the captcha is closed (`503 captcha_unavailable`) for register, recover_password and the login of an account that must answer one. The image makes a random one at start-up when it is unset (a restart then voids the challenges in flight, five minutes at most); **set the same value on every instance behind one address**. See [Security](#security). |
-| `LOG_LEVEL` | `info` | Least severe level written: `off`, `error`, `warning`, `info` or `debug`. See [Logs](#logs). |
-| `LOG_CATEGORIES` | all | Comma list of the categories written: `auth`, `account`, `data`, `export`, `mail`, `system`, `http`. Empty: all. |
-| `LOG_OUTPUT` | `stdout` | `stdout`, `stderr`, or the absolute path of a file (in Docker, a file in `/var/log/moncycle`). Anything else is `stdout`. |
-| `LOG_FORMAT` | `json` | `json` (one object per line) or `text` (`<time> <level> <event> key=value ...`, for a person reading a terminal). |
-| `LOG_IP` | `full` | The client address in the log: `full`, `truncate` (`a.b.c.0`, or the first 3 groups of an IPv6 address) or `none`. |
-| `LOG_REQUEST_ID_HEADER` | `X-Request-Id` | Request header whose value, when it is plain (`A-Za-z0-9._:-`, 64 characters at most), is the request id of the log; otherwise one is made. Set it empty to never read one. |
-| `APP_SCRIPT_ALLOW` | `127.0.0.1 ::1` | IPs allowed to call `script/` over HTTP, space separated; everyone else gets a 403. |
-| `PHP_SECURE_COOKIES` | `true` | Send cookies over HTTPS only; turn off for plain-HTTP dev. |
-| `COOKIE_SAMESITE` | `strict` | `SameSite` of the session cookie: `strict`, `lax` or `none` (any case). `none` is honoured only with `PHP_SECURE_COOKIES=true`, otherwise it is `lax`. See [Deployments](#deployments). |
-| `WEB_APP_ORIGINS` | – | Browser origins (`https://app.example.org`, comma separated) allowed to write to the API besides its own host and `APP_URL`'s: a staging site, a dev server, another front end. A write from any other origin is a 403. |
-| `TRUSTED_PROXIES` | – | Reverse proxies in front of the app (addresses or CIDR ranges, comma separated) whose `X-Forwarded-For` is believed. Empty: the client is the peer of the connection. See [Security](#security). |
-| `NEWS_URL` | `https://www.moncycle.app/actu.html` | The https page the web app shows as its news banner (`h4`, `p`, `b`, `i`, `br`, `ul`, `li`, `a` and `time` only). **Set it empty for no banner and no request to anybody.** It goes in the CSP's `connect-src` too, so give a URL with no query or fragment. |
-| `PHP_CACHE` | `1` | `1` enables PHP OPcache and the Apache browser-cache headers; `Off` disables every cache (dev). With OPcache on, restart the container after each edit of a bind-mounted `www_data`. |
-| `PHP_SHOW_ERR` | `Off` | `On` shows PHP errors in the browser; they are always logged to `docker logs`. |
-| `PHP_ERROR_REPORTING` | `24575` | PHP `error_reporting` as **a number**: `24575` is `E_ALL` without deprecations (the QR library raises some on every `/api/totp`), `32767` is `E_ALL`. |
-| `PHP_ASSERTIONS` | `-1` | PHP `zend.assertions`: `-1` compiles assertions out (prod), `1` enables them (dev). |
-
-Booleans read `true`/`false`, `on`/`off`, `yes`/`no` or `1`/`0`, in any case. A `LOG_*` value that is not one of the allowed ones takes its default: a typo never turns the log off.
-
-The `PHP_*` variables read by `php.ini` (`PHP_CACHE`, `PHP_SHOW_ERR`, `PHP_ERROR_REPORTING`, `PHP_ASSERTIONS`) are the exception: leave one out rather than empty, an empty value is not replaced by the default (`PHP_ERROR_REPORTING=` means 0: nothing reported).
-
-> **Configuration files:** the internal constants of the app (DB codes, API vocabularies, limits, PDF layouts, ...) are all in [www_data/constants.php](www_data/constants.php), loaded by `config.php`. A `config.php` written by hand (from `config.exemple.php`, outside Docker) must start with `require_once __DIR__ . "/constants.php";`, as the example does.
-
----
-
-### Logs
-
-The app holds personal data, so its log is built on data minimisation: a line says **what happened, to which account, to which row, from where**, and never the content. "Account 21 wrote day 4412 (2026-09-20)" is logged; what the day holds is not.
-
-- **Where.** `stdout` by default (`docker logs`); `stderr` or a file are options (`LOG_OUTPUT`). Nothing goes to the database: it would copy the users' history into it. Rotation, shipping and retention are yours.
-- **What.** Everything that authenticates, changes, deletes, discloses or mails, and every request that reaches the app (`http.request`, which replaces Apache's access log). Static files (pages, scripts, images) do not reach the app and are not logged.
-- **How much.** `LOG_LEVEL` is the least severe level written: `error` (the app failed), `warning` (a refusal or odd behaviour a person should review: a failed login, a wrong password from a logged-in user, a password reset for an unknown address), `info` (normal activity, the audit trail), `debug` (troubleshooting: a captcha issued, a token rejected). `LOG_CATEGORIES` keeps only some of the categories (the part of the event name before the dot).
-- **It never breaks a request.** Logging does not throw, does not write to the response and adds no SQL query of its own (the two counts of `account.deleted` are the one exception; the ids of the sessions a request closes come back with the `DELETE` itself, `RETURNING`). An unwritable file or a bad setting is swallowed: a line that cannot go to the file goes to `stdout` and `system.log_sink_failed` says so.
-
-**Never in a log:** passwords (given, old, new, generated); session tokens, their first characters (`prefix`), cookies and their hashes; TOTP secrets, codes and provisioning URIs; captcha phrases, answers, tokens and macs; request or response bodies; what a day or a description contains (stamp, comment, temperature, sensations, the text of a description); the contents of an NFP file; the subject and body of a mail (two of them hold a password); e-mail addresses and nicknames (an account is its `uid`); SQL text and parameters; SMTP and DB credentials; the query string of a URL; the User-Agent. What **is** logged about data, on purpose: the database id of the row concerned and, for a day, its date (`day`, `dt`, `dsc`). The ids of the descriptions a day *carries* are not: one join with the `description` table would give back what the day holds (a save logs only the descriptions it *created*, `dsc`). Exception messages and the mailer's error text can embed an address or an SQL fragment: they are masked, stripped of control characters and clipped to 200 characters, and a database exception is logged by its SQLSTATE only.
-
-#### A line
-
-One flat JSON object per line, in UTC; the common keys come first, then the event's own. A key whose value is unknown is left out, never `null`.
-
-```
-{"ts":"2026-10-05T14:03:22.123Z","lv":"info","ev":"auth.login_succeeded","rid":"9f3a1c0b7d42","uid":21,"sid":118,"ip":"203.0.113.7","att":0,"totp":true,"scope":"readWrite","cookie":true}
-{"ts":"2026-10-05T14:09:01.456Z","lv":"warning","ev":"auth.login_failed","rid":"c41d8a5e90b3","uid":21,"ip":"198.51.100.4","err":"invalid_credentials","att":4}
-{"ts":"2026-10-05T14:10:05.210Z","lv":"info","ev":"data.day_saved","rid":"7be0f2a64c18","uid":21,"sid":118,"ip":"203.0.113.7","day":4412,"dt":"2026-09-20","new":true}
-{"ts":"2026-10-05T14:10:12.001Z","lv":"info","ev":"http.request","rid":"7be1d3095e7a","uid":21,"sid":118,"ip":"203.0.113.7","m":"GET","p":"/api/timeline_sync","st":200,"ms":14,"n":31,"full":true}
-```
-
-With `LOG_FORMAT=text`: `2026-10-05T14:10:05.210Z info data.day_saved rid=7be0f2a64c18 uid=21 sid=118 ip=203.0.113.7 day=4412 dt=2026-09-20 new=true`. A value with a space, a quote or a control character is quoted as JSON. A newline can never split a line, in either format.
-
-A string is clipped to 200 characters and a list to 20 items. A line stays under 4000 bytes (below `PIPE_BUF`, so the workers of the server never interleave their lines): when it would be longer, its last keys are dropped and `"cut":true` is added.
-
-**The request id** (`rid`) is shared by every line of a request, and is sent back in the `X-Request-Id` response header. If the request carries the header named by `LOG_REQUEST_ID_HEADER` and its value is plain, that value is used (so a reverse proxy can hand its own id down: `proxy_set_header X-Request-Id $request_id;` with nginx); otherwise 12 hexadecimal characters are made. It is client-controlled, so it only serves correlation. A cron run has one id for the whole run.
-
-**The address** (`ip`) is the peer of the connection (`REMOTE_ADDR`), or, when that peer is one of `TRUSTED_PROXIES`, the client address it forwarded (`X-Forwarded-For`): behind a reverse proxy set `TRUSTED_PROXIES`, or it is the proxy. `LOG_IP=truncate` keeps the network only, `none` drops it. There is no `ip` in a cron line.
-
-**Traceability.** Every line of a request names the rows the request handles, so that one `rid` (or one id) finds everything that touched a row. `uid` and `sid` are the account and the session; as soon as the code knows the row, `day` (a day), `dsc` (a description) and `rev` (the sessions a request closed) join them, on **every** line of the request: its events, its `http.request` line, and a `system.exception` that cuts it short. A refused write names the row too (a `409 stale_write` carries the `day` it was refused for). A read says **how many** rows it returned (`n`, `nds`, `ntk`), never which: they are all the account's own (`uid`), and the id of a row is given when the request is about one row (`GET /api/day/{date}`). A change that touches many rows as a side effect says how many (`tch`: days re-stamped by a description change), and an import gives the bounds of what it wrote (`day0`/`day1`, `dsc0`/`dsc1`), not a list. None of this costs a query: an id is logged only where the code already holds it (a row it read, the id of an insert, the `RETURNING` of a `DELETE`), and a count is a `count()` of what the endpoint built.
-
-#### Keys
-
-Every key the code can write. The first block is on every line.
-
-| Key | Meaning |
-|-----|---------|
-| `ts` | UTC time, ISO-8601 with milliseconds. |
-| `lv` | Level: `error`, `warning`, `info`, `debug`. |
-| `ev` | Event name, `<category>.<name>` (see below). |
-| `rid` | Request id. |
-| `src` | `cli` for the cron; absent for a web request. |
-| `uid` | Account id (`no_user_account`). |
-| `sid` | Session id (`no_auth_token`, never the token itself). |
-| `ip` | Client address, as `LOG_IP` allows. |
-| `att` | Failed login attempts on the account, with the decay applied (`LOGIN_ATTEMPTS_DECAY_MINUTES`); on a refusal that counts against the account (wrong password, wrong code, locked) this one is included. On a success: the failures it ended. Absent when the address has no account. |
-| `totp` | A one-time code was required and given. |
-| `err` | The refusal or API error code (`invalid_credentials`, `captcha_invalid`, `unauthorized`...). |
-| `why` | The reason: for `auth.token_rejected` `unknown`, `expired` or `disabled`; for `account.deleted` `user_request`, `inactivity` or `unverified`; for `system.log_sink_failed` `open_basedir`, `permission_denied`, `read_only`, `missing_directory`, `is_directory`, `not_permitted`, `cannot_open` or `write_failed`. |
-| `nfp` | The NFP method id (1 to 4) of a new account. |
-| `act` | What was refused: `register`, `recover_password`, `account` (`POST /api/account` that asks the password again), `delete`, `verify_email`, `totp_enable`, `totp_disable`. |
-| `purp` | What a link by mail is for: `accountCreation`, `resetPassword` or `changeEmail` (never the token itself). |
-| `out` | Number of other sessions closed by a password change, or tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`. |
-| `rev` | Ids (`no_auth_token`) of the sessions the request closed: the ones revoked, the other sessions a password change logged out, the session a sign-in with a cookie replaced. At most 20 are listed, `out` has the count. |
-| `scope` | The scope of the token a sign-in made: `readOnly` or `readWrite`. |
-| `cookie` | The sign-in also set the session cookie (`"cookie": true`). |
-| `fld` | Names of the account settings changed (the names, never the values). |
-| `ndy` | Days erased with an account. |
-| `nds` | Descriptions erased with an account (`account.deleted`), created by an import (`data.import`) or carried by a sync (`http.request` of `GET /api/timeline_sync`). |
-| `ntk` | Sessions the raw data export held. |
-| `tch` | Days whose stamp changed (the sync reports them) because a description they carry was renamed, retyped or deleted: a day stamped in that very second does not count. |
-| `day` | Day id (`no_day`). On every line of a request about one day, even when the write is refused. |
-| `dt` | The `date_obs` of a day. |
-| `new` | The row was created by this write. |
-| `dsc` | Description id (`no_description`), on every line of a request about one description; on `data.day_saved` the ids of the descriptions the save created (never the ones the day carries). |
-| `dry` | The import, or the cron run, was a dry run (the cron's lines carry it only when it is): the counts of a step are then what it would do. |
-| `ovr` | The import was allowed to overwrite days (`override`). |
-| `rd` | Days the import file holds. |
-| `cr` | Days the import created (or would). |
-| `ow` | Days the import overwrote (or would). |
-| `dt0`, `dt1` | Earliest and latest `date_obs` an import wrote. |
-| `day0`, `day1` | Smallest and largest day id an import wrote: bounds, not a list. |
-| `dsc0`, `dsc1` | Smallest and largest id of the descriptions an import created: bounds, not a list. |
-| `fmt` | Export format: `pdf`, `csv`, `nfp`. |
-| `anon` | The export was anonymous. |
-| `per` | Length of the exported period in days (not the dates). |
-| `kind` | Which mail: `verify_email`, `account_exists`, `reset_password`, `password_changed`, `confirm_email`, `email_change_requested`, `email_change_taken`, `email_changed`, `notification_emails`, `new_login`, `cycle`, `reminder`, `deletion_warning`. |
-| `to` | Number of recipients of a mail. |
-| `fil` | Number of attachments of a mail. |
-| `msg` | A scrubbed message: the mailer's error, an exception message, a fatal error. |
-| `cls` | Class of an exception. |
-| `sql` | SQLSTATE of a database exception. |
-| `at` | Where an exception was thrown, `file:line`. |
-| `step` | Which step of a cron run is done: `cycle_mails`, `reminders`, `deletion_warnings`, `account_deletions`, `unverified_deletions`, `tokens`, `login_attempts`, `public_stats`, `visit_counters`, in the order the run takes them. |
-| `ok` | The cron run reached its end. |
-| `ms` | Duration in milliseconds. |
-| `sent` | Mails the cron run sent. |
-| `ko` | Mails the cron run, or one of its steps, could not send. |
-| `del` | Accounts the cron run deleted. |
-| `tok` | Session tokens the cron run purged. |
-| `ipa` | Login attempts (IP) the cron run purged. |
-| `f` | The log file that could not be used. |
-| `m` | HTTP method. |
-| `p` | The endpoint (`/api/day` for `/api/day/2026-09-20`): never the arguments of the URL (a date, a row number, a token prefix), nor the query string. |
-| `st` | HTTP status. |
-| `n` | Rows a read returned, as stored (days, descriptions, sessions): an unwritten date is not a row. On `export.file`, `export.raw_dump` and the cycle `mail.sent` the day rows the file or the mail was made from (a gap in a chart is not a row). For `system.cron_step`, what the step took care of (accounts mailed or deleted, rows purged, counters reset). |
-| `full` | The read was the whole history. |
-| `cut` | The line was shortened to fit. |
-
-#### Events
-
-| Event | Level | Keys | When |
-|-------|-------|------|------|
-| `auth.login_succeeded` | info | `att`, `totp`, `scope`, `cookie`, `rev` | A sign-in (`POST /api/token`): a token was made, `sid` is its id. `rev` is the session of the cookie it replaced. |
-| `auth.login_failed` | warning | `err`, `att`, `uid` | A refused login: `missing_credentials`, `login_disabled`, `rate_limited`, `captcha_required`, `captcha_expired`, `captcha_unavailable`, `account_disabled`, `invalid_credentials`, `account_locked`, `email_not_verified`, `totp_required`, `totp_invalid`. `uid` when the address has an account. |
-| `auth.logout` | info | | A logout with a valid token (`DELETE /api/token` with no parameter). |
-| `auth.token_revoked` | info | `out`, `rev` | Tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`: `rev` names them. |
-| `auth.captcha_issued` | debug | | A captcha challenge was issued (the picture, the answer, the token and its mac are never logged). |
-| `auth.token_rejected` | debug | `why`, `sid` | A token was presented and no active account matched. `uid` and `sid` name the account and the session when the token is known (`expired`, `disabled`). |
-| `account.registered` | info | `nfp` | An account was created (its address not proved yet). |
-| `account.refused` | warning | `act`, `err` | A registration or a password recovery (`act` `register`, `recover_password`) refused (`registration_disabled`, `captcha_invalid`, `captcha_expired`, `captcha_unavailable`, `rate_limited`), a registration for an address that already has an account (`account_exists`: the caller was told nothing), a link by mail refused (`act` `verify_email`: `invalid_token`, `token_expired`, `email_taken`), a wrong password (`invalid_password`) on `POST /api/account` (`act` `account`) or an account deletion (`act` `delete`), a wrong or missing TOTP code (`totp_invalid`, `totp_required`) to change the login address. |
-| `account.email_token_issued` | info | `purp` | A link was written in the slot of an account (the mail goes after): to verify the address, choose a password or change the address. |
-| `account.email_verified` | info | | The link that proves an address was used. |
-| `account.email_changed` | info | | The link that changes the login address was used. |
-| `account.password_reset` | info | | A reset link was used: the password was set. |
-| `account.password_reset_unknown` | warning | | A password reset asked for an address with no account. |
-| `account.password_changed` | info | `out`, `rev` | `rev` names the other sessions it closed. |
-| `account.settings_changed` | info | `fld` | Only when something changed. |
-| `account.totp_setup_started` | info | | |
-| `account.totp_enabled` | info | | |
-| `account.totp_disabled` | info | | |
-| `account.reactivated` | info | | A write by the owner of an account flagged inactive. |
-| `account.deleted` | info | `why`, `ndy`, `nds` | An account erased, by its owner or for inactivity (RGPD). |
-| `data.day_saved` | info | `day`, `dt`, `new`, `dsc` | Written once the transaction has committed. |
-| `data.day_cleared` | info | `day`, `dt` | Nothing is logged for a date that had never been written. |
-| `data.description_saved` | info | `dsc`, `new`, `tch` | `tch` on a rename or a retype: the days it re-stamped. |
-| `data.description_deleted` | info | `dsc`, `tch` | `tch`: the days it re-stamped (the links go with the description). |
-| `data.import` | info | `dry`, `ovr`, `rd`, `cr`, `ow`, `nds`, `dt0`, `dt1`, `day0`, `day1`, `dsc0`, `dsc1` | One line per import, not per day. A dry run writes nothing and so has no bounds. A refused or rolled-back import logs nothing but its `http.request`. |
-| `export.file` | info | `fmt`, `anon`, `per`, `n` | A PDF, CSV or NFP export: `per` is the length of the period, `n` the day rows read (an NFP file reads back to the start of its first cycle). |
-| `export.raw_dump` | info | `n`, `ntk` | The raw data export: the day rows and the sessions it held. |
-| `mail.sent` | info | `kind`, `to`, `fil`, `n` | `n` on a cycle mail: the day rows it was made from. `uid` names the account it went to. |
-| `mail.failed` | error | `kind`, `to`, `msg`, `n` | |
-| `system.exception` | error | `cls`, `sql`, `at`, `msg` | An uncaught exception (the client gets a 500 `unexpected_error`). A database exception has `sql` and no `msg`. |
-| `system.cron_started` | info | `dry` | |
-| `system.cron_step` | info | `step`, `dry`, `n`, `ko` | One line when each step of the daily cron is done, even when it had nothing to do (`n` 0): the lines between `system.cron_started` and `system.cron_ended` say how far a run that died got, and the step after the last one is the one that failed. `ko` is on the three mail steps (`cycle_mails`, `reminders`, `deletion_warnings`); `public_stats` has no `n`. |
-| `system.cron_ended` | info, **error** if it failed | `ok`, `dry`, `ms`, `sent`, `ko`, `del`, `tok`, `ipa`, `msg` | `ok:false` when the run died before its end (uncaught exception, fatal error, timeout), or was refused: `msg` is `maintenance` when `MAINTENANCE_MODE` is on and nothing was done. The counters are what had been done by then, so all 0 for a dry run. A mail that could not be sent is `ko` and a `mail.failed` line, and the run is still `ok:true`. The steps in between are the `system.cron_step` lines. |
-| `system.log_sink_failed` | error | `f`, `why` | The log file could not be opened or written; the lines go to `stdout`. At most once per request. |
-| `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `nds`, `full` | The end of every request that reached the app, with the ids the request named (`uid`, `sid`, `day`, `dsc`, `rev`). A read is this line with a `GET`, the `uid`, the path and `n` (and `nds` for a sync); `full` is true for `GET /api/timeline_sync` from the start. `GET /api/day/{date}` names the `day` when it was ever written, and `n` is 0 or 1. |
-
-`account.refused` and `auth.login_failed` are the only lines whose volume an attacker controls (`rate_limited`): the reverse proxy's rate limit (above) bounds it. The health check of [docker-compose.exemple.yml](docker-compose.exemple.yml) calls `/api/health_check` every 30 s; it is not logged unless it fails.
-
-#### To a file
-
-`LOG_OUTPUT=/var/log/moncycle/app.log` appends to a file instead. The file is opened once per request, written with one `write` per line and never locked, so lines stay whole between workers; and a rename-based `logrotate` needs no signal and no `copytruncate`.
-
-- In the Docker image `open_basedir` allows `/var/log/moncycle` and nothing else outside the code: the file must be named inside that directory, and a volume mounted there. The directory belongs to `www-data` (uid 33) in the image, so a **named volume** inherits it; a **bind mount** takes the host directory's owner: `chown 33:33 /host/dir`. Outside Docker, any path the web user can append to works.
-- `docker exec` runs as root, and a file first created by root cannot be appended to by the web server: run the cron as `www-data` (`docker exec -u www-data ...`, see [Security](#security)).
-- With `read_only: true` the directory is not writable without a volume; the app then logs to `stdout` and says why in `system.log_sink_failed`.
-- Cron lines go where the cron's own output goes: with `stdout`, the output of the `docker exec` and not `docker logs`. A file gathers the web and the cron lines in one place.
-
-```yaml
-    volumes:
-      - moncycle_logs:/var/log/moncycle
-    environment:
-      LOG_OUTPUT: /var/log/moncycle/app.log
-volumes:
-  moncycle_logs:
-```
-
-```
-# /etc/logrotate.d/moncycle: on the host, the file is in the volume (docker volume inspect moncycle_logs)
-/var/lib/docker/volumes/moncycle_logs/_data/app.log {
-    daily
-    rotate 14
-    missingok
-    notifempty
-    compress
-    delaycompress
-    create 640 33 33
-}
-```
-
-The lines hold IP addresses and account ids with the time of their activity: keep them only as long as you need them. A deleted account's old lines stay until they rotate out.
-
----
-
-### Dev vs prod
-
-The image is **prod by default**: forgetting a variable never turns debugging on.  
-Dev is opt-in, with one env file: copy [dev.env.example](dev.env.example) to `dev.env` (git-ignored) and give it to the container, `docker run --env-file dev.env ...` or `env_file: ./dev.env` in compose.  
-It shows PHP errors, reports everything, enables assertions, turns off OPcache and every HTTP cache, lets cookies travel over plain HTTP, and logs at `debug` level in the readable `text` format.  
-Prod needs none of it: no `env_file`, see [docker-compose.exemple.yml](docker-compose.exemple.yml).  
-The code is baked in the image: a deploy is a rebuild (`composer install` honours `composer.lock`; update the dependencies on purpose with `composer update`, and commit the lock).  
+Creative Commons **CC BY-NC-SA 4.0**: attribution, non-commercial use, share alike.
+[Full license](https://creativecommons.org/licenses/by-nc-sa/4.0/) · [legal code](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.fr)

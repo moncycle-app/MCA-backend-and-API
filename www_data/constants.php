@@ -297,7 +297,7 @@ const SYNC_OVERLAP_SECONDS = 120;
 const SYNC_FROM_START = "1970-01-01 00:00:00";
 
 // ===========================================================================
-// LOGS -- the app's own log (lib/log.php; the policy is README.md, "Logs")
+// LOGS -- the app's own log (lib/log.php; the policy is docs/logs.md)
 // ===========================================================================
 
 // The values the LOG_* settings take. LOG_LEVEL is the least severe level written: the order of

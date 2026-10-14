@@ -30,7 +30,7 @@ $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 // NOTE: MariaDB commits at every ALTER TABLE / CREATE TABLE / RENAME, so the transaction below protects the
 // data steps only, not the schema ones. A run that stops half way leaves a half migrated database: restore the
-// dump taken before (README, "Upgrading"), do not run the script again on it. The accounts merged or deleted
+// dump taken before (docs/upgrading.md), do not run the script again on it. The accounts merged or deleted
 // below are final from the first ALTER on: the dump is the only way back.
 try {
 
