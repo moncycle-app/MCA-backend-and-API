@@ -100,8 +100,9 @@ if ($method === 'DELETE') {
 
 	sec_exit_if_logged_out($user_account);
 	$revoked = token_revoke($db, $user_account, $prefix);
-	log_event("auth.token_revoked", ["out" => $revoked]);
-	http_data(200, ["revoked" => $revoked]);
+	log_context(["rev" => $revoked ?: null]);
+	log_event("auth.token_revoked", ["out" => count($revoked)]);
+	http_data(200, ["revoked" => count($revoked)]);
 }
 
 http_exit_method_not_allowed(["POST", "GET", "DELETE"]);

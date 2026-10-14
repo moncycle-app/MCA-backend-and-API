@@ -62,8 +62,15 @@ if (!$has_data) {
 	http_error(404, "no_data_in_period", "There is no observation between 'from' and 'to'.");
 }
 
-// only the length of the period is logged, not the dates
-log_event("export.file", ["fmt" => $type, "anon" => $anonymous, "per" => (new DateTime($start_date))->diff(new DateTime($end_date))->days + 1]);
+// the NFP file is made before it is logged, for the number of rows it read (it reads back to the start of the cycle)
+$rows_read = null;
+$nfp_json = $type === EXPORT_TYPE_NFP ? nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $inline, $rows_read) : null;
+
+// only the length of the period and the number of days read are logged, not the dates
+log_event("export.file", [
+	"fmt" => $type, "anon" => $anonymous, "per" => (new DateTime($start_date))->diff(new DateTime($end_date))->days + 1,
+	"n" => $rows_read ?? doc_export_rows_read($days),
+]);
 
 $filename = 'moncycle_app_' . date_human(new DateTime($start_date), '_');
 
@@ -82,8 +89,6 @@ elseif ($type === EXPORT_TYPE_PDF) {
 }
 
 else {
-	$nfp_json = nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $inline);
-
 	header('Content-Type: application/json');
 	if (!$inline) header('Content-Disposition: attachment; filename="' . $filename . '.nfp"');
 	print($nfp_json);

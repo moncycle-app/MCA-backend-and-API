@@ -78,8 +78,9 @@ function nfp_export_day(array $day): array {
 //
 // The period is widened backwards to the first day of the cycle containing $start_date, so a
 // cycle is never exported cut in half, and it never runs past today. Three queries total: the
-// cycle lookup, the days, and the descriptions of those days in one go.
-function nfp_export_cycles($db, string $start_date, string $end_date, array $user_account): array {
+// cycle lookup, the days, and the descriptions of those days in one go. $rows_read is how many day rows
+// that took (the gaps of the file are no row): the export's log says how much was read.
+function nfp_export_cycles($db, string $start_date, string $end_date, array $user_account, ?int &$rows_read = null): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$method = account_method_name(intval($user_account["nfp_method"]));
 
@@ -87,6 +88,7 @@ function nfp_export_cycles($db, string $start_date, string $end_date, array $use
 
 	$raw_days = db_select_day_timelines_frame($db, $cycle_start_date, $end_date, $no_user_account);
 	$raw_days = array_column($raw_days, null, 'date_obs');
+	$rows_read = count($raw_days);
 
 	$description_rows = db_select_descriptions_for_day_timeline_frame($db, $cycle_start_date, $end_date, $no_user_account);
 	$descriptions_by_day = [];
@@ -131,8 +133,8 @@ function nfp_export_cycles($db, string $start_date, string $end_date, array $use
 }
 
 // The whole file. $anonymous leaves out everything identifying, for sharing with a
-// practitioner; the data itself is unchanged.
-function nfp_export_file($db, string $start_date, string $end_date, array $user_account, bool $anonymous, string $app_version): array {
+// practitioner; the data itself is unchanged. $rows_read receives the number of day rows it read.
+function nfp_export_file($db, string $start_date, string $end_date, array $user_account, bool $anonymous, string $app_version, ?int &$rows_read = null): array {
 	$file = [
 		"schemaVersion" => NFP_SCHEMA_VERSION,
 		"fileInformation" => [
@@ -154,17 +156,17 @@ function nfp_export_file($db, string $start_date, string $end_date, array $user_
 	$file["userMethodPreferences"] = [
 		"preferredMethod" => account_method_name(intval($user_account["nfp_method"])),
 	];
-	$file["cycles"] = nfp_export_cycles($db, $start_date, $end_date, $user_account);
+	$file["cycles"] = nfp_export_cycles($db, $start_date, $end_date, $user_account, $rows_read);
 
 	return $file;
 }
 
 // The file as the text a download or a mail attachment carries. $pretty is for reading it in the browser.
 // JSON_UNESCAPED_UNICODE / _SLASHES keep accented comments and the ISO-8601 timestamp readable in the
-// file; JSON_PRESERVE_ZERO_FRACTION keeps a round 37.0 a number.
-function nfp_export_json($db, string $start_date, string $end_date, array $user_account, bool $anonymous, bool $pretty = false): string {
+// file; JSON_PRESERVE_ZERO_FRACTION keeps a round 37.0 a number. $rows_read: see nfp_export_file().
+function nfp_export_json($db, string $start_date, string $end_date, array $user_account, bool $anonymous, bool $pretty = false, ?int &$rows_read = null): string {
 	$app_version = server_build()["version"];
-	$file = nfp_export_file($db, $start_date, $end_date, $user_account, $anonymous, $app_version);
+	$file = nfp_export_file($db, $start_date, $end_date, $user_account, $anonymous, $app_version, $rows_read);
 
 	$flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION;
 	return json_encode($file, $pretty ? ($flags | JSON_PRETTY_PRINT) : $flags);

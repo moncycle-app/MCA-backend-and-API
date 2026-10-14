@@ -322,16 +322,18 @@ function account_update($db, array $user_account, array $body, array $issues = [
 		$new["notification_emails"] = $new_notification_emails;
 		$changed[] = "notificationEmails";
 	}
-	$logged_out_devices = db_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $last_write_client_UTC, $new_password, $logout_other_devices) {
+	$closed_sessions = db_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $last_write_client_UTC, $new_password, $logout_other_devices) {
 		if (!empty($changed)) db_update_user_account_settings($db, $no_user_account, $new, $last_write_client_UTC);
 		if (is_null($new_password)) return null;
 
 		db_update_password($db, sec_hash($new_password), $no_user_account);
 		// a link to choose a password, still in the mailbox, is no use any more; a pending change of address is left alone
 		db_update_user_account_email_token_clear($db, $no_user_account, EMAIL_TOKEN_PURPOSE_RESET_PASSWORD);
-		return $logout_other_devices === true ? db_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : 0;
+		return $logout_other_devices === true ? db_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : [];
 	});
+	$logged_out_devices = is_null($closed_sessions) ? null : count($closed_sessions);
 
+	if (!empty($closed_sessions)) log_context(["rev" => $closed_sessions]);
 	if (!empty($changed)) log_event("account.settings_changed", ["fld" => $changed]);
 	if (!is_null($new_password)) log_event("account.password_changed", ["out" => $logged_out_devices]);
 	if (!is_null($new_notification_emails)) mail_send_notification_emails_changed($user_account["login_email"], $new_notification_emails);

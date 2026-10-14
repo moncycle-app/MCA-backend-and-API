@@ -71,6 +71,11 @@ function doc_export_days($db, string $start_date, string $end_date, array $user_
 	return $days;
 }
 
+// How many of the days doc_export_days() answered were rows read (its gap entries are not): the volume an export's log gives.
+function doc_export_rows_read(array $days): int {
+	return count(array_filter($days, fn($day) => empty($day["isGap"])));
+}
+
 // One day_timeline row, with its "description" rows and its "cycle" / "pos" set -> an export day.
 function doc_export_day(array $row): array {
 	$day = day_format_to_json($row);

@@ -71,7 +71,8 @@ foreach (db_select_cycles_finished($db) as $account) {
 	$file_name = 'moncycle_app_' . date_human(new DateTime($cycle_start), '_');
 	$sent = mail_send_cycle(
 		$account, date_human(new DateTime($days[0]["date"])), date_human(new DateTime(end($days)["date"])), count($days),
-		["$file_name.pdf" => doc_export_pdf($days, $nfp_method, $account["name"])->Output('S'), "$file_name.csv" => stream_get_contents($csv), "$file_name.nfp" => $nfp]
+		["$file_name.pdf" => doc_export_pdf($days, $nfp_method, $account["name"])->Output('S'), "$file_name.csv" => stream_get_contents($csv), "$file_name.nfp" => $nfp],
+		doc_export_rows_read($days)
 	);
 	fclose($csv);
 	log_cron_count($sent ? "sent" : "ko");

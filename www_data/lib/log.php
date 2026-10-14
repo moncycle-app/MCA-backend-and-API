@@ -20,7 +20,12 @@
 //
 // A web request is started by log_start() (api_start() does it), which also writes its `http.request`
 // line when the request ends. log_context() holds what every line of the request shares (the
-// account and the session), log_note() what only the request's own line carries.
+// account and the session, and the ids of the rows it handles), log_note() what only the request's
+// own line carries (the error code, the number of rows a read returned).
+//
+// Traceability costs no query: an id goes in a line only when the code already holds it (a row it
+// read, an insert's id, the RETURNING of a delete), and a read says how many rows it returned
+// (count() of what it built), never which.
 
 // The state of the running request or run. Returned by reference so that the callers and the
 // shutdown functions share it (a PHP static does not outlive a request under mod_php).
@@ -98,8 +103,11 @@ function log_request_end(): void {
 	}
 }
 
-// What the lines of the request share. Only "uid" (the account) and "sid" (the session, never the
-// token) are read; a null value removes the key.
+// What the lines of the request share: "uid" (the account) and "sid" (the session, never the token),
+// and the database ids of the rows the request handles ("day", "dsc", "rev"), set as soon as the code
+// knows them so that every line of the request names them: its events, its `http.request` line, and a
+// `system.exception` that cuts it short. An id the event writes itself wins over the request's. A null
+// value removes the key. Ids only, never what a row holds, and nothing that costs a query to find.
 function log_context(array $fields): void {
 	$state = &log_state();
 	foreach ($fields as $key => $value) {
@@ -173,7 +181,8 @@ function log_event(string $event, array $fields = [], ?string $level = null): vo
 			"ip" => $state["ip"],
 		];
 		unset($fields["uid"], $fields["sid"]);
-		log_write(log_line($common, $fields));
+		$objects = array_diff_key($state["context"], ["uid" => 0, "sid" => 0]);
+		log_write(log_line($common, $objects ? array_replace($objects, $fields) : $fields));
 	} catch (\Throwable $e) {
 	}
 }

@@ -226,9 +226,9 @@ The app holds personal data, so its log is built on data minimisation: a line sa
 - **Where.** `stdout` by default (`docker logs`); `stderr` or a file are options (`LOG_OUTPUT`). Nothing goes to the database: it would copy the users' history into it. Rotation, shipping and retention are yours.
 - **What.** Everything that authenticates, changes, deletes, discloses or mails, and every request that reaches the app (`http.request`, which replaces Apache's access log). Static files (pages, scripts, images) do not reach the app and are not logged.
 - **How much.** `LOG_LEVEL` is the least severe level written: `error` (the app failed), `warning` (a refusal or odd behaviour a person should review: a failed login, a wrong password from a logged-in user, a password reset for an unknown address), `info` (normal activity, the audit trail), `debug` (troubleshooting: a captcha issued, a token rejected). `LOG_CATEGORIES` keeps only some of the categories (the part of the event name before the dot).
-- **It never breaks a request.** Logging does not throw, does not write to the response and adds no SQL query of its own (the two counts of `account.deleted` are the one exception). An unwritable file or a bad setting is swallowed: a line that cannot go to the file goes to `stdout` and `system.log_sink_failed` says so.
+- **It never breaks a request.** Logging does not throw, does not write to the response and adds no SQL query of its own (the two counts of `account.deleted` are the one exception; the ids of the sessions a request closes come back with the `DELETE` itself, `RETURNING`). An unwritable file or a bad setting is swallowed: a line that cannot go to the file goes to `stdout` and `system.log_sink_failed` says so.
 
-**Never in a log:** passwords (given, old, new, generated); session tokens, their first characters (`prefix`), cookies and their hashes; TOTP secrets, codes and provisioning URIs; captcha phrases, answers, tokens and macs; request or response bodies; what a day or a description contains (stamp, comment, temperature, sensations, the text of a description); the contents of an NFP file; the subject and body of a mail (two of them hold a password); e-mail addresses and nicknames (an account is its `uid`); SQL text and parameters; SMTP and DB credentials; the query string of a URL; the User-Agent. What **is** logged about data, on purpose: the database id of the row concerned and, for a day, its date (`day`, `dt`, `dsc`). Exception messages and the mailer's error text can embed an address or an SQL fragment: they are masked, stripped of control characters and clipped to 200 characters, and a database exception is logged by its SQLSTATE only.
+**Never in a log:** passwords (given, old, new, generated); session tokens, their first characters (`prefix`), cookies and their hashes; TOTP secrets, codes and provisioning URIs; captcha phrases, answers, tokens and macs; request or response bodies; what a day or a description contains (stamp, comment, temperature, sensations, the text of a description); the contents of an NFP file; the subject and body of a mail (two of them hold a password); e-mail addresses and nicknames (an account is its `uid`); SQL text and parameters; SMTP and DB credentials; the query string of a URL; the User-Agent. What **is** logged about data, on purpose: the database id of the row concerned and, for a day, its date (`day`, `dt`, `dsc`). The ids of the descriptions a day *carries* are not: one join with the `description` table would give back what the day holds (a save logs only the descriptions it *created*, `dsc`). Exception messages and the mailer's error text can embed an address or an SQL fragment: they are masked, stripped of control characters and clipped to 200 characters, and a database exception is logged by its SQLSTATE only.
 
 #### A line
 
@@ -248,6 +248,8 @@ A string is clipped to 200 characters and a list to 20 items. A line stays under
 **The request id** (`rid`) is shared by every line of a request, and is sent back in the `X-Request-Id` response header. If the request carries the header named by `LOG_REQUEST_ID_HEADER` and its value is plain, that value is used (so a reverse proxy can hand its own id down: `proxy_set_header X-Request-Id $request_id;` with nginx); otherwise 12 hexadecimal characters are made. It is client-controlled, so it only serves correlation. A cron run has one id for the whole run.
 
 **The address** (`ip`) is the peer of the connection (`REMOTE_ADDR`), or, when that peer is one of `TRUSTED_PROXIES`, the client address it forwarded (`X-Forwarded-For`): behind a reverse proxy set `TRUSTED_PROXIES`, or it is the proxy. `LOG_IP=truncate` keeps the network only, `none` drops it. There is no `ip` in a cron line.
+
+**Traceability.** Every line of a request names the rows the request handles, so that one `rid` (or one id) finds everything that touched a row. `uid` and `sid` are the account and the session; as soon as the code knows the row, `day` (a day), `dsc` (a description) and `rev` (the sessions a request closed) join them, on **every** line of the request: its events, its `http.request` line, and a `system.exception` that cuts it short. A refused write names the row too (a `409 stale_write` carries the `day` it was refused for). A read says **how many** rows it returned (`n`, `nds`, `ntk`), never which: they are all the account's own (`uid`), and the id of a row is given when the request is about one row (`GET /api/day/{date}`). A change that touches many rows as a side effect says how many (`tch`: days re-stamped by a description change), and an import gives the bounds of what it wrote (`day0`/`day1`, `dsc0`/`dsc1`), not a list. None of this costs a query: an id is logged only where the code already holds it (a row it read, the id of an insert, the `RETURNING` of a `DELETE`), and a count is a `count()` of what the endpoint built.
 
 #### Keys
 
@@ -271,15 +273,18 @@ Every key the code can write. The first block is on every line.
 | `act` | What was refused: `register`, `recover_password`, `account` (`POST /api/account` that asks the password again), `delete`, `verify_email`, `totp_enable`, `totp_disable`. |
 | `purp` | What a link by mail is for: `accountCreation`, `resetPassword` or `changeEmail` (never the token itself). |
 | `out` | Number of other sessions closed by a password change, or tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`. |
+| `rev` | Ids (`no_auth_token`) of the sessions the request closed: the ones revoked, the other sessions a password change logged out, the session a sign-in with a cookie replaced. At most 20 are listed, `out` has the count. |
 | `scope` | The scope of the token a sign-in made: `readOnly` or `readWrite`. |
 | `cookie` | The sign-in also set the session cookie (`"cookie": true`). |
 | `fld` | Names of the account settings changed (the names, never the values). |
 | `ndy` | Days erased with an account. |
-| `nds` | Descriptions erased with an account (`account.deleted`) or created by an import (`data.import`). |
-| `day` | Day id (`no_day`). |
+| `nds` | Descriptions erased with an account (`account.deleted`), created by an import (`data.import`) or carried by a sync (`http.request` of `GET /api/timeline_sync`). |
+| `ntk` | Sessions the raw data export held. |
+| `tch` | Days whose stamp changed (the sync reports them) because a description they carry was renamed, retyped or deleted: a day stamped in that very second does not count. |
+| `day` | Day id (`no_day`). On every line of a request about one day, even when the write is refused. |
 | `dt` | The `date_obs` of a day. |
 | `new` | The row was created by this write. |
-| `dsc` | Description id (`no_description`), or the ids of the descriptions a day save created. |
+| `dsc` | Description id (`no_description`), on every line of a request about one description; on `data.day_saved` the ids of the descriptions the save created (never the ones the day carries). |
 | `dry` | The import, or the cron run, was a dry run (the cron's lines carry it only when it is): the counts of a step are then what it would do. |
 | `ovr` | The import was allowed to overwrite days (`override`). |
 | `rd` | Days the import file holds. |
@@ -287,6 +292,7 @@ Every key the code can write. The first block is on every line.
 | `ow` | Days the import overwrote (or would). |
 | `dt0`, `dt1` | Earliest and latest `date_obs` an import wrote. |
 | `day0`, `day1` | Smallest and largest day id an import wrote: bounds, not a list. |
+| `dsc0`, `dsc1` | Smallest and largest id of the descriptions an import created: bounds, not a list. |
 | `fmt` | Export format: `pdf`, `csv`, `nfp`. |
 | `anon` | The export was anonymous. |
 | `per` | Length of the exported period in days (not the dates). |
@@ -309,7 +315,7 @@ Every key the code can write. The first block is on every line.
 | `m` | HTTP method. |
 | `p` | The endpoint (`/api/day` for `/api/day/2026-09-20`): never the arguments of the URL (a date, a row number, a token prefix), nor the query string. |
 | `st` | HTTP status. |
-| `n` | Rows a read returned (days, descriptions); for `system.cron_step`, what the step took care of (accounts mailed or deleted, rows purged, counters reset). |
+| `n` | Rows a read returned, as stored (days, descriptions, sessions): an unwritten date is not a row. On `export.file`, `export.raw_dump` and the cycle `mail.sent` the day rows the file or the mail was made from (a gap in a chart is not a row). For `system.cron_step`, what the step took care of (accounts mailed or deleted, rows purged, counters reset). |
 | `full` | The read was the whole history. |
 | `cut` | The line was shortened to fit. |
 
@@ -317,12 +323,12 @@ Every key the code can write. The first block is on every line.
 
 | Event | Level | Keys | When |
 |-------|-------|------|------|
-| `auth.login_succeeded` | info | `att`, `totp`, `scope`, `cookie` | A sign-in (`POST /api/token`): a token was made, `sid` is its id. |
+| `auth.login_succeeded` | info | `att`, `totp`, `scope`, `cookie`, `rev` | A sign-in (`POST /api/token`): a token was made, `sid` is its id. `rev` is the session of the cookie it replaced. |
 | `auth.login_failed` | warning | `err`, `att`, `uid` | A refused login: `missing_credentials`, `login_disabled`, `rate_limited`, `captcha_required`, `captcha_expired`, `captcha_unavailable`, `account_disabled`, `invalid_credentials`, `account_locked`, `email_not_verified`, `totp_required`, `totp_invalid`. `uid` when the address has an account. |
 | `auth.logout` | info | | A logout with a valid token (`DELETE /api/token` with no parameter). |
-| `auth.token_revoked` | info | `out` | Tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`. |
+| `auth.token_revoked` | info | `out`, `rev` | Tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`: `rev` names them. |
 | `auth.captcha_issued` | debug | | A captcha challenge was issued (the picture, the answer, the token and its mac are never logged). |
-| `auth.token_rejected` | debug | `why` | A token was presented and no active account matched. |
+| `auth.token_rejected` | debug | `why`, `sid` | A token was presented and no active account matched. `uid` and `sid` name the account and the session when the token is known (`expired`, `disabled`). |
 | `account.registered` | info | `nfp` | An account was created (its address not proved yet). |
 | `account.refused` | warning | `act`, `err` | A registration or a password recovery (`act` `register`, `recover_password`) refused (`registration_disabled`, `captcha_invalid`, `captcha_expired`, `captcha_unavailable`, `rate_limited`), a registration for an address that already has an account (`account_exists`: the caller was told nothing), a link by mail refused (`act` `verify_email`: `invalid_token`, `token_expired`, `email_taken`), a wrong password (`invalid_password`) on `POST /api/account` (`act` `account`) or an account deletion (`act` `delete`), a wrong or missing TOTP code (`totp_invalid`, `totp_required`) to change the login address. |
 | `account.email_token_issued` | info | `purp` | A link was written in the slot of an account (the mail goes after): to verify the address, choose a password or change the address. |
@@ -330,7 +336,7 @@ Every key the code can write. The first block is on every line.
 | `account.email_changed` | info | | The link that changes the login address was used. |
 | `account.password_reset` | info | | A reset link was used: the password was set. |
 | `account.password_reset_unknown` | warning | | A password reset asked for an address with no account. |
-| `account.password_changed` | info | `out` | |
+| `account.password_changed` | info | `out`, `rev` | `rev` names the other sessions it closed. |
 | `account.settings_changed` | info | `fld` | Only when something changed. |
 | `account.totp_setup_started` | info | | |
 | `account.totp_enabled` | info | | |
@@ -339,19 +345,19 @@ Every key the code can write. The first block is on every line.
 | `account.deleted` | info | `why`, `ndy`, `nds` | An account erased, by its owner or for inactivity (RGPD). |
 | `data.day_saved` | info | `day`, `dt`, `new`, `dsc` | Written once the transaction has committed. |
 | `data.day_cleared` | info | `day`, `dt` | Nothing is logged for a date that had never been written. |
-| `data.description_saved` | info | `dsc`, `new` | |
-| `data.description_deleted` | info | `dsc` | |
-| `data.import` | info | `dry`, `ovr`, `rd`, `cr`, `ow`, `nds`, `dt0`, `dt1`, `day0`, `day1` | One line per import, not per day. A dry run writes nothing and so has no bounds. A refused or rolled-back import logs nothing but its `http.request`. |
-| `export.file` | info | `fmt`, `anon`, `per` | A PDF, CSV or NFP export. |
-| `export.raw_dump` | info | | The raw data export. |
-| `mail.sent` | info | `kind`, `to`, `fil` | |
-| `mail.failed` | error | `kind`, `to`, `msg` | |
+| `data.description_saved` | info | `dsc`, `new`, `tch` | `tch` on a rename or a retype: the days it re-stamped. |
+| `data.description_deleted` | info | `dsc`, `tch` | `tch`: the days it re-stamped (the links go with the description). |
+| `data.import` | info | `dry`, `ovr`, `rd`, `cr`, `ow`, `nds`, `dt0`, `dt1`, `day0`, `day1`, `dsc0`, `dsc1` | One line per import, not per day. A dry run writes nothing and so has no bounds. A refused or rolled-back import logs nothing but its `http.request`. |
+| `export.file` | info | `fmt`, `anon`, `per`, `n` | A PDF, CSV or NFP export: `per` is the length of the period, `n` the day rows read (an NFP file reads back to the start of its first cycle). |
+| `export.raw_dump` | info | `n`, `ntk` | The raw data export: the day rows and the sessions it held. |
+| `mail.sent` | info | `kind`, `to`, `fil`, `n` | `n` on a cycle mail: the day rows it was made from. `uid` names the account it went to. |
+| `mail.failed` | error | `kind`, `to`, `msg`, `n` | |
 | `system.exception` | error | `cls`, `sql`, `at`, `msg` | An uncaught exception (the client gets a 500 `unexpected_error`). A database exception has `sql` and no `msg`. |
 | `system.cron_started` | info | `dry` | |
 | `system.cron_step` | info | `step`, `dry`, `n`, `ko` | One line when each step of the daily cron is done, even when it had nothing to do (`n` 0): the lines between `system.cron_started` and `system.cron_ended` say how far a run that died got, and the step after the last one is the one that failed. `ko` is on the three mail steps (`cycle_mails`, `reminders`, `deletion_warnings`); `public_stats` has no `n`. |
 | `system.cron_ended` | info, **error** if it failed | `ok`, `dry`, `ms`, `sent`, `ko`, `del`, `tok`, `ipa`, `msg` | `ok:false` when the run died before its end (uncaught exception, fatal error, timeout), or was refused: `msg` is `maintenance` when `MAINTENANCE_MODE` is on and nothing was done. The counters are what had been done by then, so all 0 for a dry run. A mail that could not be sent is `ko` and a `mail.failed` line, and the run is still `ok:true`. The steps in between are the `system.cron_step` lines. |
 | `system.log_sink_failed` | error | `f`, `why` | The log file could not be opened or written; the lines go to `stdout`. At most once per request. |
-| `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `full` | The end of every request that reached the app. A read is this line with a `GET`, the `uid`, the path and `n` / `full`: `full` is true for `GET /api/timeline_sync` from the start. |
+| `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `nds`, `full` | The end of every request that reached the app, with the ids the request named (`uid`, `sid`, `day`, `dsc`, `rev`). A read is this line with a `GET`, the `uid`, the path and `n` (and `nds` for a sync); `full` is true for `GET /api/timeline_sync` from the start. `GET /api/day/{date}` names the `day` when it was ever written, and `n` is 0 or 1. |
 
 `account.refused` and `auth.login_failed` are the only lines whose volume an attacker controls (`rate_limited`): the reverse proxy's rate limit (above) bounds it. The health check of [docker-compose.exemple.yml](docker-compose.exemple.yml) calls `/api/health_check` every 30 s; it is not logged unless it fails.
 

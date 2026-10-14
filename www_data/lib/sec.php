@@ -108,7 +108,7 @@ function sec_auth_token($db) {
 			return $user_account;
 		}
 		$why = is_null($user_account) ? "unknown" : (boolval($user_account["expired_auth_token"]) ? "expired" : "disabled");
-		log_event("auth.token_rejected", ["why" => $why, "uid" => $user_account["no_user_account"] ?? null]);
+		log_event("auth.token_rejected", ["why" => $why, "uid" => $user_account["no_user_account"] ?? null, "sid" => $user_account["no_auth_token"] ?? null]);
 	}
 	return null;
 }
@@ -188,7 +188,7 @@ function sec_auth_success($db, $user_account, array $options = []) {
 	log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($no_auth_token)]);
 	db_update_user_account_logged_in($db, $user_account["no_user_account"]);
 	if ($options["cookie"] ?? false) {
-		if (sec_cookie_token() !== "") db_delete_auth_token_by_str($db, sec_hash_token(sec_cookie_token()));
+		if (sec_cookie_token() !== "") log_context(["rev" => db_delete_auth_token_by_str($db, sec_hash_token(sec_cookie_token())) ?: null]);
 		sec_set_token_cookie($auth_token, is_null($expires_in_days) ? '+5 years' : "+$expires_in_days days");
 	}
 

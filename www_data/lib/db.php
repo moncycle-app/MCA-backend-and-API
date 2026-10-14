@@ -347,21 +347,22 @@ function db_delete_auth_token($db, $no_auth_token, $no_user_account) {
 	return db_exec($db, "DELETE FROM auth_token WHERE no_auth_token = :no_auth_token AND no_user_account = :no_user_account", ["no_auth_token" => $no_auth_token, "no_user_account" => $no_user_account]);
 }
 
-// One token of the account, named by the first characters of the token (what GET /api/token shows): answers how many were deleted,
-// 0 for a prefix the account does not have (another account's token is no token of this one).
-function db_delete_auth_token_by_prefix($db, $no_user_account, $auth_token_prefix) {
-	return db_exec($db, "DELETE FROM auth_token WHERE no_user_account = :no_user_account AND auth_token_prefix = :auth_token_prefix", ["no_user_account" => $no_user_account, "auth_token_prefix" => $auth_token_prefix]);
+// One token of the account, named by the first characters of the token (what GET /api/token shows): answers the ids of the ones deleted,
+// none for a prefix the account does not have (another account's token is no token of this one). RETURNING gives the ids the log names
+// without a query of its own.
+function db_delete_auth_token_by_prefix($db, $no_user_account, $auth_token_prefix): array {
+	return array_map('intval', db_column($db, "DELETE FROM auth_token WHERE no_user_account = :no_user_account AND auth_token_prefix = :auth_token_prefix RETURNING no_auth_token", ["no_user_account" => $no_user_account, "auth_token_prefix" => $auth_token_prefix]));
 }
 
 // The session a browser holds in its cookie (the SHA-256 of what it holds), whoever it belongs to: the browser is about to
-// hold another one.
-function db_delete_auth_token_by_str($db, $auth_token_str) {
-	return db_exec($db, "DELETE FROM auth_token WHERE auth_token_str = :auth_token_str", ["auth_token_str" => $auth_token_str]);
+// hold another one. Answers the id of the one deleted (none when there was none).
+function db_delete_auth_token_by_str($db, $auth_token_str): array {
+	return array_map('intval', db_column($db, "DELETE FROM auth_token WHERE auth_token_str = :auth_token_str RETURNING no_auth_token", ["auth_token_str" => $auth_token_str]));
 }
 
-// Every session of the account but one (the caller's own): answers how many were closed.
-function db_delete_auth_tokens_other($db, $no_user_account, $no_auth_token_kept) {
-	return db_exec($db, "DELETE FROM auth_token WHERE no_user_account = :no_user_account AND no_auth_token <> :no_auth_token", ["no_user_account" => $no_user_account, "no_auth_token" => $no_auth_token_kept]);
+// Every session of the account but one (the caller's own): answers the ids of the ones closed.
+function db_delete_auth_tokens_other($db, $no_user_account, $no_auth_token_kept): array {
+	return array_map('intval', db_column($db, "DELETE FROM auth_token WHERE no_user_account = :no_user_account AND no_auth_token <> :no_auth_token RETURNING no_auth_token", ["no_user_account" => $no_user_account, "no_auth_token" => $no_auth_token_kept]));
 }
 
 // tokens past their expiry date, and those with none that were not used for 40 days or are older than a year (expire > 0: the

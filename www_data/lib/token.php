@@ -122,9 +122,9 @@ function token_exit_if_demo(array $user_account): void {
 }
 
 // DELETE /api/token/{prefix} revokes the token that starts with these characters, DELETE /api/token?others=true every token but the caller's
-// own. $prefix is null for the second. Answers how many were revoked. A token of another account is "not found", as one that does not exist.
+// own. $prefix is null for the second. Answers the ids of the tokens revoked (the log names them). A token of another account is "not found", as one that does not exist.
 // A read-only token may end its own session and nothing else. The caller's own token going (by its prefix) is a logout: the cookie goes with it.
-function token_revoke($db, array $user_account, ?string $prefix): int {
+function token_revoke($db, array $user_account, ?string $prefix): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 
 	if (is_null($prefix)) {
@@ -138,7 +138,8 @@ function token_revoke($db, array $user_account, ?string $prefix): int {
 		sec_exit_if_token_read_only($user_account);
 		token_exit_if_demo($user_account);
 	}
-	if (db_delete_auth_token_by_prefix($db, $no_user_account, $prefix) === 0) http_error(404, "not_found", "No token of this account starts with these characters.");
+	$revoked = db_delete_auth_token_by_prefix($db, $no_user_account, $prefix);
+	if (!$revoked) http_error(404, "not_found", "No token of this account starts with these characters.");
 	if ($own) sec_clear_token_cookie();
-	return 1;
+	return $revoked;
 }

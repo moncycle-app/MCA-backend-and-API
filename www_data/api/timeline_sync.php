@@ -27,5 +27,5 @@ if (trim($query["since"] ?? "") !== "") $from_timestamp = input_timestamp(trim($
 input_exit_if_issues($issues);
 
 $sync = data_sync($db, $user_account, $from_timestamp);
-log_note(["n" => count($sync["days"]), "full" => $from_timestamp === SYNC_FROM_START]);
+log_note(["n" => count($sync["days"]), "nds" => count($sync["descriptions"]), "full" => $from_timestamp === SYNC_FROM_START]);
 http_data(200, $sync);

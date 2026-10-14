@@ -16,10 +16,11 @@ require_once __DIR__ . "/log.php";
 // password_changed, confirm_email, email_change_requested, email_change_taken, email_changed, notification_emails, new_login, cycle,
 // reminder, deletion_warning); it is all the log keeps of it, with how many addresses and files: never an address, a subject or a
 // body (several of them hold a link that opens an account). $to lists the addresses
-// (empty ones are skipped), $attachments is [file name => content]. True when the SMTP server took
+// (empty ones are skipped), $attachments is [file name => content], $log_fields what the caller adds to the log line (a
+// count of the rows the mail read: a cycle's days). True when the SMTP server took
 // it: the callers decide what a failure means, so nothing is thrown.
-function mail_send(string $kind, array $to, string $subject, string $html, string $text, array $attachments = []): bool {
-	$log = ["kind" => $kind, "to" => count(array_filter($to)), "fil" => count($attachments)];
+function mail_send(string $kind, array $to, string $subject, string $html, string $text, array $attachments = [], array $log_fields = []): bool {
+	$log = ["kind" => $kind, "to" => count(array_filter($to)), "fil" => count($attachments)] + $log_fields;
 	try {
 		$mail = new PHPMailer();
 		$mail->isSMTP();
@@ -428,10 +429,10 @@ function mail_cycle_text(string $name, string $first_day, string $last_day, int 
 
 // The export of a finished cycle (a row of db_select_cycles_finished()), with $files attached:
 // [file name => content], the PDF, the CSV and the NFP file.
-function mail_send_cycle(array $account, string $first_day, string $last_day, int $nb_days, array $files): bool {
+function mail_send_cycle(array $account, string $first_day, string $last_day, int $nb_days, array $files, int $rows_read): bool {
 	return mail_send('cycle', mail_recipients($account), "Votre cycle du $first_day au $last_day ($nb_days jours)",
 		mail_cycle_html($account["name"], $first_day, $last_day, $nb_days),
-		mail_cycle_text($account["name"], $first_day, $last_day, $nb_days), $files);
+		mail_cycle_text($account["name"], $first_day, $last_day, $nb_days), $files, ["n" => $rows_read]);
 }
 
 function mail_send_reminder(array $account): bool {

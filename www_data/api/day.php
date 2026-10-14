@@ -30,7 +30,11 @@ if ($method === "GET" && $path !== []) {
 	input_check_no_body($issues);
 	input_exit_if_issues($issues);
 
-	http_data(200, day_format_to_json(data_construct_day($db, $date, $no_user_account)));
+	// the row's id when the day was ever written, and how many rows were read (0 or 1: an unwritten date is answered empty)
+	$day = data_construct_day($db, $date, $no_user_account);
+	log_context(["day" => isset($day["no_day"]) ? intval($day["no_day"]) : null]);
+	log_note(["n" => isset($day["no_day"]) ? 1 : 0]);
+	http_data(200, day_format_to_json($day));
 }
 
 // READING SEVERAL DAYS: the dates asked for, or a range
@@ -75,12 +79,16 @@ elseif ($method === "GET") {
 	input_exit_if_issues($issues);
 
 	$result = [];
+	$rows_read = 0;
 	foreach ($dates as $one) {
-		$result[$one] = day_format_to_json(data_construct_day($db, $one, $no_user_account));
+		$day = data_construct_day($db, $one, $no_user_account);
+		$rows_read += isset($day["no_day"]) ? 1 : 0;
+		$result[$one] = day_format_to_json($day);
 	}
 
 	$all_days = [];
 	if ($range) $all_days = db_select_day_timelines_frame($db, $range["from"], $range["to"], $no_user_account);
+	$rows_read += count($all_days);
 
 	// the days come in date order: the cycle is the one the last first day started
 	$descriptions = data_descriptions_by_day($db, $all_days, $no_user_account);
@@ -91,7 +99,7 @@ elseif ($method === "GET") {
 	}
 	ksort($result);
 
-	log_note(["n" => count($result)]);
+	log_note(["n" => $rows_read]);
 	http_data(200, array_values($result));
 }
 

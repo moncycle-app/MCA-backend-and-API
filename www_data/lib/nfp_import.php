@@ -745,12 +745,14 @@ function nfp_import_narrowed_note(string $date, string $name, int $recorded_type
 ** same semantics as a POST to /api/day, which also carries the full state of a day, and which
 ** writes through the same data_write_day().
 **
-** $written_days, when the caller passes one, receives the [no_day, date] of each day written, for the
-** log (nfp_import_log_fields()); the array returned, and so the API answer, does not change.
+** $written_days, when the caller passes one, receives the [no_day, date] of each day written, and
+** $created_descriptions the id of each description made, for the log (nfp_import_log_fields()); the
+** array returned, and so the API answer, does not change.
 */
-function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $override, string $last_write_client_UTC, ?array &$written_days = null): array {
+function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $override, string $last_write_client_UTC, ?array &$written_days = null, ?array &$created_descriptions = null): array {
 	$written_days = [];
-	return db_transaction($db, function () use ($db, $no_user_account, $plan, $override, $last_write_client_UTC, &$written_days) {
+	$created_descriptions = [];
+	return db_transaction($db, function () use ($db, $no_user_account, $plan, $override, $last_write_client_UTC, &$written_days, &$created_descriptions) {
 		db_select_user_account_for_update($db, $no_user_account);
 		$created = [];
 		$overwritten = [];
@@ -775,7 +777,10 @@ function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $ove
 			foreach ([DESCRIPTION_TYPE_SENSATION => $entry["sensations"], DESCRIPTION_TYPE_OBSERVATION => $entry["observations"]] as $type => $names) {
 				foreach ($names as $name) {
 					$description = data_resolve_description($db, $no_user_account, $name, $type, $last_write_client_UTC, $known);
-					if ($description["created"]) $descriptions_created += 1;
+					if ($description["created"]) {
+						$descriptions_created += 1;
+						$created_descriptions[] = $description["id"];
+					}
 					// asking for the other type is a narrowing: the label keeps the one it has
 					if ($description["type"] !== $type) $narrowed[] = nfp_import_narrowed_note($date, $name, $description["type"]);
 					$no_descriptions[] = $description["id"];
@@ -805,10 +810,10 @@ function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $ove
 }
 
 // The fields of the `data.import` log line, from the report api/import.php answers with: the counts
-// and the options. For a real run, $written_days (see nfp_import_write_plan()) adds the bounds of
-// what it wrote -- earliest and latest date, smallest and largest day id, not a list. A dry run
-// writes nothing, and so has no bounds.
-function nfp_import_log_fields(array $report, array $written_days = []): array {
+// and the options. For a real run, $written_days and $created_descriptions (see nfp_import_write_plan())
+// add the bounds of what it wrote -- earliest and latest date, smallest and largest day id, smallest and
+// largest id of the descriptions made, not a list. A dry run writes nothing, and so has no bounds.
+function nfp_import_log_fields(array $report, array $written_days = [], array $created_descriptions = []): array {
 	$fields = [
 		"dry" => $report["dryRun"],
 		"ovr" => $report["override"],
@@ -821,5 +826,7 @@ function nfp_import_log_fields(array $report, array $written_days = []): array {
 
 	$dates = array_column($written_days, "date");
 	$ids = array_column($written_days, "no_day");
-	return $fields + ["dt0" => min($dates), "dt1" => max($dates), "day0" => min($ids), "day1" => max($ids)];
+	$fields += ["dt0" => min($dates), "dt1" => max($dates), "day0" => min($ids), "day1" => max($ids)];
+	if ($created_descriptions) $fields += ["dsc0" => min($created_descriptions), "dsc1" => max($created_descriptions)];
+	return $fields;
 }
