@@ -204,14 +204,14 @@ const API_VERSION = 2;
 const SCHEMA_VERSION = 15;
 const SCHEMA_VERSION_KEY = "schema_version";
 
-// The names a PATCH /api/account body may use, and the ones of GET /api/account that the server alone writes (refused if sent).
-const ACCOUNT_PATCH_FIELDS = [
+// The names a POST /api/account body may use, and the ones of GET /api/account that the server alone writes (refused if sent).
+const ACCOUNT_UPDATE_FIELDS = [
 	"nickname", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
 	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
 ];
 const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "totpState"];
 
-// The names a day body may use (PUT /api/day/{date}), and the ones of the day the server alone writes: a client that reads a day, changes it and
+// The names a day body may use (POST /api/day/{date}), and the ones of the day the server alone writes: a client that reads a day, changes it and
 // sends it back whole sends them too, and they are dropped (api/day.php).
 const DAY_INPUT_FIELDS = [
 	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "booleanPregnancyDetected",

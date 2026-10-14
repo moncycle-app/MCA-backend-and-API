@@ -79,7 +79,7 @@ that are open nor touch the TOTP: a mail tells the owner that the password chang
 account page. `POST /api/recover_password` sleeps 1 to 5 s on purpose (so that its timing does not tell whether the address has an
 account) and holds a worker meanwhile: rate-limit it at the edge.
 
-**Account settings.** `PATCH /api/account` changes every setting. Three of them hand the account or its cycles over, and want the
+**Account settings.** `POST /api/account` changes every setting. Three of them hand the account or its cycles over, and want the
 current password again as `password`:
 
 - `newPassword` is set at once (`logoutOtherDevices` closes the other sessions). It ends a reset link that is waiting and leaves a
@@ -109,7 +109,7 @@ Failed logins are counted per account and decay after `LOGIN_ATTEMPTS_DECAY_MINU
 **Two-factor authentication.** Once the password is known, the one-time code is all that is left to guess, so a wrong TOTP code
 after a right password counts like a wrong password. Past the lockout threshold an account with a TOTP code refuses even the right
 password and code until the failures decay. Whoever knows the password can therefore keep such an account locked while they keep
-trying. A wrong password or TOTP code sent from an open session (`PATCH /api/account`, `DELETE /api/totp`) is not counted.
+trying. A wrong password or TOTP code sent from an open session (`POST /api/account`, `DELETE /api/totp`) is not counted.
 
 ## The captcha
 
@@ -135,7 +135,7 @@ failures; a request that reads the account after it finds one that asks for no c
 
 ## Writes from other sites
 
-The session cookie is `HttpOnly` and `SameSite=Strict` (`COOKIE_SAMESITE`). On top of that, every write (`POST`, `PUT`, `PATCH`,
+The session cookie is `HttpOnly` and `SameSite=Strict` (`COOKIE_SAMESITE`). On top of that, every write (`POST`,
 `DELETE`) that a browser sends is checked against its `Origin` header (or `Sec-Fetch-Site` when there is none): the server's own
 host, `APP_URL` and `WEB_APP_ORIGINS` pass; any other page gets `403 cross_origin_refused`, sign-in and password recovery
 included. Bodies must be `Content-Type: application/json` (a 415 otherwise), which a form of another site cannot send.

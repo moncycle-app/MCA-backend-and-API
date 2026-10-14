@@ -22,8 +22,8 @@
 **  - GET /api/timeline_sync brings what was changed elsewhere, and the cursor it gives is kept
 **    (data_last_sync); GET /api/account is read before it (its ETag is kept, data_account_etag: an account
 **    that did not change costs a 304);
-**  - when the session ends, all of localStorage goes. When the app is updated (GET /api/server_info changes),
-**    the copy goes and is downloaded again; the unsent changes stay.
+**  - when the session ends, all of localStorage goes. When the app is updated (`moncycle_store.schema` or the
+**    apiVersion of GET /api/server_info changes), the copy goes and is downloaded again; the unsent changes stay.
 **
 ** This file holds no text for the user and draws nothing: a page listens to the events (see on()).
 ** ======================================================================== */
@@ -46,7 +46,7 @@ const moncycle_store = {
 	account_etag : null,    // the ETag GET /api/account gave for the account kept
 	news_url : null,    // newsUrl of GET /api/server_info
 	last_sync : null,   // the syncTimestamp of the last merged answer
-	pending : {},       // date -> {op: "put", body: the PUT /api/day/{date} body} | {op: "delete", lastWriteClientUtc}
+	pending : {},       // date -> {op: "put", body: the POST /api/day/{date} body} | {op: "delete", lastWriteClientUtc}
 	pending_descriptions : [],  // [{name, type: "observation" | "sensation", lastWriteClientUtc}]: made here, not yet created by the server
 	stale : [],         // dates of days whose copy is wrong (a write of them was refused): to download again
 
@@ -163,7 +163,7 @@ const moncycle_store = {
 		window.location.replace("/auth");
 	},
 	// 401 "unauthorized" is a session that is over. Another 401 is an answer of an endpoint to a
-	// wrong password or code (PATCH /api/account with a password, POST /api/account/deletion): the session is fine.
+	// wrong password or code (POST /api/account with a password, POST /api/account/deletion): the session is fine.
 	is_unauthorized : function (jqXHR) {
 		if (jqXHR.status != 401) return false;
 		let code = ((jqXHR.responseJSON || {}).error || {}).code;
@@ -392,7 +392,7 @@ const moncycle_store = {
 		return moved;
 	},
 
-	// The day the server will hold once it has taken a PUT /api/day/{date} body, as far as the page can tell.
+	// The day the server will hold once it has taken a POST /api/day/{date} body, as far as the page can tell.
 	// The server's own answer replaces it as soon as there is one.
 	day_from_body : function (body, previous) {
 		let baby = !!body.stampBaby;
@@ -423,7 +423,7 @@ const moncycle_store = {
 	/* -----------------------------------------------------------------------
 	** WRITING: the copy first, then the server
 	** ====================================================================== */
-	// A PUT /api/day/{date} body (the full state of the day). Returns the dates whose day changed in the copy.
+	// A POST /api/day/{date} body (the full state of the day). Returns the dates whose day changed in the copy.
 	queue_day : function (body) {
 		let date = body.date;
 		moncycle_store.days[date] = moncycle_store.day_from_body(body, moncycle_store.days[date]);
@@ -472,7 +472,7 @@ const moncycle_store = {
 	// the longest comment the day form takes (index.html, maxlength of #from_com); the server's own limit is 256
 	comment_max_chars : 255,
 
-	// The PUT /api/day/{date} body that makes the server hold a day of the copy as it is, so that a write can change one
+	// The POST /api/day/{date} body that makes the server hold a day of the copy as it is, so that a write can change one
 	// field of it: a day is posted whole. Where it stands in its cycle is left out, the server works it out.
 	body_of_day : function (day, last_write_client_utc) {
 		let body = {};
@@ -573,7 +573,7 @@ const moncycle_store = {
 		if (entry.op == "delete") {
 			return moncycle_store.request("DELETE", url + (entry.lastWriteClientUtc ? "?lastWriteClientUtc=" + encodeURIComponent(entry.lastWriteClientUtc) : ""));
 		}
-		return moncycle_store.request("PUT", url, entry.body);
+		return moncycle_store.request("POST", url, entry.body);
 	},
 	send_description : function (entry) {
 		return moncycle_store.request("POST", "api/description", {name : entry.name, type : entry.type, lastWriteClientUtc : entry.lastWriteClientUtc});
@@ -711,7 +711,7 @@ const moncycle_store = {
 			moncycle_store.checked_version = true;
 			let info = ret.data || {};
 			moncycle_store.set_news_url(info.newsUrl || null);
-			let stamp = [moncycle_store.schema, info.serverVersion, info.build, info.commit].join("/");
+			let stamp = [moncycle_store.schema, info.apiVersion].join("/");
 			let known = localStorage.getItem(moncycle_store.keys.version);
 			if (known === stamp) return;
 			if (known !== null) moncycle_store.wipe_data(true);
@@ -762,26 +762,18 @@ const moncycle_store = {
 			}).fail(function (jqXHR) { reject(jqXHR); });
 		});
 	},
-	// The timeline since the cursor kept (none: from the start), page after page while the server says there is more.
+	// The timeline since the cursor kept (none: from the start), in one answer.
 	pull : async function () {
 		moncycle_store.touched = {};
 		moncycle_store.created = [];
-		let changes = {days : [], descriptions : false, account : false};
-		let more = true;
-		while (more) {
-			// the first sync has no cursor: the server then reads from the start
-			let query = moncycle_store.last_sync ? "?since=" + encodeURIComponent(moncycle_store.last_sync) : "";
-			let ret = await moncycle_store.request("GET", "api/timeline_sync" + query);
-			let page = moncycle_store.merge(ret.data);
-			changes.days = changes.days.concat(page.days.filter(function (date) { return !changes.days.includes(date); }));
-			changes.descriptions = changes.descriptions || page.descriptions;
-			changes.account = changes.account || page.account;
-			moncycle_store.error = null;
-			moncycle_store.last_pull = Date.now();
-			moncycle_store.last_sync = ret.data.syncTimestamp;
-			if (!moncycle_store.storage_failed) moncycle_store.write(moncycle_store.keys.last_sync, moncycle_store.last_sync);
-			more = ret.data.hasMore === true;
-		}
+		// the first sync has no cursor: the server then reads from the start
+		let query = moncycle_store.last_sync ? "?since=" + encodeURIComponent(moncycle_store.last_sync) : "";
+		let ret = await moncycle_store.request("GET", "api/timeline_sync" + query);
+		let changes = moncycle_store.merge(ret.data);
+		moncycle_store.error = null;
+		moncycle_store.last_pull = Date.now();
+		moncycle_store.last_sync = ret.data.syncTimestamp;
+		if (!moncycle_store.storage_failed) moncycle_store.write(moncycle_store.keys.last_sync, moncycle_store.last_sync);
 		if (changes.days.length || changes.descriptions || changes.account) moncycle_store.emit("changed", Object.assign(changes, {source : "sync"}));
 		return changes;
 	},

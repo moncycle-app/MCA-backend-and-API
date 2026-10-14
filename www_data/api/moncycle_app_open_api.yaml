@@ -74,12 +74,12 @@ info:
     a write was not sent as JSON, and `403` with the code `cross_origin_refused` that a browser page of another
     origin tried to write (both in section 3). `503` with the code `maintenance` means the operator put the
     server in maintenance: every endpoint answers it before it reads or writes anything, so nothing was done;
-    try again later. Only `GET /server_info` stays up, with `status: "maintenance"`, so that a client can say
+    try again later. Only `GET /server_info` stays up, with `maintenanceMode: true`, so that a client can say
     what is going on. `503` with `schema_mismatch` means the database is not at the version this code needs:
     nothing works until the operator runs the migrations. Check the status first, then the body.
 
     **Rule 4 — `meta` is about the answer, not part of it.** A few answers carry a sibling `meta` next to `data`
-    (`PATCH /account`: what was changed). It is how information can be added to a list later without turning the list
+    (`POST /account`: what was changed). It is how information can be added to a list later without turning the list
     into an object.
 
     **Every response carries an `X-Request-Id` header** (but `GET /health_check`): the id the server's log
@@ -129,7 +129,7 @@ info:
 
     **Nothing is silently ignored.** A typo in a field name is an error, not "nothing happened"; a value that cannot
     be stored is an error, not a quiet `null`. The exceptions are written where they apply: the fields of a day that
-    the server computes are dropped when you send a day back (`PUT /day/{date}`), and a field set to `null` is the same
+    the server computes are dropped when you send a day back (`POST /day/{date}`), and a field set to `null` is the same
     as a field that is not sent.
 
     A request in the wrong **state** is not a validation problem and keeps its own code and status: `unauthorized`,
@@ -178,12 +178,12 @@ info:
       There are no roles: a read-write token can do everything its account can.
     - Missing or wrong token on a protected endpoint → `401` with code `unauthorized`.
     - **Every body is JSON.** Send `Content-Type: application/json` (a parameter such as
-      `; charset=utf-8` is fine) with every `POST`, `PUT` and `PATCH`, and with
-      `POST /import`, whose body is the NFP file. Any other type, a form or `text/plain`, is
+      `; charset=utf-8` is fine) with every `POST` (`POST /import` too, whose body is the NFP file). Any other
+      type, a form or `text/plain`, is
       answered `415` `unsupported_media_type`. A `GET` and a `DELETE` take **no body**: one is refused.
     - **A write from a browser page that is not ours is refused**, with `403`
       `cross_origin_refused`, whoever is logged in. The server reads the `Origin` header of a
-      `POST`, `PUT`, `PATCH` or `DELETE` (and `Sec-Fetch-Site` when there is no `Origin`): the allowed origins
+      `POST` or `DELETE` (and `Sec-Fetch-Site` when there is no `Origin`): the allowed origins
       are the server's own, the web app's (`APP_URL`) and the ones the operator lists
       (`WEB_APP_ORIGINS`). A request with neither header, which is what curl, a script or a
       mobile app sends, is not a browser's and is never refused for this.
@@ -193,11 +193,12 @@ info:
     ## 4. First run, step by step
 
     **Start with `GET /server_info`**, a public call: it tells you which `apiVersion` this server speaks (stop if it is
-    greater than yours), whether it is `ok`, whether `registrationEnabled`, and the `limits` to check forms with.
+    greater than yours), whether it is in maintenance (`maintenanceMode`), whether `registrationEnabled`, and the `limits`
+    to check forms with.
 
     ```bash
     curl -s http://localhost:8003/api/server_info
-    # -> 200 {"data":{"app":"moncycle.app","apiVersion":2,"status":"ok","registrationEnabled":true,"limits":{...},...}}
+    # -> 200 {"data":{"app":"moncycle.app","apiVersion":2,"maintenanceMode":false,"registrationEnabled":true,"limits":{...},...}}
     ```
 
     Creating an account needs a captcha, which the server keeps nowhere: `POST /captcha` gives a picture
@@ -247,7 +248,7 @@ info:
 
     # Write today. Day 1 of a new cycle, red stamp, one free-text sensation. The date is in the address.
     curl -s -H "$AUTH" -H 'Content-Type: application/json' \
-      -X PUT http://localhost:8003/api/day/2026-03-10 \
+      -X POST http://localhost:8003/api/day/2026-03-10 \
       -d '{"cycleFirstDay":true,"stampColor":"Red",
            "freeMucusSensation":["dry"],"comment":"cramps in the morning"}'
     # -> 201 (day created) with the full day as the server now stores it
@@ -257,14 +258,14 @@ info:
       'http://localhost:8003/api/day?from=2026-03-04&to=2026-03-10'
     ```
 
-    ### The most important write rule: PUT /day/{date} replaces the whole day
+    ### The most important write rule: POST /day/{date} replaces the whole day
 
-    `PUT /day/{date}` is an **upsert of the complete day**, not a partial patch. Any field you leave
-    out is written as empty or `false`. There is no `PATCH` for a day.
+    `POST /day/{date}` is an **upsert of the complete day**, not a partial update. Any field you leave
+    out is written as empty or `false`. There is no partial update of a day.
 
     ```
     stored:  { date: 2026-03-10, stampColor: "Red", isPeak: true, comment: "cramps" }
-    you send:{ stampColor: "Green" }       (PUT /day/2026-03-10)
+    you send:{ stampColor: "Green" }       (POST /day/2026-03-10)
     result:  { date: 2026-03-10, stampColor: "Green", isPeak: false, comment: "" }
                                                       ^^^^^^^^^^^^^  ^^^^^^^^^^^^
                                                       both were silently cleared
@@ -273,7 +274,7 @@ info:
     **Always read the day, change the fields you want, then send the whole object back.**
     The day you read can be sent as it is. The response body is the day as the server stored it, so you
     can use it to refresh your local copy without a second `GET`.
-    (`PATCH /account` is the opposite: a partial update, only the fields sent are touched.)
+    (`POST /account` is the opposite: a partial update, only the fields sent are touched.)
 
     ## 6. Dates, times and null
 
@@ -294,7 +295,7 @@ info:
     - **`lastWriteClientUtc`** — *your* clock, which you send. Omitted, or outside what the server can store (a
       clock far in the past or the future), it is replaced by the server's clock; a value that is not a timestamp
       is an error. It is stored and returned in UTC. On a day, it also decides which write is the latest: see
-      "A write that arrives late" on `PUT /day/{date}`.
+      "A write that arrives late" on `POST /day/{date}`.
     - **`lastWriteDb`** — the server clock. Read-only. The server always sets it. This is the
       field `GET /timeline_sync` is based on, so a wrong clock on your side cannot make you miss anything.
 
@@ -306,7 +307,7 @@ info:
     ## 7. Two tracking methods
 
     Each account uses one method, chosen at registration and changeable later on
-    `PATCH /account`. The method decides **which fields of a day make sense**. The server does
+    `POST /account`. The method decides **which fields of a day make sense**. The server does
     not block the other fields, but the app will not display them.
 
     | Method | How a day is recorded | Fields used |
@@ -328,7 +329,7 @@ info:
     **description**, with its own `id` and a `useCount`.
 
     You never have to create them by hand. When you send a new name inside
-    `freeMucusSensation` or `freeMucusObservation`, `PUT /day/{date}` creates the description for you
+    `freeMucusSensation` or `freeMucusObservation`, `POST /day/{date}` creates the description for you
     and links it to the day. The `/description` endpoints exist so the app can show a
     "most used first" picklist, and rename or delete a label everywhere at once.
 
@@ -341,7 +342,7 @@ info:
       label. It does not create a second one.
     - A label can have no type yet (`type: "undefined"`): nobody said whether it is a sensation or an
       observation. A day shows such labels in `freeOther`, and keeps them only if you send them
-      back there. To classify one, `PATCH /description/{id}` with the new `type`: every
+      back there. To classify one, `POST /description/{id}` with the new `type`: every
       day that carries it then shows it in `freeMucusSensation` or `freeMucusObservation`.
 
     ## 8. Keeping a local copy in sync
@@ -353,7 +354,6 @@ info:
     | Key | What it holds |
     |---|---|
     | `syncTimestamp` | The server clock when it started to answer. **Keep it**: it is the `since` of your next call. |
-    | `hasMore` | `true` when there is more to fetch: call again at once with `since` = the `syncTimestamp` you just got. Always `false` today. |
     | `days` | The days written since `since`, and the days that follow them in their cycle. A cleared day is among them, empty. |
     | `descriptions` | **Every** label of the account, with its `useCount`. |
     | `allCyclesFirstDay` | **Every** day flagged `cycleFirstDay`, newest first. |
@@ -362,11 +362,10 @@ info:
     The loop:
 
     ```
-    1. PUT/DELETE your own unsent days, POST/PATCH/DELETE your labels   (your changes first)
+    1. POST/DELETE your own unsent days, POST/DELETE your labels   (your changes first)
          - a day answered 409 stale_write was written after you made your change: drop yours
     2. GET /account                           (the settings; send its ETag back to get a 304)
     3. GET /timeline_sync?since=<lastSync>    (the first time: GET /timeline_sync, with no parameter)
-         - repeat step 3 while hasMore is true, with since = the syncTimestamp just received
     4. merge into your copy:
          - each returned day replaces yours; an empty day means "forget this day";
          - the returned labels replace yours; the returned lists of cycles and pregnancies replace yours;
@@ -390,8 +389,8 @@ info:
     - **A change of cycle reports the cycle.** Setting or clearing `cycleFirstDay` changes the
       `cycleStartDate` and `cycleDay` of every following day up to the next first day. Those days
       come back too, so you never have to compute a cycle yourself.
-    - **Nothing is paged yet.** The answer is as big as the changed days (about 500 bytes a day) and `hasMore`
-      is `false`; a client that loops on `hasMore` is ready for the day it is not.
+    - **The answer is not paged.** It comes in one piece, as big as the changed days (about 500 bytes a day): the
+      first call, with no `since`, is the whole timeline.
 
     ## 9. Login protection
 
@@ -478,7 +477,7 @@ tags:
   - name: server
     description: |-
       Public endpoints. No token, no personal data. **`GET /server_info` is the first call of every client**: the
-      version of the contract, the state of the server and the limits to check a form with. Also monitoring
+      version of the contract, whether the server is in maintenance and the limits to check a form with. Also monitoring
       (`GET /health_check`) and the public counters for a web site (`GET /pub_stat`).
   - name: auth
     description: |-
@@ -489,14 +488,14 @@ tags:
       captcha is asked for just before the call it guards, for the same address.
   - name: account
     description: |-
-      The account: `GET /account`, `PATCH /account` (settings, login address, password), and its deletion.
+      The account: `GET /account`, `POST /account` (settings, login address, password), and its deletion.
   - name: timeline
     description: |-
       The heart of the API: the timeline of days (`/day`), the reusable free-text labels (`/description`), and
       `GET /timeline_sync`, which keeps a local copy up to date.
 
       Read **section 1** of the introduction first ("one day = one observation"), and
-      **section 5** before your first write (`PUT /day/{date}` replaces the whole day).
+      **section 5** before your first write (`POST /day/{date}` replaces the whole day).
   - name: files
     description: |-
       Import and export. Both speak the portable **NFP file format**, which is versioned on its
@@ -518,8 +517,9 @@ paths:
       summary: What this server is — the first call of every client
       description: |-
         Public, no token. **Call it first**, before anything else: it says which API this server speaks
-        (`apiVersion`), which build it is, whether it is ready, and the numbers a client needs to check a
-        form before sending it.
+        (`apiVersion`), whether the operator put it in maintenance, which optional features it has (new accounts, the
+        demo accounts, the captcha, the news banner), and the numbers a client needs to check a form before sending it.
+        It is made from the settings of the server alone: the database is not opened, so it answers in maintenance too.
 
         ### The contract of this call
 
@@ -528,25 +528,17 @@ paths:
         greater number here **must stop and ask the user to update the app**: the rest of the API may not be
         what it was written for.
 
-        ### `status`
+        ### `maintenanceMode`
 
-        | Value | Meaning | What to do |
-        |---|---|---|
-        | `ok` | Ready. | Go on. |
-        | `maintenance` | The operator put the server in maintenance. Every other endpoint answers `503 maintenance`. `schemaVersion` is `null`: the database is not opened. | Tell the user, try again later. |
-        | `schema_mismatch` | The database is not at the version this code needs (a migration was not run, or the code and the database do not match). Every other endpoint answers `503 schema_mismatch`. | Tell the user the service is down; it needs its operator. |
+        `true` when the operator put the server in maintenance: every other endpoint then answers `503 maintenance`
+        before it reads or writes anything. The answer of this call is `200` all the same, so a client can tell the
+        user to come back later. (A database that is not at the version this code needs is not told here: every other
+        endpoint answers `503 schema_mismatch`.)
 
-        The answer is `200` in all three cases, so a client can show a precise message. `503 database_unreachable`
-        means the database does not answer at all.
+        ### The version
 
-        ### Three versions, three places
-
-        - `apiVersion` — an integer, the version of **this contract**. It rises only when something a client
-          relies on breaks.
-        - `serverVersion`, `build`, `commit` — the release and the build that runs. `build` and `commit` are `null` on
-          a development tree.
-        - `schemaVersion` — the version the database says it is at (the `schema_version` row of `key_value`, set by
-          every migration).
+        `apiVersion` — an integer, the version of **this contract**. It rises only when something a client relies on
+        breaks. It is the only version the server tells: not the release, not the build, not the schema of the database.
 
         ### `limits`
 
@@ -567,12 +559,6 @@ paths:
           $ref: '#/components/responses/ValidationFailed'
         "405":
           $ref: '#/components/responses/MethodNotAllowed'
-        "503":
-          description: "`database_unreachable` — the database does not answer."
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorEnvelope'
 
   /health_check:
     get:
@@ -593,7 +579,7 @@ paths:
         container healthcheck must accept that answer as alive, or a server in maintenance is taken for a dead one
         (the `docker-compose.exemple.yml` of the repository does).
 
-        Nothing is written and nothing personal is read, so you can poll this often. For the version, the status
+        Nothing is written and nothing personal is read, so you can poll this often. For the version, the maintenance
         and the limits of the server use `GET /server_info`.
       security: []
       responses:
@@ -923,7 +909,7 @@ paths:
 
         - The token is 32 random bytes; the server keeps its SHA-256 only.
         - **One slot per account:** a new link (a sign-up, a `POST /recover_password`, a
-          `PATCH /account` that changes `loginEmail`) replaces the one before it, whatever that one was for.
+          `POST /account` that changes `loginEmail`) replaces the one before it, whatever that one was for.
         - A link is **single use** and checked against its purpose: the link of one action cannot do
           another (`invalid_token`).
         - It lives 3 days (`accountCreation`), 1 hour (`resetPassword`) or 1 day (`changeEmail`), then
@@ -1185,7 +1171,7 @@ paths:
         is a logout all the same and answers `204`, with the cookie cleared. A read-only token may do it.
 
         **With `others=true`**: revokes **every token but the one you are using**. This is what to do when a device is
-        lost or a token leaked; `PATCH /account` with `newPassword` and `logoutOtherDevices` does the same with the
+        lost or a token leaked; `POST /account` with `newPassword` and `logoutOtherDevices` does the same with the
         password. A read-only token cannot (`403` `read_only_token`), nor a demo session (`403` `demo_account`).
 
         To revoke **one** token, name it in the address: `DELETE /token/{prefix}`.
@@ -1613,16 +1599,16 @@ paths:
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
 
-    patch:
+    post:
       tags: [account]
-      operationId: patchAccount
+      operationId: updateAccount
       summary: Change the settings, the login address, the password
       description: |-
         **Every setting of the logged-in account is changed here**: its nickname, method, preferences,
         the addresses and the password.
 
         **This is a partial update**: only the fields present in the body are touched, everything else keeps its
-        value. (`PUT /day/{date}`, on the contrary, replaces a whole day.) An empty object `{}` is valid and changes
+        value. (`POST /day/{date}`, on the contrary, replaces a whole day.) An empty object `{}` is valid and changes
         nothing. A field set to `null` is the same as a field that is not sent.
 
         ### Strict: a wrong request is refused, and told in full
@@ -1778,8 +1764,6 @@ paths:
 
         - take the cursor from `syncTimestamp` of the previous answer, **never from your own clock**; the very first call
           sends no `since` at all, which reads from the start;
-        - repeat while `hasMore` is `true` (it is always `false` today, and the loop is part of the contract so that
-          paging can come without breaking anyone);
         - the server subtracts a safety margin (120 seconds) and the bound is inclusive, so the
           last days come back again: **replace what you hold, do not append**;
         - a cleared day comes back empty, a deleted label is absent from `descriptions`, and a
@@ -1925,22 +1909,22 @@ paths:
         "503":
           $ref: '#/components/responses/ServiceUnavailable'
 
-    put:
+    post:
       tags: [timeline]
-      operationId: putDay
+      operationId: writeDay
       summary: Write one day (replaces the whole day)
       description: |-
         Creates or replaces one day. **The date is in the address** — there is no id to pass and no separate "create"
-        and "update" call. `PUT` is idempotent: sending the same write twice is harmless.
+        and "update" call. Sending the same write twice is harmless.
 
         ### Read this before your first write
 
         **This is not a partial update.** The body must carry the *complete* state of the day.
-        Any field you leave out is written as empty or `false`. There is no `PATCH` for a day.
+        Any field you leave out is written as empty or `false`. There is no partial update of a day.
 
         ```
-        correct:   GET the day -> change one field -> PUT the whole object back
-        wrong:     PUT {"comment": "new"}      <- clears everything else
+        correct:   GET the day -> change one field -> POST the whole object back
+        wrong:     POST {"comment": "new"}     <- clears everything else
         ```
 
         The day you read can be sent back as it is: the fields the server computes (`cycleStartDate`, `cycleDay`,
@@ -1965,7 +1949,7 @@ paths:
         existing label and keeps its original type.
 
         The day is the full state, so a label you do not send back is unlinked, `freeOther`
-        included: read the day, change what you mean to, and put all of it. A client that does
+        included: read the day, change what you mean to, and send all of it. A client that does
         not know `freeOther` and omits it silently unlinks the day's untyped labels.
 
         ### Values are checked, not dropped
@@ -2006,7 +1990,7 @@ paths:
               $ref: '#/components/schemas/Day'
             examples:
               billings:
-                summary: Billings — first day of a cycle (PUT /day/2026-03-10)
+                summary: Billings — first day of a cycle (POST /day/2026-03-10)
                 value:
                   cycleFirstDay: true
                   stampColor: Red
@@ -2014,7 +1998,7 @@ paths:
                   comment: cramps in the morning
                   lastWriteClientUtc: "2026-03-10T07:12:00Z"
               billingsPeak:
-                summary: Billings — peak day, with temperature (PUT /day/2026-03-22)
+                summary: Billings — peak day, with temperature (POST /day/2026-03-22)
                 value:
                   stampColor: White
                   isPeak: true
@@ -2022,7 +2006,7 @@ paths:
                   temperature: 36.8
                   temperatureTime: "06:45:00"
               fertilityCare:
-                summary: FertilityCare — codes (PUT /day/2026-03-12)
+                summary: FertilityCare — codes (POST /day/2026-03-12)
                 value:
                   stampColor: Green
                   codifiedMucusSensation: "10WL"
@@ -2084,7 +2068,7 @@ paths:
         time it was cleared — that is how `GET /timeline_sync` tells the other clients that the day is gone.
         Clearing a date that was never written is a success (`204`).
 
-        `lastWriteClientUtc` has the same meaning as on `PUT`: a clear **made before** the last write of the day is
+        `lastWriteClientUtc` has the same meaning as on `POST /day/{date}`: a clear **made before** the last write of the day is
         refused with `409 stale_write`. A `DELETE` takes no body, so the stamp is a query parameter.
       parameters:
         - $ref: '#/components/parameters/DatePath'
@@ -2153,12 +2137,12 @@ paths:
       operationId: createDescription
       summary: Create a label
       description: |-
-        Creates a label. You rarely need to: a name sent in a day is created for you (see `PUT /day/{date}`). It exists
+        Creates a label. You rarely need to: a name sent in a day is created for you (see `POST /day/{date}`). It exists
         for a picklist ("most used first") and to prepare labels before they are used.
 
         Names are **unique per account** and **case-sensitive**: a name that exists is `409 duplicate_name`. The type
         is `sensation` or `observation` (`undefined` is a label nobody classified yet: to classify
-        one, `PATCH` it).
+        one, `POST /description/{id}` it).
       requestBody:
         required: true
         content:
@@ -2216,9 +2200,9 @@ paths:
           $ref: '#/components/responses/ServiceUnavailable'
 
   /description/{id}:
-    patch:
+    post:
       tags: [timeline]
-      operationId: patchDescription
+      operationId: updateDescription
       summary: Rename or retype a label
       description: |-
         Changes the `name` and / or the `type` of a label, **everywhere at once**: every day that carries it shows the new
@@ -2543,7 +2527,7 @@ paths:
 
         `override=false` (the default) leaves those dates untouched and lists them in `daysSkipped`.
         `override=true` replaces them whole — including their free-text labels — exactly like a
-        `PUT /day/{date}`, which also carries the full state of a day. Either way they are counted in
+        `POST /day/{date}`, which also carries the full state of a day. Either way they are counted in
         `daysAlreadyInAccount`, and `dryRun=true` fills all three without writing, so the choice
         can be made with the dates in hand.
 
@@ -2594,7 +2578,7 @@ paths:
 
         `userInformation` and `userMethodPreferences` are read but **never applied**. A file
         cannot rename the account, change its address, or switch its method — that is what
-        `PATCH /account` is for. Both appear in `ignoredFields`.
+        `POST /account` is for. Both appear in `ignoredFields`.
 
         ### A file from `GET /export/nfp` always imports
 
@@ -2886,7 +2870,7 @@ components:
       description: "`method_not_allowed` — this address does not take this method. The `Allow` header lists the ones it takes."
       headers:
         Allow:
-          description: The methods this address takes, for example `GET, PATCH`.
+          description: The methods this address takes, for example `GET, POST`.
           schema:
             type: string
       content:
@@ -2896,7 +2880,7 @@ components:
           example:
             error:
               code: method_not_allowed
-              message: "Method PUT is not supported here. Supported: GET, PATCH."
+              message: "Method PATCH is not supported here. Supported: GET, POST."
 
     NotFound:
       description: "`not_found` — this address does not exist (an unknown path after the name of the endpoint)."
@@ -2913,7 +2897,7 @@ components:
       description: |-
         `maintenance` — the operator put the server in maintenance; nothing was read or done, try again later.
         `schema_mismatch` — the database is not at the version this code needs; nothing works until the operator runs
-        the migrations. `GET /server_info` says which of the two.
+        the migrations. `GET /server_info` says whether it is the first (`maintenanceMode`).
       content:
         application/json:
           schema:
@@ -3111,8 +3095,8 @@ components:
     Account:
       type: object
       description: |-
-        The account and its settings, as `GET /account` shows them (and `PATCH /account` answers). `userId`, `inscriptionDate` and
-        `totpState` are read-only: sent in a `PATCH`, they are refused.
+        The account and its settings, as `GET /account` shows them (and `POST /account` answers). `userId`, `inscriptionDate` and
+        `totpState` are read-only: sent in a `POST /account`, they are refused.
       properties:
         userId:
           type: integer
@@ -3185,10 +3169,10 @@ components:
       type: object
       description: |-
         One day of the timeline — the central object of this API. Used by `GET /day`,
-        `GET /day/{date}`, `PUT /day/{date}` and `GET /timeline_sync`.
+        `GET /day/{date}`, `POST /day/{date}` and `GET /timeline_sync`.
 
         **On write, send the whole object.** Any field you leave out is cleared. See
-        `PUT /day/{date}`. The read-only fields below can be left in when you send a day back: they are dropped.
+        `POST /day/{date}`. The read-only fields below can be left in when you send a day back: they are dropped.
 
         Three groups of fields:
 
@@ -3207,7 +3191,7 @@ components:
           format: date
           description: |-
             `YYYY-MM-DD`. This is the identifier of the day. On write it is the date of the address
-            (`PUT /day/{date}`): leave it out of the body, or send the same date (else `date_mismatch`).
+            (`POST /day/{date}`): leave it out of the body, or send the same date (else `date_mismatch`).
           example: "2026-03-10"
 
         cycleStartDate:
@@ -3305,7 +3289,7 @@ components:
         freeOther:
           type: array
           description: |-
-            **Billings only.** Labels with no type yet. Classify them with `PATCH /description/{id}`.
+            **Billings only.** Labels with no type yet. Classify them with `POST /description/{id}`.
 
             Always present on read, empty when the day has none. On write it is part of the full
             state of the day like the two other lists: leave it out and these labels are unlinked.
@@ -3417,7 +3401,7 @@ components:
     DescriptionWritten:
       type: object
       description: |-
-        What `POST /description` and `PATCH /description/{id}` return. It is the same label as `Description`, but with
+        What `POST /description` and `POST /description/{id}` return. It is the same label as `Description`, but with
         `lastWriteClientUtc` instead of `useCount`. Call `GET /description` when you need the
         counts.
       properties:
@@ -3551,7 +3535,7 @@ components:
         the per-cycle `method` is what decides how a cycle is read.
 
         **On import this block is read but never applied** — the account's method is only
-        changed from `PATCH /account`. It is reported in `ignoredFields`.
+        changed from `POST /account`. It is reported in `ignoredFields`.
       properties:
         preferredMethod:
           type: string
@@ -4020,27 +4004,9 @@ components:
           type: integer
           description: The version of this contract. A client that finds a number greater than the one it was written for must stop and ask the user to update.
           example: 2
-        serverVersion:
-          type: string
-          description: The release that runs (`15dev` on a development tree).
-          example: "15"
-        build:
-          type: string
-          format: date
-          nullable: true
-          description: The build date; `null` on a development tree.
-        commit:
-          type: string
-          nullable: true
-          description: The short git commit of the build; `null` on a development tree.
-        schemaVersion:
-          type: integer
-          nullable: true
-          description: The version the database says it is at (`key_value`, row `schema_version`). `null` in maintenance (the database is not opened) or when it says none.
-          example: 15
-        status:
-          type: string
-          enum: [ok, maintenance, schema_mismatch]
+        maintenanceMode:
+          type: boolean
+          description: Is the server in maintenance? Every other endpoint then answers `503 maintenance`.
         registrationEnabled:
           type: boolean
           description: Does this instance accept new accounts?
@@ -4123,9 +4089,6 @@ components:
           description: |-
             The server clock when it started to answer. Send it as `since` next time, once you have merged this answer.
           example: "2026-03-10T15:31:02Z"
-        hasMore:
-          type: boolean
-          description: "`true` when there is more to fetch: call again with `since` = `syncTimestamp`. Always `false` today."
         days:
           type: array
           description: |-

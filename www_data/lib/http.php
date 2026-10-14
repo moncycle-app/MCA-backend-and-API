@@ -50,7 +50,7 @@ function http_respond(int $status, array $body): never {
 	exit;
 }
 
-// $meta is what the answer says about itself and that is not part of the resource (PATCH /api/account: what changed). Only sent when it holds something.
+// $meta is what the answer says about itself and that is not part of the resource (POST /api/account: what changed). Only sent when it holds something.
 function http_data(int $status, array $data, array $meta = []): never {
 	http_respond($status, empty($meta) ? ["data" => $data] : ["data" => $data, "meta" => $meta]);
 }

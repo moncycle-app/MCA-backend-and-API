@@ -253,7 +253,7 @@ full hour.
 
 - **The API.** Every endpoint answers `503` with `{"error": {"code": "maintenance", ...}}` before it opens the database: nothing can
   be read or written, whoever is signed in, and the downloads included. The one exception is `GET /api/server_info`, which answers
-  `200` with `"status": "maintenance"` so that a client can tell its user. The static pages stay up. **A container healthcheck must
+  `200` with `"maintenanceMode": true` so that a client can tell its user. The static pages stay up. **A container healthcheck must
   accept the 503 of `health_check` as alive**, or a server in maintenance is restarted as dead: the one in
   [`docker-compose.exemple.yml`](docker-compose.exemple.yml) does.
 - **The cron** refuses to run, dry run included, and exits with status 1.
@@ -288,7 +288,7 @@ spec is the contract:** a change to an endpoint and its YAML go in the same comm
 
 In four lines:
 
-0. `GET /api/server_info` (public) first: the `apiVersion` the server speaks, whether it is `ok` or in maintenance, and the limits to
+0. `GET /api/server_info` (public) first: the `apiVersion` the server speaks, whether it is in maintenance (`maintenanceMode`), and the limits to
    check a form with.
 1. `POST /api/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
    token is shown once.
@@ -298,7 +298,7 @@ In four lines:
 ```sh
 TOKEN=$(curl -s -H 'Content-Type: application/json' -d '{"email":"you@example.org","password":"..."}' https://YOUR.HOST/api/token | jq -r .data.token)
 curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/account
-curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X PUT -d '{"stampColor":"Red"}' https://YOUR.HOST/api/day/2026-09-20
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST -d '{"stampColor":"Red"}' https://YOUR.HOST/api/day/2026-09-20
 ```
 
 ## Development

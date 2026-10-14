@@ -8,7 +8,7 @@
 */
 
 // The user_account row as the code and the JSON API see it: its method, the account as GET /api/account shows it, and what a
-// PATCH /api/account body changes.
+// POST /api/account body changes.
 
 require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/day_format.php";
@@ -157,7 +157,7 @@ function account_recover_password($db, string $email, mixed $token, mixed $answe
 }
 
 // ---------------------------------------------------------------------------
-// PATCH /api/account, GET /api/account
+// POST /api/account, GET /api/account
 // ---------------------------------------------------------------------------
 
 // A birth year a person can give: this year, or up to ACCOUNT_BIRTH_YEAR_MAX_AGE years back. The
@@ -186,7 +186,7 @@ function account_notification_emails_parse(mixed $value): ?string {
 	return strlen($joined) <= ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS ? $joined : null;
 }
 
-// The settings of a PATCH body that need no password, checked: [the values db_update_user_account_settings() takes, the JSON names of the fields
+// The settings of a POST /api/account body that need no password, checked: [the values db_update_user_account_settings() takes, the JSON names of the fields
 // it changes]. A field that is absent leaves the account as it is; a wrong one is an issue. "notificationEmails" is one of the values (passed
 // on as it is stored); whether it changes is account_update()'s to say, since it asks for the password.
 function account_check_settings(array $account, array $body, array &$issues): array {
@@ -224,7 +224,7 @@ function account_check_settings(array $account, array $body, array &$issues): ar
 	return [$new, $changed];
 }
 
-// PATCH /api/account: every setting of the account is changed here. $body has gone through input_body(); $issues are the ones it found (the names that
+// POST /api/account: every setting of the account is changed here. $body has gone through input_body(); $issues are the ones it found (the names that
 // are not known), to which this adds its own so that the client is told everything at once. Answers what
 // the endpoint says:
 //   success: ["status" => 200, "data" => the account after the change (account_to_json()), "meta" => ["fieldsUpdated", and when they were asked

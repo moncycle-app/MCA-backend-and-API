@@ -86,7 +86,7 @@ Also:
 - **`account.php`** the account row: the method table (`NFP_METHOD_BY_ID`: id 3 = FertilityCare, 4 = FertilityCare + temperature),
   `account_check_settings` (the settings that need no password, checked: issues, never silently dropped), `account_to_json`
   (`GET /api/account`; the cycles are in the sync, the news address in `server_info`), **`account_update()` = the whole of
-  `PATCH /api/account`** (every setting is changed there, partial: a method or a temperature flag not sent keeps its value;
+  `POST /api/account`** (every setting is changed there, partial: a method or a temperature flag not sent keeps its value;
   `newPassword`, `notificationEmails` and `loginEmail` want the current password again as `password`, `loginEmail` also the TOTP
   `code`; everything is checked before anything is written; it answers the account in `data` and `fieldsUpdated` /
   `loggedOutDevices` / `loginEmailLinkSent` in `meta`), `account_notification_emails_parse()` (`user_account.notification_emails` is a
@@ -126,9 +126,11 @@ Also:
   sent) through here, collects the problems as issues `{field, code, message}` (`input_issue()`, codes `INPUT_ISSUE_CODES`) and ends
   with ONE answer: `input_exit_if_issues()` = 400 `validation_failed` with `details.issues`. A message names the field, the type that
   came and what is expected; it never holds a password, a code or a text.
-- **`server.php`** `server_info()` (`GET /api/server_info`: `apiVersion` = `API_VERSION`, release / build / commit from
-  `lib/build.json`, `schemaVersion` from `key_value`, `limits`), `server_exit_if_schema_mismatch()` (503 `schema_mismatch`, run by
-  every endpoint that opens the database after the maintenance exit), `server_build()`.
+- **`server.php`** `server_info()` (`GET /api/server_info`: `apiVersion` = `API_VERSION`, `maintenanceMode`, the toggles, `newsUrl`,
+  `limits`; made from the settings alone, **no database**, so it answers in maintenance too, and it tells neither the release nor the
+  schema), `server_exit_if_schema_mismatch()` (503 `schema_mismatch`, run by every endpoint that opens the database after the
+  maintenance exit), `server_build()` (release, build date and commit of `lib/build.json`: the NFP export stamps them, the API does not
+  tell them).
 
 ## Writing an endpoint
 
@@ -162,11 +164,14 @@ clients. The rules for the server side:
 - **Envelope.** `{"data": ...}` on success (a list is a bare array; an optional sibling `meta`), `{"error": {"code", "message", "details"?}}`
   on failure. JSON keys are camelCase, DB columns snake_case, error codes snake_case, URL paths snake_case (`server_info`,
   `timeline_sync`), query parameters camelCase, timestamps RFC 3339 with a zone.
+- **Verbs.** `GET` reads, `DELETE` deletes (and takes no body), every other write is a `POST`: there is no `PUT` and no `PATCH`.
+  `POST /api/day/{date}` replaces the whole day; `POST /api/account` and `POST /api/description/{id}` change only what is sent. An
+  address answers 405 with `Allow` to a method it does not take (`http_exit_method_not_allowed()`).
 - **Versions.** Additive changes (a field, an optional parameter, an endpoint, an enum value, a `code`) never change `API_VERSION`; a
   breaking one does. `GET /api/server_info`, its URL and its fields never break.
 - **Strict input.** An unknown field or query parameter, a wrong type and an out-of-range value are 400 `validation_failed` with every
   problem in `details.issues`: nothing is dropped silently. The day fields the server computes (`DAY_OUTPUT_ONLY_FIELDS`) are
-  accepted and dropped on `PUT /api/day/{date}`, so that a day read can be sent back. A field set to `null` is a field not sent.
+  accepted and dropped on `POST /api/day/{date}`, so that a day read can be sent back. A field set to `null` is a field not sent.
 - **Bodies.** Requests are JSON (`Content-Type: application/json`, else 415; malformed JSON is 400 `invalid_json`), `POST /api/import`
   included. A browser write with a foreign `Origin` is `403 cross_origin_refused` (`sec_exit_if_cross_origin()`, called by
   `api_start()`); a request with no `Origin` is not a browser's and passes.
@@ -257,7 +262,7 @@ refactoring the old code.
   `GET /api/account` plus the lists of cycles and pregnancies of the sync plus `newsUrl` of `server_info`), `data_account_etag`,
   `data_descriptions`, `data_pending` (the queue of unsent days), `data_pending_descriptions` (descriptions made here that the server
   has not created), `data_last_sync`, `data_version`. It runs the sync (`GET /api/server_info` once for the version, `GET /api/account`
-  with its ETag, then `GET /api/timeline_sync?since=`, repeated while `hasMore`), the queue and its retries, and the end of the session
+  with its ETag, then `GET /api/timeline_sync?since=`, one answer, not paged), the queue and its retries, and the end of the session
   (a 401 `unauthorized` empties all of localStorage through `moncycle_store.clear_storage()`, the one place that empties it; the
   sign-in, sign-up and account pages call it too).
   - A day refused as late (409 `stale_write`) is dropped from the queue and downloaded again, like any refusal.
@@ -266,7 +271,8 @@ refactoring the old code.
   - It holds no text and draws nothing: `tableau.js` (the timeline) listens to its events (`changed`, `status`, `sent`, `failed`).
     `account.js` only loads it, so that a 401 ends the session there too, and asks for a sync after a change.
   - Bump `moncycle_store.schema` when what is stored changes shape: copies of another schema are dropped. An update of the app
-    (`serverVersion`, `build` or `commit` of `server_info` changes) drops the copy and reloads the page.
+    (`moncycle_store.schema`, or the `apiVersion` of `server_info`, changes) drops the copy and reloads the page. The release and the
+    build are not in `server_info`: a server update that changes neither number does not reach a page that is open.
   - Exports are fetched and saved as a blob (`moncycle_store.download()`): the API answers its errors in JSON.
 - **A request to the API carries no cache-buster** (`cache: false` adds `_=...`, an unknown query parameter, which is refused).
 
@@ -299,9 +305,9 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
   directory (`cd www_data/script && php cron.php`).
 - **Three versions.** `SCHEMA_VERSION` (`constants.php`) is the schema this code is written for and the row `schema_version` of
   `key_value` (`schema.sql` inserts it, **every migration ends by setting it**; the three must agree; a database that says another
-  number is served nothing). `API_VERSION` is the integer of the HTTP contract. The release string, the build date and the commit are
-  in `www_data/lib/build.json` (committed with placeholders `"15dev"`, `YYYY-MM-DD`, `xxxxxxxx`; `build.sh` rewrites it; not served),
-  read by `server_build()`. `GET /api/server_info` shows all of them. Bump the release only when asked.
+  number is served nothing). `API_VERSION` is the integer of the HTTP contract, the only version `GET /api/server_info` tells. The release
+  string, the build date and the commit are in `www_data/lib/build.json` (committed with placeholders `"15dev"`, `YYYY-MM-DD`,
+  `xxxxxxxx`; `build.sh` rewrites it; not served), read by `server_build()` for the NFP export. Bump the release only when asked.
 - **Migrations** are `script/migration/vN-1_to_vN.{sql,php}`; `SCHEMA_VERSION` corresponds to the `vN`. A migration is tried on a
   copy first (MariaDB commits at every `ALTER TABLE`), and never run against a database that holds real data without a dump.
 - **The captcha** needs a `CAPTCHA_SECRET` of 32+ characters (the image makes one when none is given); without it register,
@@ -361,5 +367,5 @@ Delete a line when it is fixed.
   (`day_from_body`, twin of `day_format_from_json` + `_to_json`) and the cycle start / day (`recompute_cycles`, twin of
   `data_sync_days`). They only serve until the server's own answer replaces them.
 - DB names left as they are because renaming needs a migration: the `contry_code` column.
-- A wrong password or TOTP code on `PATCH /api/account` (like on `DELETE /api/totp`) is not counted or throttled: a stolen session that
+- A wrong password or TOTP code on `POST /api/account` (like on `DELETE /api/totp`) is not counted or throttled: a stolen session that
   knows the password can try TOTP codes freely. This is the posture of the session-level checks, not fixed.

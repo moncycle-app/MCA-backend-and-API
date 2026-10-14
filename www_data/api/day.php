@@ -19,7 +19,7 @@ $no_user_account = $user_account["no_user_account"];
 $path = input_path();
 input_exit_unless_path_fits($path, 1);
 $method = http_method();
-if (!in_array($method, $path === [] ? ["GET"] : ["GET", "PUT", "DELETE"], true)) http_exit_method_not_allowed($path === [] ? ["GET"] : ["GET", "PUT", "DELETE"]);
+if (!in_array($method, $path === [] ? ["GET"] : ["GET", "POST", "DELETE"], true)) http_exit_method_not_allowed($path === [] ? ["GET"] : ["GET", "POST", "DELETE"]);
 
 $issues = [];
 $date = $path === [] ? null : input_path_date($path[0], $issues);
@@ -103,8 +103,8 @@ elseif ($method === "GET") {
 	http_data(200, array_values($result));
 }
 
-// WRITING ONE DAY: it is replaced whole, what is not sent is empty
-elseif ($method === "PUT") {
+// WRITING ONE DAY: it is replaced whole, what is not sent is empty; sending the same day twice is harmless
+elseif ($method === "POST") {
 	input_query([], $issues);
 	$body = input_body(DAY_INPUT_FIELDS, $issues, DAY_OUTPUT_ONLY_FIELDS);
 	if (array_key_exists("date", $body) && $body["date"] !== $date) {

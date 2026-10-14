@@ -302,7 +302,7 @@ moncycle_app = {
 		return {no_description: d.id, name: d.name, type: moncycle_app.desc_type_to_int[d.type] || 0, use_count: d.useCount};
 	},
 
-	// full Day object (GET/PUT /api/day/{date}, or one entry of GET /api/day
+	// full Day object (GET/POST /api/day/{date}, or one entry of GET /api/day
 	// result) -> the legacy flat shape day_timeline2timeline/day_timeline2recap/open_menu
 	// expect. Description names are matched against the already-loaded picklist
 	// (moncycle_app.description) to recover the numeric ids open_menu checks against.

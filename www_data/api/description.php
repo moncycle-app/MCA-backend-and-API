@@ -20,7 +20,7 @@ $no_user_account = $user_account["no_user_account"];
 $path = input_path();
 input_exit_unless_path_fits($path, 1);
 $method = http_method();
-$allowed = $path === [] ? ["GET", "POST"] : ["PATCH", "DELETE"];
+$allowed = $path === [] ? ["GET", "POST"] : ["POST", "DELETE"];
 if (!in_array($method, $allowed, true)) http_exit_method_not_allowed($allowed);
 
 $issues = [];
@@ -52,11 +52,11 @@ elseif ($method === "DELETE") {
 	http_no_content();
 }
 
-// CREATION (POST /description) OR MODIFICATION (PATCH /description/{id}) OF A DESCRIPTION
+// CREATION (POST /description) OR MODIFICATION (POST /description/{id}, partial: what is not sent is kept) OF A DESCRIPTION
 else {
 	input_query([], $issues);
 	$body = input_body(["name", "type", "lastWriteClientUtc"], $issues);
-	$creates = $method === "POST";
+	$creates = $path === [];
 
 	$name = day_format_body_text($body, "name", DAY_LIMIT_DESCRIPTION_CHARS, $issues);
 	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");

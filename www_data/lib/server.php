@@ -11,7 +11,7 @@
 //
 // Three versions, three places: the contract (API_VERSION) and the schema this code expects (SCHEMA_VERSION) are constants; the release,
 // the build date and the commit are written at build time in lib/build.json (build.sh) and are not in the database; the version the
-// database is at is the row `schema_version` of key_value, set by schema.sql and by each migration.
+// database is at is the row `schema_version` of key_value, set by schema.sql and by each migration. Only API_VERSION is told to a client.
 
 require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/db.php";
@@ -69,19 +69,13 @@ function server_limits(): array {
 	];
 }
 
-// The data of GET /api/server_info. $db is null in maintenance: nothing is opened, and the schema version is not known.
-function server_info($db): array {
-	$build = server_build();
-	$schema = is_null($db) ? null : server_schema_version($db);
-
+// The data of GET /api/server_info: what a client needs before it signs in. It is made from the settings alone, the database is not opened
+// (so it answers in maintenance too), and neither the release nor the schema is told: the version of the contract is `apiVersion`.
+function server_info(): array {
 	return [
 		"app" => APP_NAME,
 		"apiVersion" => API_VERSION,
-		"serverVersion" => $build["version"],
-		"build" => $build["build"],
-		"commit" => $build["commit"],
-		"schemaVersion" => $schema,
-		"status" => is_null($db) ? "maintenance" : ($schema === SCHEMA_VERSION ? "ok" : "schema_mismatch"),
+		"maintenanceMode" => MAINTENANCE_MODE,
 		"registrationEnabled" => REGISTRATION_ENABLED,
 		"demoEnabled" => DEMO_ENABLED,
 		"captchaAvailable" => captcha_ready(),

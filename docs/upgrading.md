@@ -34,7 +34,7 @@ UPDATE key_value SET value = N WHERE `key` = 'schema_version';
 ```
 
 The code checks it on every request (`SCHEMA_VERSION` in [`constants.php`](../www_data/constants.php)). A database that says another
-number is not served: every endpoint answers `503 schema_mismatch` and `GET /api/server_info` says `status: "schema_mismatch"`.
+number is not served: every endpoint answers `503 schema_mismatch` (`GET /api/server_info` opens no database and does not say it).
 
 ## From v14 to v15
 

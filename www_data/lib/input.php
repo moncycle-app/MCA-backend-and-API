@@ -101,7 +101,7 @@ function input_check_names(array $given, array $known, array &$issues, array $re
 // The body
 // ---------------------------------------------------------------------------
 
-// The JSON body of a POST, PUT or PATCH: http_json_body() (415 and invalid_json end the request), then the names checked. $known are the
+// The JSON body of a POST: http_json_body() (415 and invalid_json end the request), then the names checked. $known are the
 // names the endpoint reads; $ignored are names it accepts and drops (the output-only fields of a day a client sends back as it read it);
 // $read_only are refused with their own code. Returns the body without the ignored names, and without the fields set to null: a field that is
 // null is a field that is not sent (a client library that writes its unset options as null says the same as one that leaves them out).

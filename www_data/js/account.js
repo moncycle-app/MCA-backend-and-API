@@ -173,7 +173,7 @@ const moncycle_app_text = {
 	tokens_prefix_title : "Début du jeton: il permet de distinguer les connexions d'une même application.",
 	tokens_none : "Aucune connexion.",
 
-	/* --- PATCH /api/account: what the server refuses when the password is asked again (its own words are English); the keys are the
+	/* --- POST /api/account: what the server refuses when the password is asked again (its own words are English); the keys are the
 	   codes of the problems (moncycle_store.error_pick), or "field:code" --- */
 	account_errors : {
 		invalid_password : "mot de passe incorrect",
@@ -504,7 +504,7 @@ $(document).ready(function(){
 			$("#desc_net_stat").html('⏳');
 			saved.sent = {name: name, type: type_int};
 			let payload = {name: name, type: moncycle_app_desc_type_from_int[type_int]};
-			$.ajax({type: "PATCH", url: "api/description/" + encodeURIComponent(id), contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
+			$.ajax({type: "POST", url: "api/description/" + encodeURIComponent(id), contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
 				if (edit == desc_last_edit) $("#desc_net_stat").html(' ✅&nbsp;enregistré');
 				// what the page holds of the description follows what was saved (the duplicate check, the delete dialog, the emoji)
 				saved.name = name;
@@ -574,7 +574,7 @@ $(document).ready(function(){
 
 	// AFFICHAGE VERSION
 	$.get("api/server_info", {}).done(function(ret) {
-		$("#tech_info_ver").text((ret.data || {}).serverVersion ?? "?");
+		$("#tech_info_ver").text((ret.data || {}).apiVersion ?? "?");
 	}).fail(moncycle_app_redirect_if_unauthenticated);
 
 
@@ -596,7 +596,7 @@ $(document).ready(function(){
 			payload[moncycle_app_account_field_map[field_name] || field_name] = val;
 		}
 		$.ajax({
-			type: "PATCH",
+			type: "POST",
 			url: "../api/account",
 			contentType: "application/json",
 			data: JSON.stringify(payload),
@@ -615,10 +615,10 @@ $(document).ready(function(){
 	});
 
 
-	// Everything about the account is changed by PATCH /api/account: the settings as they are typed, and what hands the account (or its cycles)
+	// Everything about the account is changed by POST /api/account: the settings as they are typed, and what hands the account (or its cycles)
 	// over -- the addresses and the password -- with the current password sent again. A form carries the data, the script sends the form.
 	const account_update = function (payload, done, fail) {
-		$.ajax({type: "PATCH", url: "../api/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
+		$.ajax({type: "POST", url: "../api/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
 			console.error(jqXHR);
 			fail(jqXHR);
 		});

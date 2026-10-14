@@ -59,10 +59,10 @@ if ($method === "GET") {
 	http_data(200, $account);
 }
 
-// UPDATE OF THE ACCOUNT: its settings, and what wants the password again (loginEmail, newPassword, notificationEmails)
-if ($method === "PATCH") {
+// UPDATE OF THE ACCOUNT, partial (what is not sent is kept): its settings, and what wants the password again (loginEmail, newPassword, notificationEmails)
+if ($method === "POST") {
 	input_query([], $issues);
-	$body = input_body(ACCOUNT_PATCH_FIELDS, $issues, [], ACCOUNT_READ_ONLY_FIELDS);
+	$body = input_body(ACCOUNT_UPDATE_FIELDS, $issues, [], ACCOUNT_READ_ONLY_FIELDS);
 
 	$outcome = account_update($db, $user_account, $body, $issues);
 	if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);
@@ -70,4 +70,4 @@ if ($method === "PATCH") {
 	http_data($outcome["status"], $outcome["data"], $outcome["meta"]);
 }
 
-http_exit_method_not_allowed(["GET", "PATCH"]);
+http_exit_method_not_allowed(["GET", "POST"]);

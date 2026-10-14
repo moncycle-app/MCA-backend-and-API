@@ -348,16 +348,15 @@ function data_public_stats($db): array {
 }
 
 // The answer of GET /api/timeline_sync: the cursor to send next time (the database's clock, read before anything else so what is written while
-// this runs is in the next one), whether there is more to fetch (never, for now: the whole answer is one page), the days to merge, every
-// description, and the first days of all the cycles and the pregnancy dates. The descriptions and the cycle lists come whole every time: there
-// are few of them, and that is how a deletion reaches a client.
+// this runs is in the next one), the days to merge (all of them, in one answer), every description, and the first days of all the cycles and
+// the pregnancy dates. The descriptions and the cycle lists come whole every time: there are few of them, and that is how a deletion reaches
+// a client.
 function data_sync($db, array $user_account, string $from_timestamp): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$now = db_select_now($db);
 
 	return [
 		"syncTimestamp" => http_iso8601($now),
-		"hasMore" => false,
 		"days" => array_map('day_format_to_json', data_sync_days($db, $no_user_account, $from_timestamp)),
 		"descriptions" => array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account)),
 		"allCyclesFirstDay" => db_select_cycles($db, $no_user_account),

@@ -198,7 +198,7 @@ function day_format_filled(array $day, string $field): bool {
 // Checking what a client sends
 // ---------------------------------------------------------------------------
 
-// A day sent in the JSON shape (PUT /api/day/{date}), checked against what can be stored and cleaned for day_format_from_json(): the day, and the
+// A day sent in the JSON shape (POST /api/day/{date}), checked against what can be stored and cleaned for day_format_from_json(): the day, and the
 // problems added to $issues (with any, the day is not to be stored). A field left out is not a problem: a day is the full state of the day, and
 // what is absent is empty. The types are the JSON ones: a flag is true or false, a count a whole number, a code a string.
 function day_format_validate(array $day, array &$issues): array {
