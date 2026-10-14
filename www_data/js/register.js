@@ -16,11 +16,13 @@ if (parseInt(localStorage.auth)>0 && !moncycle_store.is_demo(localStorage.auth))
 else {
 	moncycle_store.clear_storage();
 	$(document).ready(function(){
-		let year = new Date().getFullYear();
-		yera = year - (year%5);
-		for (let yy = year-100; yy < year; yy+=5) {
-			$("#i_anaissance").append(`<option value="${yy}">entre ${yy} et ${yy+4}</option>`);
+		// 5-year bands, the youngest ending 19 years back: someone born then is 18 or more whatever their birthday, so no band holds a minor
+		const year = new Date().getFullYear();
+		let bands = [];
+		for (let yy = year-23; yy >= year-100; yy-=5) {
+			bands.unshift(`<option value="${yy}">entre ${yy} et ${yy+4}</option>`);
 		}
+		$("#i_anaissance").append(bands.join(""));
 		// the picture and its token are asked for once the address is typed (a click on the picture asks for another)
 		const register_captcha = moncycle_captcha.attach({
 			purpose: "register",
