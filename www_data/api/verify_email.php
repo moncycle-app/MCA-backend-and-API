@@ -7,10 +7,10 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/api.php";
-require_once "../lib/email_token.php";
-require_once "../lib/input.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/api.php";
+require_once __DIR__ . "/../lib/email_token.php";
+require_once __DIR__ . "/../lib/input.php";
 
 // The link of a mail, used: it proves an address, or sets a new password, or changes the primary address. It needs no session (the
 // person may open the mail on another device), and the token is the whole proof. The page of the link posts the token it finds in its

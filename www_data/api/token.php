@@ -7,12 +7,12 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/account.php";
-require_once "../lib/api.php";
-require_once "../lib/input.php";
-require_once "../lib/mail.php";
-require_once "../lib/token.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/account.php";
+require_once __DIR__ . "/../lib/api.php";
+require_once __DIR__ . "/../lib/input.php";
+require_once __DIR__ . "/../lib/mail.php";
+require_once __DIR__ . "/../lib/token.php";
 
 [$db, $user_account] = api_start(false, true);
 

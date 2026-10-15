@@ -216,14 +216,14 @@ inactive for 4 years and those whose address was never verified after 7 days (`A
 
 - **With Docker** the container runs it at 3:30 in its time zone (`TZ`, UTC when unset); its output goes to `docker logs`.
   `CRON_ENABLED=false` schedules nothing: do that if you run it from the host, or it runs twice a day and sends every mail twice.
-- **By hand**, as the web user, from the `script/` directory (the scripts open `../config.php` relative to it):
+- **By hand**, as the web user:
 
   ```sh
-  docker exec -u www-data -w /var/www/html/script <container> php cron.php
-  # without Docker, as the web user:  cd www_data/script && php cron.php
+  docker exec -u www-data <container> php /var/www/html/script/cron.php
+  # without Docker, as the web user:  php www_data/script/cron.php
   ```
 
-  A cron entry of the host does the same: `30 3 * * * cd /path/to/www_data/script && php cron.php`.
+  A cron entry of the host does the same: `30 3 * * * php /path/to/www_data/script/cron.php`.
 - **`php cron.php --dry-run`** reads and prints what a run would do (who would be mailed, which accounts and how many tokens would be
   deleted) and sends, deletes and writes nothing. Any other argument is refused with exit status 2. Do not run the real thing on a
   database you have not backed up.
@@ -239,7 +239,7 @@ their switch:
 - **On.** They can sign in. Every hour, on the hour, `script/demo_reset.php` deletes the two accounts and makes them again in one
   transaction, with days dated from the day of the run: whatever a visitor wrote is gone, and **a visitor is signed out at the next
   hour**. The Docker image schedules it unless `CRON_ENABLED=false`; if you run the cron from the host, add
-  `0 * * * * docker exec -u www-data -w /var/www/html/script <container> php demo_reset.php`. `php demo_reset.php --dry-run` says what
+  `0 * * * * docker exec -u www-data <container> php /var/www/html/script/demo_reset.php`. `php demo_reset.php --dry-run` says what
   it would do and writes nothing.
 - **Off.** Signing in to them is refused (`403 account_disabled`), a session that is open on one stops working at once, and nothing
   resets them. The accounts stay in the database.

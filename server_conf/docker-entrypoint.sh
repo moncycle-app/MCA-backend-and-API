@@ -22,7 +22,7 @@ as_web_user() {
 if [ "${1:-}" = "apache2-foreground" ]; then
 	# the database may still be starting: wait for it. No answer or no schema is a failed start, and the
 	# restart policy of the container tries again.
-	(cd /var/www/html/script && as_web_user php db_init.php --wait=60)
+	(as_web_user php /var/www/html/script/db_init.php --wait=60)
 
 	# The captcha is signed with CAPTCHA_SECRET (at least 32 characters; shorter or empty and the captcha is closed, 503).
 	# None given: a random one is made for this run, which the web server and the cron inherit. A restart then only voids

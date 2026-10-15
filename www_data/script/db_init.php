@@ -7,8 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/data.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/data.php";
 
 // php db_init.php [--wait=SECONDS]. The first launch of the Docker image (server_conf/docker-entrypoint.sh): a
 // database with no table gets the schema (script/db/schema.sql) and, when DEMO_ENABLED, the demo accounts

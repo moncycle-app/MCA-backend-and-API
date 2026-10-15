@@ -7,13 +7,13 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/data.php";
-require_once "../lib/doc_csv.php";
-require_once "../lib/doc_export.php";
-require_once "../lib/log.php";
-require_once "../lib/mail.php";
-require_once "../lib/nfp_export.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/data.php";
+require_once __DIR__ . "/../lib/doc_csv.php";
+require_once __DIR__ . "/../lib/doc_export.php";
+require_once __DIR__ . "/../lib/log.php";
+require_once __DIR__ . "/../lib/mail.php";
+require_once __DIR__ . "/../lib/nfp_export.php";
 
 // php cron.php [--dry-run]. --dry-run reads and says what a run would do, and sends, deletes and writes nothing.
 // Only the command line takes it, and anything else on it is refused: a typo must not turn a dry run into a real one.

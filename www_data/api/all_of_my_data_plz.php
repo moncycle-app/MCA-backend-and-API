@@ -7,11 +7,11 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/doc_csv.php";
-require_once "../lib/log.php";
-require_once "../lib/sec.php";
-require_once "../lib/server.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/doc_csv.php";
+require_once __DIR__ . "/../lib/log.php";
+require_once __DIR__ . "/../lib/sec.php";
+require_once __DIR__ . "/../lib/server.php";
 
 log_start(sec_client_ip());
 http_exit_if_maintenance();

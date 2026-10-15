@@ -7,10 +7,10 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/db.php";
-require_once "../lib/http.php";
-require_once "../lib/log.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/db.php";
+require_once __DIR__ . "/../lib/http.php";
+require_once __DIR__ . "/../lib/log.php";
 
 header('Content-Type: application/json');
 

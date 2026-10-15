@@ -7,8 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../config.php";
-require_once "../lib/data.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/data.php";
 
 // php demo_reset.php [--dry-run]. The two public demo accounts back as script/db/demo.sql makes them, their days
 // dated from today: what a visitor wrote in them is gone, and so are their sessions. Run every hour by the Docker

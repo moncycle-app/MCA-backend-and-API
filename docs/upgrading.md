@@ -15,9 +15,8 @@ one version at a time.
 2. **Stop the old container**, or point the proxy away from it, or start the new one with `MAINTENANCE_MODE=true` (see
    [Maintenance mode](../README.md#maintenance-mode)).
 3. **Run the migration inside a container of the new image** (it already has the database settings):
-   `docker exec -w /var/www/html/script/migration <container> php v14_to_v15.php`. The script reads `./v14_to_v15.sql` from its working
-   directory, hence `-w`. `script/` answers only to `127.0.0.1` over HTTP, so run it through the command line as above. Without
-   Docker: `cd www_data/script/migration && php v14_to_v15.php`.
+   `docker exec <container> php /var/www/html/script/migration/v14_to_v15.php`. `script/` answers only to `127.0.0.1` over HTTP, so run
+   it through the command line as above. Without Docker: `php www_data/script/migration/v14_to_v15.php`.
 4. **Without Docker, a `config.php` written by hand needs the settings the new version adds.** Copy them from `config.exemple.php`
    (for v15: `MAINTENANCE_MODE`, `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `TERMS_OF_SERVICE_URL`, `DEMO_ENABLED`, `CAPTCHA_SECRET`,
    and the `LOGIN_*` ones). A missing one is a fatal "Undefined constant". The Docker image reads them from its environment and needs

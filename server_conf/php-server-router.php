@@ -39,7 +39,7 @@ if (preg_match('#^/api/([a-z_]+)(/.*)?$#', $path, $found) && is_file("$root/api/
 	$_SERVER["SCRIPT_FILENAME"] = $script;
 	$_SERVER["PATH_INFO"] = $found[2] ?? "";
 	$_SERVER["PHP_SELF"] = $_SERVER["SCRIPT_NAME"] . $_SERVER["PATH_INFO"];
-	chdir(dirname($script));   // the endpoints require "../config.php"
+	chdir(dirname($script));   // as Apache does
 	require $script;
 	return true;
 }

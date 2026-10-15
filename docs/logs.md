@@ -203,7 +203,7 @@ and never locked, so lines stay whole between workers; and a rename-based `logro
   directory, and a volume mounted there. The directory belongs to `www-data` (uid 33) in the image, so a **named volume** inherits it; a
   **bind mount** takes the host directory's owner: `chown 33:33 /host/dir`. Without Docker, any path the web user can append to works.
 - `docker exec` runs as root, and a file first created by root cannot be appended to by the web server: run the cron as `www-data`
-  (`docker exec -u www-data -w /var/www/html/script <container> php cron.php`).
+  (`docker exec -u www-data <container> php /var/www/html/script/cron.php`).
 - With `read_only: true` the directory is not writable without a volume; the app then logs to `stdout` and says why in
   `system.log_sink_failed`.
 - Cron lines go where the cron's own output goes: with `stdout`, the output of the `docker exec` and not `docker logs`. A file gathers the

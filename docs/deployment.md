@@ -111,8 +111,8 @@ what the Docker image's Apache does. [`server_conf/zz-moncycleapp.conf`](../serv
    `max_execution_time = 30`, `file_uploads = Off`, and `open_basedir` set to the app's directory (add the directory of the log file,
    if any, and your secrets directory). The file's `${VAR:-default}` values are filled from the container's environment; outside
    Docker write the values you want.
-7. **Run the cron** as the web user, once a day, from `www_data/script/` (the scripts load `../config.php` relative to their
-   directory): `30 3 * * * cd /path/to/www_data/script && php cron.php`. With `DEMO_ENABLED`, also `0 * * * * ... php demo_reset.php`.
+7. **Run the cron** as the web user, once a day: `30 3 * * * php /path/to/www_data/script/cron.php`. With `DEMO_ENABLED`, also
+   `0 * * * * php /path/to/www_data/script/demo_reset.php`.
    See [Cron](../README.md#cron).
 8. **Settings** are the `define()` lines of `www_data/config.php`, made from `config.exemple.php` ([Settings](../README.md#settings)).
    Put `config.php` out of reach of the web (rule 2 does that) and readable by the web user only.

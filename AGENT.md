@@ -304,8 +304,7 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
   (`0 * * * *` runs `demo_reset.php`; one crontab per process). `cron.php` must run once a day (it mails and erases), hence the
   separate `script/demo_reset.php` for the hourly demo reload. `DEMO_ENABLED` (default **false**) gates the sign-in and the sessions
   of accounts 2 and 3 (`sec_account_enabled()`, answering `403 account_disabled` / 401) and that reload.
-- **Scripts open their requires relative to the working directory** (`require_once "../config.php"`): run them from their own
-  directory (`cd www_data/script && php cron.php`).
+- **Every `require_once` is `__DIR__`-based** (`require_once __DIR__ . "/../config.php"`): a script runs from any directory.
 - **Three versions.** `SCHEMA_VERSION` (`constants.php`) is the schema this code is written for and the row `schema_version` of
   `key_value` (`schema.sql` inserts it, **every migration ends by setting it**; the three must agree; a database that says another
   number is served nothing). `API_VERSION` is the integer of the HTTP contract, the only version `GET /api/server_info` tells. The release

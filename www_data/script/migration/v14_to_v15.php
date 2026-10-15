@@ -7,9 +7,9 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-require_once "../../config.php";
-require_once "../../lib/db.php";
-require_once "../../lib/sec.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/db.php";
+require_once __DIR__ . "/../../lib/sec.php";
 
 header("Content-Type: text/plain");
 
@@ -39,7 +39,7 @@ try {
     print("reading v14_to_v15.sql file ...");
     print(PHP_EOL);
 
-    $v14_to_v15_shema_migration = file_get_contents("./v14_to_v15.sql");
+    $v14_to_v15_shema_migration = file_get_contents(__DIR__ . "/v14_to_v15.sql");
 
     if ($v14_to_v15_shema_migration === false) {
         throw new RuntimeException("cannot read ./v14_to_v15.sql: run the script from its own directory, nothing has been changed");

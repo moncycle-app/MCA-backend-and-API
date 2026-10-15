@@ -30,10 +30,10 @@
 ** default) leaves it alone and reports it, true replaces it.
 */
 
-require_once "../config.php";
-require_once "../lib/api.php";
-require_once "../lib/input.php";
-require_once "../lib/nfp_import.php";
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/api.php";
+require_once __DIR__ . "/../lib/input.php";
+require_once __DIR__ . "/../lib/nfp_import.php";
 
 [$db, $user_account] = api_start();
 
