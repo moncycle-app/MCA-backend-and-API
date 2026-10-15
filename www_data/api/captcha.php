@@ -9,9 +9,8 @@
 
 require_once __DIR__ . "/../config.php";
 require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/user_account.php";
-require_once __DIR__ . "/../lib/sec_captcha.php";
 require_once __DIR__ . "/../lib/input.php";
+require_once __DIR__ . "/../lib/sec_captcha.php";
 
 [$db] = api_start(false);
 
@@ -21,26 +20,13 @@ input_exit_unless_path_fits(input_path(), 0);
 $issues = [];
 input_query([], $issues);
 $body = input_body(["purpose", "email"], $issues);
-
-if (input_require($body, "purpose", $issues)) {
-	if (!is_string($body["purpose"])) input_wrong_type($issues, "purpose", $body["purpose"], "a string (" . implode(", ", CAPTCHA_PURPOSES) . ")");
-	elseif (!in_array($body["purpose"], CAPTCHA_PURPOSES, true)) $issues[] = input_issue("purpose", "invalid_value", "'purpose' must be one of: " . implode(", ", CAPTCHA_PURPOSES) . ".");
-}
-$email = null;
-if (input_require($body, "email", $issues)) {
-	if (!is_string($body["email"])) input_wrong_type($issues, "email", $body["email"], "a string (an e-mail address)");
-	else {
-		$email = user_account_email_normalise($body["email"]);
-		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $issues[] = input_issue("email", "invalid_email", "'email' is not a valid e-mail address.");
-	}
-}
+$purpose = input_choice($body, "purpose", CAPTCHA_PURPOSES, $issues);
+$email = input_email($body, "email", $issues);
 input_exit_if_issues($issues);
 
-if (!sec_captcha_ready()) {
-	http_error(503, "captcha_unavailable", "The captcha is not available.");
-}
+if (!sec_captcha_ready()) http_error(503, "captcha_unavailable", "The captcha is not available.");
 
-$challenge = sec_captcha_issue($db, $body["purpose"], $email, sec_client_ip());
+$challenge = sec_captcha_issue($db, $purpose, $email, sec_client_ip());
 log_event("auth.captcha_issued");
 
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");

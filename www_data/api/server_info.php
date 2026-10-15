@@ -17,10 +17,7 @@ require_once __DIR__ . "/../lib/server.php";
 api_start_open();
 
 if (http_method() !== "GET") http_exit_method_not_allowed(["GET"]);
-$issues = [];
-input_query([], $issues);
-input_check_no_body($issues);
-input_exit_if_issues($issues);
+input_exit_unless_none();
 input_exit_unless_path_fits(input_path(), 0);
 
 http_data(200, server_info());

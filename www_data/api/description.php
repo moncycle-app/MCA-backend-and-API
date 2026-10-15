@@ -28,9 +28,7 @@ $id = $path === [] ? null : input_path_id($path[0], $issues);
 
 // LISTING ALL DESCRIPTIONS
 if ($method === "GET") {
-	input_query([], $issues);
-	input_check_no_body($issues);
-	input_exit_if_issues($issues);
+	input_exit_unless_none($issues);
 
 	$descriptions = array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account));
 	log_note(["n" => count($descriptions)]);
@@ -39,9 +37,7 @@ if ($method === "GET") {
 
 // DELETION OF A DESCRIPTION
 elseif ($method === "DELETE") {
-	input_query([], $issues);
-	input_check_no_body($issues);
-	input_exit_if_issues($issues);
+	input_exit_unless_none($issues);
 
 	if (is_null(db_select_description($db, $id, $no_user_account))) {
 		http_error(404, "not_found", "No description of this account has this id.");
@@ -62,18 +58,13 @@ else {
 	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");
 	elseif ($creates) input_require($body, "name", $issues);
 
-	$type = null;
-	if (array_key_exists("type", $body)) {
-		if (!is_string($body["type"])) input_wrong_type($issues, "type", $body["type"], "a string (" . implode(", ", array_keys(DESCRIPTION_TYPE_BY_NAME)) . ")");
-		elseif (!isset(DESCRIPTION_TYPE_BY_NAME[$body["type"]])) $issues[] = input_issue("type", "invalid_value", "'type' must be one of: " . implode(", ", array_keys(DESCRIPTION_TYPE_BY_NAME)) . ".");
-		else $type = DESCRIPTION_TYPE_BY_NAME[$body["type"]];
-	}
-	elseif ($creates) input_require($body, "type", $issues);
+	$type_name = input_choice($body, "type", DESCRIPTION_TYPE_NAMES, $issues, $creates);
+	$type = is_null($type_name) ? null : array_search($type_name, DESCRIPTION_TYPE_NAMES, true);
 	if (!$creates && !array_key_exists("name", $body) && !array_key_exists("type", $body)) {
 		$issues[] = input_issue("body", "missing_field", "Send the 'name' or the 'type' to change (or both).");
 	}
 
-	$last_write_client_UTC = http_client_timestamp(input_timestamp($body["lastWriteClientUtc"] ?? null, "lastWriteClientUtc", $issues));
+	$last_write_client_UTC = input_last_write($body, $issues);
 	input_exit_if_issues($issues);
 
 	$saved = data_save_description($db, $no_user_account, $id, $name, $type, $last_write_client_UTC);

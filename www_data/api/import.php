@@ -48,7 +48,7 @@ $issues = [];
 $query = input_query(["dryRun", "override", "lastWriteClientUtc"], $issues);
 $dry_run = input_query_bool($query, "dryRun", $issues);
 $override = input_query_bool($query, "override", $issues);
-$last_write_client_UTC = http_client_timestamp(input_timestamp($query["lastWriteClientUtc"] ?? null, "query.lastWriteClientUtc", $issues));
+$last_write_client_UTC = input_last_write($query, $issues, "query.");
 input_exit_if_issues($issues);
 
 // ---------------------------------------------------------------------------

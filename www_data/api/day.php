@@ -26,9 +26,7 @@ $date = $path === [] ? null : input_path_date($path[0], $issues);
 
 // READING ONE DAY: an empty day when nothing is stored for it
 if ($method === "GET" && $path !== []) {
-	input_query([], $issues);
-	input_check_no_body($issues);
-	input_exit_if_issues($issues);
+	input_exit_unless_none($issues);
 
 	// the row's id when the day was ever written, and how many rows were read (0 or 1: an unwritten date is answered empty)
 	$day = data_construct_day($db, $date, $no_user_account);
@@ -86,16 +84,9 @@ elseif ($method === "GET") {
 		$result[$one] = day_format_to_json($day);
 	}
 
-	$all_days = [];
-	if ($range) $all_days = db_select_day_timelines_range($db, $range["from"], date_next_day($range["to"]), $no_user_account);
-	$rows_read += count($all_days);
-
-	// the days come in date order: the cycle is the one the last first day started
-	$descriptions = data_descriptions_by_day($db, $all_days, $no_user_account);
-	$cycle_date = null;
-	foreach ($all_days as $row) {
-		if ($row["cycle_1st_day"]) $cycle_date = $row["date_obs"];
-		$result[$row["date_obs"]] = day_format_to_json(data_construct_day($db, $row["date_obs"], $no_user_account, $row, $cycle_date, null, $descriptions[$row["no_day"]] ?? []));
+	foreach ($range ? data_days_range($db, $range["from"], $range["to"], $no_user_account) : [] as $day) {
+		$rows_read++;
+		$result[$day["date_obs"]] = day_format_to_json($day);
 	}
 	ksort($result);
 
@@ -113,7 +104,7 @@ elseif ($method === "POST") {
 	unset($body["date"]);
 
 	$day = day_format_validate($body, $issues);
-	$last_write_client_UTC = http_client_timestamp(input_timestamp($body["lastWriteClientUtc"] ?? null, "lastWriteClientUtc", $issues));
+	$last_write_client_UTC = input_last_write($body, $issues);
 	input_exit_if_issues($issues);
 
 	data_reactivate_account($db, $user_account);
@@ -131,7 +122,7 @@ elseif ($method === "POST") {
 else {
 	$query = input_query(["lastWriteClientUtc"], $issues);
 	input_check_no_body($issues);
-	$last_write_client_UTC = http_client_timestamp(input_timestamp($query["lastWriteClientUtc"] ?? null, "query.lastWriteClientUtc", $issues));
+	$last_write_client_UTC = input_last_write($query, $issues, "query.");
 	input_exit_if_issues($issues);
 
 	if (!data_clear_day($db, $no_user_account, $date, $last_write_client_UTC)) {

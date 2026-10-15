@@ -7,14 +7,10 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// What a request is allowed to say, and how a client is told when it says it wrong. Every endpoint reads its path, its query string and its
-// body through here, and ends with one answer for any problem: 400 `validation_failed`, whose `details.issues` is a list of
-// {"field", "code", "message"} (the codes are INPUT_ISSUE_CODES, constants.php). `field` is where the problem is: `stampColor`,
-// `freeMucusSensation[2]`, `query.from`, `path.date`.
-//
-// An issue is collected, not thrown: the checks of an endpoint all run, and input_exit_if_issues() tells the client everything that is
-// wrong at once. A message names the field, the type that came ("got array") and what is expected; it never holds the value that was
-// sent (a password, a code, the text of a day).
+// What a request may say. Every endpoint reads its path, its query string and its body through here and collects the problems as
+// issues {"field", "code", "message"} (codes: INPUT_ISSUE_CODES), so that one 400 `validation_failed` tells the client everything that
+// is wrong at once. A message names the field, the type that came and what is expected; it never holds the value sent (a password, a
+// code, the text of a day). `field` is `stampColor`, `freeMucusSensation[2]`, `query.from` or `path.date`.
 
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/http.php";
@@ -27,7 +23,6 @@ function input_issue(string $field, string $code, string $message): array {
 	return ["field" => $field, "code" => in_array($code, INPUT_ISSUE_CODES, true) ? $code : "invalid_value", "message" => $message];
 }
 
-// Ends the request with the 400 when there is any issue.
 function input_exit_if_issues(array $issues): void {
 	if (empty($issues)) return;
 	$count = count($issues);
@@ -37,63 +32,47 @@ function input_exit_if_issues(array $issues): void {
 	http_error(400, "validation_failed", $message, ["issues" => $issues]);
 }
 
-// The type of a decoded JSON value as a client thinks of it.
-function input_type_name(mixed $value): string {
-	if (is_null($value)) return "null";
-	if (is_bool($value)) return "boolean";
-	if (is_int($value)) return "whole number";
-	if (is_float($value)) return "decimal number";
-	if (is_string($value)) return "string";
-	return array_is_list($value) ? "array" : "object";
-}
-
 // "'name' must be a string, got array."
 function input_wrong_type(array &$issues, string $field, mixed $value, string $expected): void {
-	$issues[] = input_issue($field, "wrong_type", "'" . input_label($field) . "' must be $expected, got " . input_type_name($value) . ".");
-}
-
-// A field as a message names it: `query.from` is the parameter "from", `stampColor` stays as it is.
-function input_label(string $field): string {
-	return preg_replace('/^(query|path)\./', '', $field);
+	$type = match (true) {
+		is_null($value) => "null",
+		is_bool($value) => "boolean",
+		is_int($value) => "whole number",
+		is_float($value) => "decimal number",
+		is_string($value) => "string",
+		default => array_is_list($value) ? "array" : "object",
+	};
+	$issues[] = input_issue($field, "wrong_type", "'" . preg_replace('/^(query|path)\./', '', $field) . "' must be $expected, got $type.");
 }
 
 // ---------------------------------------------------------------------------
 // The names a request may use
 // ---------------------------------------------------------------------------
 
-// The known name closest to a name that is none, when it is close enough to be a typo ("stampColour" -> "stampColor"); null otherwise.
-function input_closest(string $name, array $known): ?string {
-	$best = null;
+// An unknown name, with the known one it is a typo of ("stampColour" -> "stampColor") when one is close enough. A long name is cut:
+// it is only there to be recognised.
+function input_unknown_issue(string $prefix, string $name, array $known): array {
+	$closest = null;
 	$best_distance = PHP_INT_MAX;
 	foreach ($known as $candidate) {
 		$distance = levenshtein(strtolower(substr($name, 0, 60)), strtolower($candidate));
-		if ($distance < $best_distance) [$best, $best_distance] = [$candidate, $distance];
+		if ($distance < $best_distance) [$closest, $best_distance] = [$candidate, $distance];
 	}
-	return $best_distance <= 2 || ($best_distance <= 3 && strlen($name) >= 8) ? $best : null;
-}
+	if (!($best_distance <= 2 || ($best_distance <= 3 && strlen($name) >= 8))) $closest = null;
 
-// The message and the code of a name nobody reads: a name over 64 characters is cut, it is only there to be recognised.
-function input_unknown_issue(string $field_prefix, string $name, array $known): array {
 	$shown = mb_strlen($name) > 64 ? mb_substr($name, 0, 64) . "..." : $name;
-	$closest = input_closest($name, $known);
-	$what = $field_prefix === "query." ? "parameter" : "field";
+	$what = $prefix === "query." ? "parameter" : "field";
 	if (is_null($closest)) $hint = empty($known) ? "This endpoint takes no $what." : "Known " . $what . "s: " . implode(", ", $known) . ".";
 	else $hint = "Did you mean '$closest'?";
-	$message = "Unknown $what '$shown'. $hint";
-	return input_issue($field_prefix . $shown, "unknown_field", $message);
+	return input_issue($prefix . $shown, "unknown_field", "Unknown $what '$shown'. $hint");
 }
 
-// Issues for the names of $given that are not in $known: unknown ones, and read-only ones ($read_only, a subset the server writes). $prefix is
-// "" for a body and "query." for a query string.
+// Issues for the names of $given that are not in $known, and for the read-only ones the server writes. $prefix is "query." for a query.
 function input_check_names(array $given, array $known, array &$issues, array $read_only = [], string $prefix = ""): void {
 	foreach (array_keys($given) as $name) {
 		$name = (string) $name;
-		if (in_array($name, $read_only, true)) {
-			$issues[] = input_issue($prefix . $name, "read_only_field", "'$name' is read-only: the server sets it. Remove it from the request.");
-		}
-		elseif (!in_array($name, $known, true)) {
-			$issues[] = input_unknown_issue($prefix, $name, $known);
-		}
+		if (in_array($name, $read_only, true)) $issues[] = input_issue($prefix . $name, "read_only_field", "'$name' is read-only: the server sets it. Remove it from the request.");
+		elseif (!in_array($name, $known, true)) $issues[] = input_unknown_issue($prefix, $name, $known);
 	}
 }
 
@@ -101,39 +80,76 @@ function input_check_names(array $given, array $known, array &$issues, array $re
 // The body
 // ---------------------------------------------------------------------------
 
-// The JSON body of a POST: http_json_body() (415 and invalid_json end the request), then the names checked. $known are the
-// names the endpoint reads; $ignored are names it accepts and drops (the output-only fields of a day a client sends back as it read it);
-// $read_only are refused with their own code. Returns the body without the ignored names, and without the fields set to null: a field that is
-// null is a field that is not sent (a client library that writes its unset options as null says the same as one that leaves them out).
+// The JSON body, its names checked. $ignored are accepted and dropped (the output-only fields of a day sent back as it was read),
+// $read_only refused with their own code. A field set to null is a field not sent: it is dropped too.
 function input_body(array $known, array &$issues, array $ignored = [], array $read_only = []): array {
 	$body = http_json_body();
 	input_check_names($body, array_merge($known, $ignored), $issues, $read_only);
 	return array_filter(array_diff_key($body, array_flip($ignored)), fn($value) => !is_null($value));
 }
 
-// A body on a request that takes none (GET, DELETE).
 function input_check_no_body(array &$issues): void {
 	if (http_body_present()) $issues[] = input_issue("body", "body_not_allowed", "This request takes no body.");
 }
 
-// A field that must be true or false; null when absent.
-function input_bool_field(array $body, string $field, array &$issues): ?bool {
-	if (!array_key_exists($field, $body)) return null;
-	if (!is_bool($body[$field])) {
-		input_wrong_type($issues, $field, $body[$field], "true or false");
-		return null;
-	}
-	return $body[$field];
+// A request that takes neither a query string nor a body: the 400 for either, and for the issues already found.
+function input_exit_unless_none(array $issues = []): void {
+	input_query([], $issues);
+	input_check_no_body($issues);
+	input_exit_if_issues($issues);
 }
 
-// A field that must be present: an issue when it is not.
+// true, false, or null when absent (or wrong: an issue).
+function input_bool_field(array $body, string $field, array &$issues): ?bool {
+	if (!array_key_exists($field, $body)) return null;
+	if (is_bool($body[$field])) return $body[$field];
+	input_wrong_type($issues, $field, $body[$field], "true or false");
+	return null;
+}
+
 function input_require(array $body, string $field, array &$issues): bool {
 	if (array_key_exists($field, $body) && !is_null($body[$field])) return true;
 	$issues[] = input_issue($field, "missing_field", "'$field' is required.");
 	return false;
 }
 
-// A one-time code (TOTP): a string of digits, or a number. As a string, null when absent (an issue when $required) or wrong (an issue).
+// Optional fields that must be strings when sent (a captcha and its token).
+function input_check_strings(array $body, array $fields, array &$issues): void {
+	foreach ($fields as $field) {
+		if (array_key_exists($field, $body) && !is_string($body[$field])) input_wrong_type($issues, $field, $body[$field], "a string");
+	}
+}
+
+// One of $values, or null when absent (an issue when $required) or wrong (an issue).
+function input_choice(array $body, string $field, array $values, array &$issues, bool $required = true): ?string {
+	if ($required ? !input_require($body, $field, $issues) : !array_key_exists($field, $body)) return null;
+	$list = implode(", ", $values);
+	if (!is_string($body[$field])) input_wrong_type($issues, $field, $body[$field], "a string ($list)");
+	elseif (!in_array($body[$field], $values, true)) $issues[] = input_issue($field, "invalid_value", "'$field' must be one of: $list.");
+	else return $body[$field];
+	return null;
+}
+
+// An address as it is stored and looked up: trimmed and in lower case, so that Alice@X.test is alice@x.test ("" when it is no string).
+// FILTER_VALIDATE_EMAIL refuses non-ASCII, so strtolower never meets a multibyte character.
+function input_email_normalise(mixed $email): string {
+	return is_string($email) ? strtolower(trim($email)) : "";
+}
+
+// A valid address, normalised; null when absent (an issue when $required) or wrong (an issue).
+function input_email(array $body, string $field, array &$issues, bool $required = true): ?string {
+	if ($required ? !input_require($body, $field, $issues) : !array_key_exists($field, $body)) return null;
+	if (!is_string($body[$field])) {
+		input_wrong_type($issues, $field, $body[$field], "a string (an e-mail address)");
+		return null;
+	}
+	$email = input_email_normalise($body[$field]);
+	if (filter_var($email, FILTER_VALIDATE_EMAIL)) return $email;
+	$issues[] = input_issue($field, "invalid_email", "'$field' is not a valid e-mail address.");
+	return null;
+}
+
+// A one-time code: digits as a string or a number, returned as a string; null when absent (an issue when $required) or wrong.
 function input_code(array $body, array &$issues, bool $required = true): ?string {
 	if (!array_key_exists("code", $body)) {
 		if ($required) $issues[] = input_issue("code", "missing_field", "'code' (the one-time code of the authenticator app) is required.");
@@ -150,7 +166,7 @@ function input_code(array $body, array &$issues, bool $required = true): ?string
 	return (string) $body["code"];
 }
 
-// A secret that must be a non-empty string (a password, a token): the issue never holds its value.
+// A non-empty string (a password, a token); null when absent (an issue when $required) or wrong (an issue).
 function input_secret(array $body, string $field, array &$issues, bool $required = true): ?string {
 	if (!array_key_exists($field, $body) || is_null($body[$field])) {
 		if ($required) $issues[] = input_issue($field, "missing_field", "'$field' is required.");
@@ -167,8 +183,7 @@ function input_secret(array $body, string $field, array &$issues, bool $required
 	return $body[$field];
 }
 
-// A timestamp a client sends, body or query: the same moment in UTC as "Y-m-d H:i:s", null when there is none (absent or null). One that is
-// not an RFC 3339 timestamp with a zone is an issue.
+// An RFC 3339 timestamp with a zone, as the UTC "Y-m-d H:i:s" the app stores; null when absent (or wrong: an issue).
 function input_timestamp(mixed $value, string $field, array &$issues): ?string {
 	if (is_null($value)) return null;
 	if (!is_string($value)) {
@@ -177,18 +192,24 @@ function input_timestamp(mixed $value, string $field, array &$issues): ?string {
 	}
 	$utc = date_parse_rfc3339($value);
 	if (is_null($utc)) {
-		$issues[] = input_issue($field, "invalid_timestamp", "'" . input_label($field) . "' must be an RFC 3339 timestamp with a zone, such as 2026-03-10T15:30:45Z or 2026-03-10T17:30:45+02:00"
+		$issues[] = input_issue($field, "invalid_timestamp", "'" . preg_replace('/^(query|path)\./', '', $field) . "' must be an RFC 3339 timestamp with a zone, such as 2026-03-10T15:30:45Z or 2026-03-10T17:30:45+02:00"
 			. (str_starts_with($field, "query.") ? " (in a URL, write the '+' of an offset as %2B)." : "."));
 	}
 	return $utc;
+}
+
+// The client's own moment of a write ("lastWriteClientUtc", of the body or with $prefix "query." of the query), or the server's clock when
+// it sent none or one a TIMESTAMP column cannot store: a client whose clock is wrong must still be able to write.
+function input_last_write(array $values, array &$issues, string $prefix = ""): string {
+	$utc = input_timestamp($values["lastWriteClientUtc"] ?? null, $prefix . "lastWriteClientUtc", $issues);
+	return $utc && $utc >= TIMESTAMP_STORABLE_MIN && $utc <= TIMESTAMP_STORABLE_MAX ? $utc : date('Y-m-d H:i:s');
 }
 
 // ---------------------------------------------------------------------------
 // The query string
 // ---------------------------------------------------------------------------
 
-// The query string as [name => string]. A name that is not in $known is an issue (`query.<name>`), and so is a value that is not a plain
-// string (`?from[]=2026-01-01`).
+// [name => string]. An unknown name is an issue, and so is a value that is not a plain string (`?from[]=2026-01-01`).
 function input_query(array $known, array &$issues): array {
 	$values = [];
 	input_check_names($_GET, $known, $issues, [], "query.");
@@ -201,18 +222,15 @@ function input_query(array $known, array &$issues): array {
 	return $values;
 }
 
-// A query value that is a boolean: true, false, 1 or 0. Absent is $default.
+// true, false, 1 or 0; $default when absent (or wrong: an issue).
 function input_query_bool(array $query, string $name, array &$issues, bool $default = false): bool {
 	if (!array_key_exists($name, $query)) return $default;
 	$value = ["true" => true, "1" => true, "false" => false, "0" => false][$query[$name]] ?? null;
-	if (is_null($value)) {
-		$issues[] = input_issue("query.$name", "invalid_value", "'$name' must be true, false, 1 or 0.");
-		return $default;
-	}
-	return $value;
+	if (!is_null($value)) return $value;
+	$issues[] = input_issue("query.$name", "invalid_value", "'$name' must be true, false, 1 or 0.");
+	return $default;
 }
 
-// A query value that is a calendar date YYYY-MM-DD; null (with an issue) when it is not.
 function input_query_date(array $query, string $name, array &$issues): ?string {
 	if (!array_key_exists($name, $query)) return null;
 	$date = date_parse_ymd($query[$name]);
@@ -224,29 +242,26 @@ function input_query_date(array $query, string $name, array &$issues): ?string {
 // The path after the endpoint's name
 // ---------------------------------------------------------------------------
 
-// The segments of the URL after the script (/api/day/2026-03-10 -> ["2026-03-10"]), decoded, empty ones dropped.
+// /api/day/2026-03-10 -> ["2026-03-10"], empty segments dropped.
 function input_path(): array {
 	$info = $_SERVER['PATH_INFO'] ?? "";
 	return array_values(array_filter(explode("/", is_string($info) ? $info : ""), fn($segment) => $segment !== ""));
 }
 
-// A path that has more segments than the endpoint reads is a URL that does not exist.
+// More segments than the endpoint reads: a URL that does not exist.
 function input_exit_unless_path_fits(array $path, int $max): void {
 	if (count($path) > $max) http_exit_not_found();
 }
 
-// A path segment that is a calendar date; null (with an issue) when it is not.
 function input_path_date(string $segment, array &$issues): ?string {
 	$date = date_parse_ymd($segment);
 	if (is_null($date)) $issues[] = input_issue("path.date", "invalid_date", "The date in the URL must be a real date in YYYY-MM-DD format.");
 	return $date;
 }
 
-// A path segment that is a row number: digits only, from 1. null (with an issue) when it is not.
+// A row number: digits only, from 1, within an int column.
 function input_path_id(string $segment, array &$issues): ?int {
-	if (!preg_match('/\A[1-9][0-9]{0,9}\z/', $segment) || intval($segment) > 2147483647) {
-		$issues[] = input_issue("path.id", "invalid_value", "The id in the URL must be a whole number from 1.");
-		return null;
-	}
-	return intval($segment);
+	if (preg_match('/\A[1-9][0-9]{0,9}\z/', $segment) && intval($segment) <= 2147483647) return intval($segment);
+	$issues[] = input_issue("path.id", "invalid_value", "The id in the URL must be a whole number from 1.");
+	return null;
 }

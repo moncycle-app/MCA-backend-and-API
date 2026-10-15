@@ -255,16 +255,11 @@ const DESCRIPTION_TYPE_UNDEFINED = 0;     // text the v15 migration could not cl
 const DESCRIPTION_TYPE_OBSERVATION = 1;   // a mucus observation
 const DESCRIPTION_TYPE_SENSATION = 2;     // a mucus sensation
 
-// type <-> the string the JSON API speaks (api/description.php, api/timeline_sync.php).
+// type => the string the JSON API speaks (api/description.php, api/timeline_sync.php).
 const DESCRIPTION_TYPE_NAMES = [
 	DESCRIPTION_TYPE_UNDEFINED => "undefined",
 	DESCRIPTION_TYPE_OBSERVATION => "observation",
 	DESCRIPTION_TYPE_SENSATION => "sensation",
-];
-const DESCRIPTION_TYPE_BY_NAME = [
-	"undefined" => DESCRIPTION_TYPE_UNDEFINED,
-	"observation" => DESCRIPTION_TYPE_OBSERVATION,
-	"sensation" => DESCRIPTION_TYPE_SENSATION,
 ];
 
 // The formats api/export.php can produce, as the {format} of its URL names them.

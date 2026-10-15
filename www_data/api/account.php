@@ -9,10 +9,10 @@
 
 require_once __DIR__ . "/../config.php";
 require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/user_account.php";
 require_once __DIR__ . "/../lib/data.php";
 require_once __DIR__ . "/../lib/input.php";
 require_once __DIR__ . "/../lib/sec_token.php";
+require_once __DIR__ . "/../lib/user_account.php";
 
 [$db, $user_account] = api_start();
 
@@ -45,9 +45,7 @@ if ($path !== []) http_exit_not_found();
 
 // THE ACCOUNT
 if ($method === "GET") {
-	input_query([], $issues);
-	input_check_no_body($issues);
-	input_exit_if_issues($issues);
+	input_exit_unless_none();
 
 	$account = user_account_to_json($user_account);
 	// a client that keeps the account sends back the ETag it was given and is told when nothing changed

@@ -7,32 +7,37 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// What the app does with its data, on top of the queries of lib/db.php: building a day, saving one,
-// the descriptions (the free-text labels of a day). The shape of a day itself is lib/day_format.php.
+// What the app does with its data, on top of lib/db.php: a day built and saved, the descriptions (the free-text labels of a day), the
+// sync, the public numbers, and the SQL files of script/db/. The shape of a day is lib/day_format.php.
 
+require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
 
-// A day as the array lib/day_format.php translates: the DB row (or just its date when the day is
-// empty), with the first day of its cycle, its position in it, and its descriptions. What the
-// caller already has -- the row, the cycle, the position, the descriptions -- is not read again.
-function data_construct_day($db, $date, $no_user_account, $raw_day = null, $cycle = null, $pos = null, ?array $descriptions = null) {
-	$day = ["cycle" => $cycle ?? db_select_cycle($db, $date, $no_user_account)];
+// ---------------------------------------------------------------------------
+// Reading days
+// ---------------------------------------------------------------------------
 
-	if ($day["cycle"] && is_null($pos)) $pos = data_cycle_day($day["cycle"], $date);
-	if (!is_null($pos)) $day["pos"] = $pos;
-
-	$raw_day ??= db_select_day_timeline($db, $date, $no_user_account);
-	if (empty($raw_day)) return $day + ["date_obs" => $date];
-
-	return array_merge($day, $raw_day, ["description" => $descriptions ?? db_select_all_description_for_day_timeline($db, $no_user_account, $raw_day["no_day"])]);
+// A day as lib/day_format.php reads it: the row (or just ["date_obs" => ...] for a date never written), the first day of its cycle
+// and its position in it, and its descriptions (none for a date never written).
+function data_day(array $row, ?string $cycle, ?array $descriptions = null): array {
+	$day = ["cycle" => $cycle];
+	if ($cycle) $day["pos"] = date_cycle_day($cycle, $row["date_obs"]);
+	return is_null($descriptions) ? $day + $row : array_merge($day, $row, ["description" => $descriptions]);
 }
 
-// The descriptions of a list of day rows (in date order) in one query, by no_day: the way to read many days
-// at once, where data_construct_day() asking for each would be a query per day.
-function data_descriptions_by_day($db, array $rows, int $no_user_account): array {
+// One day read from the database.
+function data_construct_day($db, string $date, $no_user_account): array {
+	$cycle = db_select_cycle($db, $date, $no_user_account);
+	$row = db_select_day_timeline($db, $date, $no_user_account);
+	if (is_null($row)) return data_day(["date_obs" => $date], $cycle);
+	return data_day($row, $cycle, db_select_all_description_for_day_timeline($db, $no_user_account, $row["no_day"]));
+}
+
+// The descriptions of day rows (in date order) in one query, by no_day.
+function data_descriptions_by_day($db, array $rows, $no_user_account): array {
 	$by_day = [];
 	if (empty($rows)) return $by_day;
 	foreach (db_select_descriptions_for_day_timeline_frame($db, $rows[0]["date_obs"], end($rows)["date_obs"], $no_user_account) as $link) {
@@ -41,13 +46,20 @@ function data_descriptions_by_day($db, array $rows, int $no_user_account): array
 	return $by_day;
 }
 
-// The position of a date in the cycle that began on $cycle: 1 for its first day.
-function data_cycle_day(string $cycle, string $date): int {
-	return intval(date_diff(date_create($cycle), date_create($date))->format('%a')) + 1;
+// The stored days from $first to $last (both included), built: one query for the cycle they start in, one for the days, one for their
+// descriptions.
+function data_days_range($db, string $first, string $last, $no_user_account): array {
+	$rows = db_select_day_timelines_range($db, $first, date_next_day($last), $no_user_account);
+	$descriptions = data_descriptions_by_day($db, $rows, $no_user_account);
+	$cycle = db_select_cycle($db, $first, $no_user_account);
+	$days = [];
+	foreach ($rows as $row) {
+		if ($row["cycle_1st_day"]) $cycle = $row["date_obs"];
+		$days[] = data_day($row, $cycle, $descriptions[$row["no_day"]] ?? []);
+	}
+	return $days;
 }
 
-// a description row (db_select_description_with_count) as the JSON API shows it, shared by
-// api/description.php and api/timeline_sync.php so the two never drift apart.
 function data_description_to_json(array $row): array {
 	return [
 		"id" => intval($row["no_description"]),
@@ -58,13 +70,11 @@ function data_description_to_json(array $row): array {
 }
 
 // ---------------------------------------------------------------------------
-// Saving a day: the API (one day) and the NFP import (many) both write through these.
+// Writing days: the API (one day) and the NFP import (many) write through these
 // ---------------------------------------------------------------------------
 
-// The description of a name: found among the account's, or created with $type the first time.
-// $known keeps the answers from one call to the next (name => id and type), for a file that repeats
-// the same few names on every day. A name is one row whatever type it is asked as: "type" in the
-// answer is the one the description has, "created" whether this very call made it.
+// The description of a name, found or created with $type. $known keeps the answers between calls (a file repeats a few names on every
+// day). A name is one row whatever type it is asked as: "type" is the one it has, "created" whether this call made it.
 function data_resolve_description($db, int $no_user_account, string $name, int $type, string $last_write_client_UTC, array &$known = []): array {
 	$name = trim($name);
 	if (isset($known[$name])) return $known[$name] + ["created" => false];
@@ -78,9 +88,7 @@ function data_resolve_description($db, int $no_user_account, string $name, int $
 	return $known[$name] + ["created" => $created];
 }
 
-// Writes a day: its row (made when $existing, the row the caller looked up, is null), its fields,
-// and the set of descriptions it carries ($no_descriptions, their ids). Not a transaction of its
-// own: the caller wraps what has to be all or nothing. Returns the no_day.
+// A day's row (made when $existing is null), its fields and the set of descriptions it carries. No transaction of its own: the caller's.
 function data_write_day($db, int $no_user_account, string $date, ?array $existing, array $fields, array $no_descriptions, string $last_write_client_UTC): int {
 	$no_day = is_null($existing) ? intval(db_insert_day_timeline($db, $date, $no_user_account)) : intval($existing["no_day"]);
 	db_update_day_timeline($db, $date, $no_user_account, $last_write_client_UTC, $fields);
@@ -89,38 +97,29 @@ function data_write_day($db, int $no_user_account, string $date, ?array $existin
 	$wanted = array_values(array_unique($no_descriptions));
 	foreach (array_diff($linked, $wanted) as $no_description) db_delete_linked_descriptions($db, $no_day, $no_description);
 	foreach (array_diff($wanted, $linked) as $no_description) db_insert_link_description_day_timeline($db, $no_day, $no_description);
-
 	return $no_day;
 }
 
-// When the row of a day was last written, by the clock of the client that wrote it -- but never
-// later than the database's own clock for that write: a client whose clock runs ahead must not be
-// able to keep the others out of the day. Null for a day never written.
-function data_day_last_write(?array $existing): ?string {
-	if (is_null($existing) || empty($existing["last_write_client_UTC"])) return null;
-	return empty($existing["last_write_db"]) ? $existing["last_write_client_UTC"] : min($existing["last_write_client_UTC"], $existing["last_write_db"]);
+// Inside the write's transaction: the account held, then the stored day (null when none), or false when the day was written after the
+// moment the write carries (a device that was offline replaying an old change). The same moment is not later: a write sent twice goes
+// through. The stored moment counts as at most the DB's own, so that a client whose clock runs ahead cannot shut the others out.
+function data_day_for_write($db, int $no_user_account, string $date, string $last_write_client_UTC): array|false|null {
+	db_select_user_account_for_update($db, $no_user_account);
+	$existing = db_select_day_timeline($db, $date, $no_user_account);
+	if (is_null($existing)) return null;
+	log_context(["day" => intval($existing["no_day"])]);
+	if (empty($existing["last_write_client_UTC"])) return $existing;
+	$last_write = empty($existing["last_write_db"]) ? $existing["last_write_client_UTC"] : min($existing["last_write_client_UTC"], $existing["last_write_db"]);
+	return $last_write > $last_write_client_UTC ? false : $existing;
 }
 
-// A write is out of date when the day it targets was written, by the clock of its client, after the
-// moment it carries: a device that was offline replays what it did before another one wrote.
-// The same moment is not newer: a write sent twice goes through twice.
-function data_day_is_newer(?array $existing, string $last_write_client_UTC): bool {
-	$last_write = data_day_last_write($existing);
-	return !is_null($last_write) && $last_write > $last_write_client_UTC;
-}
-
-// Saves a day the API received, checked and cleaned by day_format_validate(): in one transaction, its
-// fields and its free-text descriptions (created when a name is new). True when the day is new, null
-// when it is not saved because the stored day is newer than the write (data_day_is_newer()).
-// Logged once the transaction has committed: which day (the request's `day`, set as soon as the row is known, so a refused write and
-// an exception name it too), whether it is new, the descriptions it made. The ids of the descriptions the day carries are not logged:
-// one join would give back what the day holds.
+// A day checked by day_format_validate(), with its descriptions (created when a name is new), in one transaction. True when the day is
+// new, null when the stored day is later than the write. The log names the day and the descriptions made, never the ones the day
+// carries (one join would give back what the day holds).
 function data_save_day($db, int $no_user_account, string $date, array $day, string $last_write_client_UTC): ?bool {
 	$saved = db_transaction($db, function () use ($db, $no_user_account, $date, $day, $last_write_client_UTC) {
-		db_select_user_account_for_update($db, $no_user_account);
-		$existing = db_select_day_timeline($db, $date, $no_user_account);
-		if (!is_null($existing)) log_context(["day" => intval($existing["no_day"])]);
-		if (data_day_is_newer($existing, $last_write_client_UTC)) return null;
+		$existing = data_day_for_write($db, $no_user_account, $date, $last_write_client_UTC);
+		if ($existing === false) return null;
 
 		$known = [];
 		$no_descriptions = [];
@@ -133,19 +132,31 @@ function data_save_day($db, int $no_user_account, string $date, array $day, stri
 			}
 		}
 
-		$no_day = data_write_day($db, $no_user_account, $date, $existing, day_format_from_json($day), $no_descriptions, $last_write_client_UTC);
-		log_context(["day" => $no_day]);
-		return [$no_day, is_null($existing), $created];
+		log_context(["day" => data_write_day($db, $no_user_account, $date, $existing, day_format_from_json($day), $no_descriptions, $last_write_client_UTC)]);
+		return [is_null($existing), $created];
 	});
 	if (is_null($saved)) return null;
 
-	[, $is_new, $created] = $saved;
+	[$is_new, $created] = $saved;
 	log_event("data.day_saved", ["dt" => $date, "new" => $is_new, "dsc" => $created ?: null]);
 	return $is_new;
 }
 
-// A write by the owner counts as activity: an account flagged inactive (the "are you still there"
-// mail) is not any more.
+// The row stays, empty and stamped: that is how the sync tells the other clients the day is gone. A date never written has nothing to
+// clear and logs nothing. False when the stored day is later than the clear.
+function data_clear_day($db, int $no_user_account, string $date, string $last_write_client_UTC): bool {
+	[$cleared_row, $cleared] = db_transaction($db, function () use ($db, $no_user_account, $date, $last_write_client_UTC) {
+		$existing = data_day_for_write($db, $no_user_account, $date, $last_write_client_UTC);
+		if ($existing === false) return [false, false];
+		if (!is_null($existing)) data_write_day($db, $no_user_account, $date, $existing, [], [], $last_write_client_UTC);
+		return [!is_null($existing), true];
+	});
+
+	if ($cleared_row) log_event("data.day_cleared", ["dt" => $date]);
+	return $cleared;
+}
+
+// A write by the owner counts as activity: the "are you still there" flag goes.
 function data_reactivate_account($db, array &$user_account): void {
 	if (empty($user_account["is_inactive"])) return;
 	db_update_is_inactive($db, $user_account["no_user_account"], 0);
@@ -153,9 +164,7 @@ function data_reactivate_account($db, array &$user_account): void {
 	log_event("account.reactivated");
 }
 
-// Erases an account and all it holds: its days, descriptions and sessions go with it (cascade).
-// $why is "user_request" or "inactivity". Logged with what was erased, counted just before; the
-// cookie of a user who asked is the endpoint's to clear.
+// The account and all it holds (cascade). $why: "user_request", "inactivity" or "unverified". The cookie is the endpoint's to clear.
 function data_delete_account($db, array $account, string $why): void {
 	$no_user_account = intval($account["no_user_account"]);
 	$days = db_count_days_of_account($db, $no_user_account);
@@ -164,57 +173,13 @@ function data_delete_account($db, array $account, string $why): void {
 	log_event("account.deleted", ["uid" => $no_user_account, "why" => $why, "ndy" => $days, "nds" => $descriptions]);
 }
 
-// The text of one of the SQL files of script/db/ (DB_SCRIPT_TABLES, DB_SCRIPT_DEMO).
-function data_read_sql_file(string $path): string {
-	$sql = is_readable($path) ? file_get_contents($path) : false;
-	if ($sql === false || trim($sql) === "") throw new RuntimeException("The SQL file " . basename($path) . " cannot be read.");
-	return $sql;
-}
-
-// The first launch: a database with no table gets the schema (script/db/schema.sql), and the demo accounts
-// (script/db/demo.sql) when DEMO_ENABLED. One that has tables is left as it is, whatever it holds. Answers whether the
-// schema was made. A schema is DDL, which MariaDB commits as it goes: it cannot be rolled back, and a failure after the
-// first table leaves a database that is no longer empty (script/demo_reset.php then loads the demo accounts at its next run).
-function data_init_database($db): bool {
-	if (db_count_tables($db) > 0) return false;
-	db_exec_script($db, data_read_sql_file(DB_SCRIPT_TABLES));
-	if (DEMO_ENABLED) data_reload_demo_accounts($db);
-	return true;
-}
-
-// The two public demo accounts back as script/db/demo.sql makes them, their days dated from today: what a visitor
-// wrote in them is gone, and so are their sessions (cascade). One transaction, so that nobody finds them half made.
-function data_reload_demo_accounts($db): void {
-	$sql = data_read_sql_file(DB_SCRIPT_DEMO);
-	db_transaction($db, fn() => db_exec_script($db, $sql));
-}
-
 // ---------------------------------------------------------------------------
-// Clearing a day, and changing a description a day carries
+// Descriptions
 // ---------------------------------------------------------------------------
 
-// Clears a day: its fields, and its descriptions with them. The row stays, empty, stamped with when
-// it was cleared: that is how GET /api/timeline_sync tells the other clients the day is gone. A date that was
-// never written has nothing to clear, and logs nothing. False when the day is not cleared because it
-// is newer than the clear (data_day_is_newer()).
-function data_clear_day($db, int $no_user_account, string $date, string $last_write_client_UTC): bool {
-	[$no_day, $cleared] = db_transaction($db, function () use ($db, $no_user_account, $date, $last_write_client_UTC) {
-		db_select_user_account_for_update($db, $no_user_account);
-		$existing = db_select_day_timeline($db, $date, $no_user_account);
-		if (!is_null($existing)) log_context(["day" => intval($existing["no_day"])]);
-		if (data_day_is_newer($existing, $last_write_client_UTC)) return [null, false];
-		return [is_null($existing) ? null : data_write_day($db, $no_user_account, $date, $existing, [], [], $last_write_client_UTC), true];
-	});
-
-	if (!is_null($no_day)) log_event("data.day_cleared", ["dt" => $date]);
-	return $cleared;
-}
-
-// Creates a description ($no_description null; $name and $type are then given), or renames and / or retypes one ($name and $type null stay what
-// they are). A day shows its descriptions by name and type, so the days carrying it are stamped written: the sync reports them.
-// Answers ["outcome" => "created" | "updated" | "duplicate_name" | "not_found", "description" => ["no_description", "name", "type"] or null,
-// "touched" => how many days were stamped, an update only]. The description is the request's `dsc` as soon as it is known (found, or made),
-// so a refused rename (duplicate_name) names it too; the log says how many days the change re-stamped (`tch`), not which (it would cost a query).
+// Creates one ($no_description null) or renames and / or retypes one ($name or $type null stay as they are). A day shows its labels by
+// name and type, so the days that carry it are stamped for the sync. Answers ["outcome" => "created" | "updated" | "duplicate_name" |
+// "not_found", "description" => [no_description, name, type] or null, "touched" => days stamped]. The log says how many days, not which.
 function data_save_description($db, int $no_user_account, ?int $no_description, ?string $name, ?int $type, string $last_write_client_UTC): array {
 	$saved = db_transaction($db, function () use ($db, $no_user_account, $no_description, $name, $type, $last_write_client_UTC) {
 		db_select_user_account_for_update($db, $no_user_account);
@@ -242,8 +207,7 @@ function data_save_description($db, int $no_user_account, ?int $no_description, 
 	return $saved;
 }
 
-// Deletes a description, and with it its links to the days. Those days are stamped first (the links
-// go with the description): the sync reports them without it. The description is the request's `dsc`; `tch` is how many days were stamped.
+// The days it is on are stamped first (the links go with it), so that the sync reports them without it.
 function data_delete_description($db, int $no_user_account, int $no_description): void {
 	log_context(["dsc" => $no_description]);
 	$touched = db_transaction($db, function () use ($db, $no_user_account, $no_description) {
@@ -251,19 +215,16 @@ function data_delete_description($db, int $no_user_account, int $no_description)
 		db_delete_descriptions($db, $no_description, $no_user_account);
 		return $touched;
 	});
-
 	log_event("data.description_deleted", ["tch" => $touched]);
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/timeline_sync: what a client needs to catch up with the timeline
+// GET /api/timeline_sync
 // ---------------------------------------------------------------------------
 
-// The date ranges a set of written days changes. A day's cycleStartDate and cycleDay come from the
-// first day of its cycle, which a write may have set or cleared: so a written day changes every day
-// from it to the next first day. $dates and $starts (the cycles' first days) are YYYY-MM-DD, $starts
-// oldest first. A range is [first date, end not included], the end null when the cycle is the last
-// one; touching ranges are one.
+// The ranges a set of written days changes: a day's cycleStartDate and cycleDay come from the first day of its cycle, which the write may
+// have set or cleared, so a written day changes every day up to the next first day. $starts: the first days, oldest first. A range is
+// [first date, end excluded], null for no end; ranges that touch are one.
 function data_cycle_tails(array $dates, array $starts): array {
 	sort($dates);
 	$ranges = [];
@@ -282,10 +243,8 @@ function data_cycle_tails(array $dates, array $starts): array {
 	return $ranges;
 }
 
-// The days written since $from_timestamp (the database's clock, less SYNC_OVERLAP_SECONDS) and the
-// days that follow them in their cycles, in date order, as data_construct_day() builds them. A
-// cleared day is among them: it is a row that is empty. The queries are one per range of days, and
-// one for the descriptions of the range, whatever the number of days.
+// The days written since $from_timestamp (the DB clock, less SYNC_OVERLAP_SECONDS) and the days that follow them in their cycles, in
+// date order; a cleared day is among them, as an empty row. Two queries a range, whatever the number of days.
 function data_sync_days($db, int $no_user_account, string $from_timestamp): array {
 	$written = db_select_day_timeline_dates_written_since($db, $from_timestamp, SYNC_OVERLAP_SECONDS, $no_user_account);
 	if (empty($written)) return [];
@@ -294,48 +253,46 @@ function data_sync_days($db, int $no_user_account, string $from_timestamp): arra
 	$days = [];
 	foreach (data_cycle_tails($written, $starts) as [$range_start, $range_end]) {
 		$rows = db_select_day_timelines_range($db, $range_start, $range_end, $no_user_account);
-		if (empty($rows)) continue;
-
 		$descriptions = data_descriptions_by_day($db, $rows, $no_user_account);
-
 		$cycle = null;
 		$next_start = 0;
 		foreach ($rows as $row) {
 			while ($next_start < count($starts) && $starts[$next_start] <= $row["date_obs"]) $cycle = $starts[$next_start++];
-			$day = ["cycle" => $cycle];
-			if ($cycle) $day["pos"] = data_cycle_day($cycle, $row["date_obs"]);
-			$days[] = array_merge($day, $row, ["description" => $descriptions[$row["no_day"]] ?? []]);
+			$days[] = data_day($row, $cycle, $descriptions[$row["no_day"]] ?? []);
 		}
 	}
 	return $days;
 }
 
+// The cursor for next time (the DB clock, read first, so that what is written meanwhile comes next time), the days, and every
+// description and every first day of a cycle and of a pregnancy: they are few, and coming whole is how a deletion reaches a client.
+function data_sync($db, array $user_account, string $from_timestamp): array {
+	$no_user_account = intval($user_account["no_user_account"]);
+	$now = db_select_now($db);
+	return [
+		"syncTimestamp" => http_iso8601($now),
+		"days" => array_map('day_format_to_json', data_sync_days($db, $no_user_account, $from_timestamp)),
+		"descriptions" => array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account)),
+		"allCyclesFirstDay" => db_select_cycles($db, $no_user_account),
+		"allPregnancyDates" => db_select_pregnancies($db, $no_user_account),
+	];
+}
+
 // ---------------------------------------------------------------------------
-// The public numbers of GET /api/pub_stat
+// GET /api/pub_stat: counting walks day_timeline, so the cron counts once a day and stores
 // ---------------------------------------------------------------------------
 
-// The three numbers counted now, rounded (PUB_STAT_KEYS): a walk of day_timeline, which the cron does
-// once a day and stores (data_public_stats_store()).
 function data_public_stats_count($db): array {
-	$counts = [
-		"accounts" => db_count_user_accounts($db),
-		"cycles" => db_count_cycles($db),
-		"observations" => db_count_days($db),
-	];
+	$counts = ["accounts" => db_count_user_accounts($db), "cycles" => db_count_cycles($db), "observations" => db_count_days($db)];
 	foreach ($counts as $name => $count) $counts[$name] = round($count, PUB_STAT_KEYS[$name][1]);
 	return $counts;
 }
 
-// Counts the three numbers and keeps them where data_public_stats() reads them. Run by the cron.
 function data_public_stats_store($db): void {
-	foreach (data_public_stats_count($db) as $name => $count) {
-		[$key] = PUB_STAT_KEYS[$name];
-		db_upsert_key_value($db, $key, intval($count));
-	}
+	foreach (data_public_stats_count($db) as $name => $count) db_upsert_key_value($db, PUB_STAT_KEYS[$name][0], intval($count));
 }
 
-// What GET /api/pub_stat answers: the numbers the cron stored, or counted now when it has not run yet
-// (a fresh install, an upgrade before its first night).
+// What the cron stored, or counted now before its first run.
 function data_public_stats($db): array {
 	$stats = [];
 	foreach (PUB_STAT_KEYS as $name => [$key]) {
@@ -346,19 +303,27 @@ function data_public_stats($db): array {
 	return $stats;
 }
 
-// The answer of GET /api/timeline_sync: the cursor to send next time (the database's clock, read before anything else so what is written while
-// this runs is in the next one), the days to merge (all of them, in one answer), every description, and the first days of all the cycles and
-// the pregnancy dates. The descriptions and the cycle lists come whole every time: there are few of them, and that is how a deletion reaches
-// a client.
-function data_sync($db, array $user_account, string $from_timestamp): array {
-	$no_user_account = intval($user_account["no_user_account"]);
-	$now = db_select_now($db);
+// ---------------------------------------------------------------------------
+// The SQL files of script/db/
+// ---------------------------------------------------------------------------
 
-	return [
-		"syncTimestamp" => http_iso8601($now),
-		"days" => array_map('day_format_to_json', data_sync_days($db, $no_user_account, $from_timestamp)),
-		"descriptions" => array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account)),
-		"allCyclesFirstDay" => db_select_cycles($db, $no_user_account),
-		"allPregnancyDates" => db_select_pregnancies($db, $no_user_account),
-	];
+function data_read_sql_file(string $path): string {
+	$sql = is_readable($path) ? file_get_contents($path) : false;
+	if ($sql === false || trim($sql) === "") throw new RuntimeException("The SQL file " . basename($path) . " cannot be read.");
+	return $sql;
+}
+
+// A database with no table gets the schema, and the demo accounts when DEMO_ENABLED; one with tables is left as it is. Answers whether
+// the schema was made. DDL commits as it goes: a failure after the first table leaves a database that is no longer empty.
+function data_init_database($db): bool {
+	if (db_count_tables($db) > 0) return false;
+	db_exec_script($db, data_read_sql_file(DB_SCRIPT_TABLES));
+	if (DEMO_ENABLED) data_reload_demo_accounts($db);
+	return true;
+}
+
+// The demo accounts back as demo.sql makes them, dated from today, in one transaction: what visitors wrote, and their sessions, go.
+function data_reload_demo_accounts($db): void {
+	$sql = data_read_sql_file(DB_SCRIPT_DEMO);
+	db_transaction($db, fn() => db_exec_script($db, $sql));
 }
