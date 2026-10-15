@@ -390,5 +390,3 @@ Delete a line when it is fixed.
   (`day_from_body`, twin of `day_format_from_json` + `_to_json`) and the cycle start / day (`recompute_cycles`, twin of
   `data_sync_days`). They only serve until the server's own answer replaces them.
 - DB names left as they are because renaming needs a migration: the `contry_code` column.
-- A wrong password or TOTP code on `POST /api/v2/account` (like on `DELETE /api/v2/totp`) is not counted or throttled: a stolen session that
-  knows the password can try TOTP codes freely. This is the posture of the session-level checks, not fixed.

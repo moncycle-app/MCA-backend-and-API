@@ -423,6 +423,11 @@ info:
     from the lockout threshold on, even the right code is refused with `403` `account_locked`.
     Someone who knows the password can therefore keep such an account locked while they keep trying.
 
+    The same counters guard the password and the code that **a session** asks for again: `POST /account` (`newPassword`,
+    `notificationEmails`, `loginEmail`), `POST /account/deletion`, `POST /totp/confirm` and `POST /totp/disable`. A wrong
+    one counts like a wrong sign-in, and from the lockout threshold on these checks answer `403` `account_locked`, even for
+    the right secret, until the failures age out (the session stays valid). A correct one clears the count, as a sign-in does.
+
     ## 10. Privacy by design
 
     This is personal data, so the API is deliberately narrow:
@@ -987,6 +992,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
+        "429":
+          description: "`rate_limited` — too many attempts from this IP address (section 9): every call counts until it succeeds. Wait and try again later."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
 
   /token:
     post:
@@ -1380,7 +1391,7 @@ paths:
 
         ```
         POST /totp                    -> a new secret + a QR code      (state becomes "init")
-        POST /totp/confirm {code}     -> confirm with one real code     (state becomes "active")
+        POST /totp/confirm {code, password} -> confirm with one real code and the password (state becomes "active")
         POST /totp/disable {code}     -> turn it off                    (state becomes "disabled")
         ```
 
@@ -1453,17 +1464,22 @@ paths:
     post:
       tags: [auth]
       operationId: confirmTotp
-      summary: "Two-factor: step 2, turn it on with a code"
+      summary: "Two-factor: step 2, turn it on with a code and the password"
       description: |-
-        Confirms the setup with one real code from the authenticator app. From then on `POST /token` asks for a
-        `code`. The code is a string of digits (keep a leading zero: `"091710"`); a number is accepted too.
-        Spaces in a string are ignored.
+        Confirms the setup with one real code from the authenticator app, **and the current password**: the step that
+        makes two-factor take effect asks for it, so a session that is not the owner's cannot lock the owner out of the next
+        sign-in. From then on `POST /token` asks for a `code`. The code is a string of digits (keep a leading zero:
+        `"091710"`); a number is accepted too. Spaces in a string are ignored.
+
+        A wrong password or code counts against the account like a failed sign-in (section 9): past the lockout threshold
+        every such check, here and in `POST /account`, `POST /account/deletion` and `POST /totp/disable`, answers
+        `403 account_locked` until the failures age out. The session itself stays valid.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TotpCodeRequest'
+              $ref: '#/components/schemas/TotpConfirmRequest'
       responses:
         "200":
           description: Two-factor authentication is on.
@@ -1481,13 +1497,13 @@ paths:
         "400":
           $ref: '#/components/responses/ValidationFailed'
         "401":
-          description: "`unauthorized` — no valid token. `totp_invalid` — the code is wrong or expired."
+          description: "`unauthorized` — no valid token. `invalid_password` — the password is wrong. `totp_invalid` — the code is wrong or expired."
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "403":
-          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          description: "`read_only_token` — the token is read-only. `account_locked` — too many wrong passwords or codes lately (section 9). `cross_origin_refused` — see section 3 of the introduction."
           content:
             application/json:
               schema:
@@ -1542,7 +1558,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "403":
-          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          description: "`read_only_token` — the token is read-only. `account_locked` — too many wrong passwords or codes lately (section 9). `cross_origin_refused` — see section 3 of the introduction."
           content:
             application/json:
               schema:
@@ -1651,7 +1667,9 @@ paths:
         when the login address changes. The two public demo accounts cannot change these three
         (`403` `demo_account`).
 
-        A wrong password or code here is not counted against the account (like `POST /totp/disable`).
+        A wrong password or code here counts against the account like a failed sign-in (section 9). Past the lockout
+        threshold these three changes answer `403 account_locked`, even with the right password, until the failures age
+        out; the other settings and the session itself are not affected.
 
         ### The response
 
@@ -1707,6 +1725,7 @@ paths:
           description: |-
             `read_only_token` — the token is read-only.
             `demo_account` — `newPassword`, `notificationEmails` or `loginEmail` on one of the two public demo accounts.
+            `account_locked` — `newPassword`, `notificationEmails` or `loginEmail` with too many wrong passwords or codes lately (section 9).
             `cross_origin_refused` — a browser page of another origin sent this write (see section 3 of the introduction).
           content:
             application/json:
@@ -1752,7 +1771,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "403":
-          description: "`read_only_token` — the token is read-only. `cross_origin_refused` — see section 3 of the introduction."
+          description: "`read_only_token` — the token is read-only. `account_locked` — too many wrong passwords or codes lately (section 9). `cross_origin_refused` — see section 3 of the introduction."
           content:
             application/json:
               schema:
@@ -4227,6 +4246,18 @@ components:
         loginEmailLinkSent:
           type: boolean
           description: Only when `loginEmail` was sent. `false` means the mail with the link could not be sent.
+
+    TotpConfirmRequest:
+      type: object
+      required: [code, password]
+      properties:
+        code:
+          type: string
+          description: The one-time code of the authenticator app, as a string of digits (a leading zero matters). A number is accepted too.
+          example: "091710"
+        password:
+          type: string
+          description: The current password of the account.
 
     TotpCodeRequest:
       type: object

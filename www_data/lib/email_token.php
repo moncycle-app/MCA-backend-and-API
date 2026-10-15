@@ -31,6 +31,15 @@ function email_token_issue($db, int $no_user_account, int $purpose, ?string $new
 	return $token;
 }
 
+// What would refuse the link, read without a lock: "invalid_token" (unknown, used, replaced, or for another purpose), "token_expired", or
+// null. It lets a caller skip expensive work (a bcrypt) for a link that cannot work; email_token_use() decides, under the lock.
+function email_token_refusal($db, mixed $token, int $purpose): ?string {
+	if (!is_string($token) || $token === "" || strlen($token) > EMAIL_TOKEN_LIMIT_CHARS) return "invalid_token";
+	$account = db_select_user_account_by_email_token($db, sec_token_hash($token));
+	if (is_null($account) || intval($account["email_token_purpose"]) !== $purpose) return "invalid_token";
+	return intval($account["email_token_expired"]) === 1 ? "token_expired" : null;
+}
+
 // Uses the link for $purpose: $apply($account) does what it is for, inside the transaction with the account held (["error" => code]
 // leaves the link in place). Answers ["account" => the row, "result" => what $apply answered] or ["error" => "invalid_token" (unknown,
 // used, replaced, or for another purpose) | "token_expired" | $apply's code].
@@ -75,9 +84,12 @@ function email_token_complete($db, array $body, array $issues = []): array {
 	}
 	input_exit_if_issues($issues);
 
-	$password_hash = $purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD ? sec_hash($new_password) : null;   // before the lock: bcrypt is slow
+	// before the lock, as bcrypt is slow, and only for a link that can work: nobody can make the server hash for a token it does not know
+	$password_hash = null;
+	$refusal = $purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD ? email_token_refusal($db, $body["token"], $purpose) : null;
+	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD && is_null($refusal)) $password_hash = sec_hash($new_password);
 
-	$used = email_token_use($db, $body["token"], $purpose, function (array $account) use ($db, $purpose, $password_hash) {
+	$used = !is_null($refusal) ? ["error" => $refusal] : email_token_use($db, $body["token"], $purpose, function (array $account) use ($db, $purpose, $password_hash) {
 		if ($purpose === EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL) {
 			// the address was free when the link was made; it may not be now
 			if (!db_update_user_account_login_email($db, $account["no_user_account"], $account["email_token_new_email"])) return ["error" => "email_taken"];

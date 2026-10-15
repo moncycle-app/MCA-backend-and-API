@@ -109,7 +109,15 @@ Failed logins are counted per account and decay after `LOGIN_ATTEMPTS_DECAY_MINU
 **Two-factor authentication.** Once the password is known, the one-time code is all that is left to guess, so a wrong TOTP code
 after a right password counts like a wrong password. Past the lockout threshold an account with a TOTP code refuses even the right
 password and code until the failures decay. Whoever knows the password can therefore keep such an account locked while they keep
-trying. A wrong password or TOTP code sent from an open session (`POST /api/v2/account`, `DELETE /api/v2/totp`) is not counted.
+trying.
+
+A password or TOTP code asked again on an open session (`POST /api/v2/account`, `POST /api/v2/account/deletion`,
+`POST /api/v2/totp/confirm`, `POST /api/v2/totp/disable`) counts against the same account counters as a sign-in
+(`nb_connection_attempts`, `LOGIN_LOCKOUT_THRESHOLD`, `LOGIN_ATTEMPTS_DECAY_MINUTES`): past the threshold these checks answer
+`403 account_locked`, even for the right secret, and the session stays valid. A stolen session can therefore not guess the
+password or the code at will. The price is shared with the sign-in: whoever holds the session can also push the owner's next
+sign-in towards the captcha, and, with TOTP on, towards the lockout. Turning TOTP on asks for the password
+(`POST /api/v2/totp/confirm`), so a session that is not the owner's cannot lock the owner out of the next sign-in.
 
 ## The captcha
 

@@ -85,6 +85,7 @@ $(document).ready(function(){
 			const return_codes = {
 				invalid_token: "Ce lien n'est plus valable: il a peut-être déjà servi, ou été remplacé par un plus récent.",
 				token_expired: "Ce lien a expiré. Demandez-en un nouveau.",
+				rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
 				email_taken: "Cette adresse est déjà utilisée par un autre compte.",
 				missing_field: "Données manquantes.",
 				password_too_short: "Le mot de passe est trop court (10 caractères au moins).",

@@ -189,6 +189,7 @@ const moncycle_app_text = {
 		password_unchanged : "le nouveau mot de passe est identique à l\u2019ancien",
 		demo_account : "indisponible sur un compte de démo",
 		read_only_token : "cette connexion est en lecture seule",
+		account_locked : "compte temporairement bloqué après trop de tentatives échouées, réessayez plus tard",
 	},
 
 	export_errors : {
@@ -835,8 +836,9 @@ $(document).ready(function(){
 		event.preventDefault();
 		$("#totp_err_msg").html("");
 		var code = $('#f_totp_validation input[name="tmp_code"]').val();
+		var password = $('#f_totp_validation input[name="password"]').val();
 		$("#f_totp_validation").trigger("reset");
-		$.ajax({type: "POST", url: $(this).attr("action"), contentType: "application/json", data: JSON.stringify({code: code})}).done(function(ret){
+		$.ajax({type: "POST", url: $(this).attr("action"), contentType: "application/json", data: JSON.stringify({code: code, password: password})}).done(function(ret){
 			if (ret.data.totpState == "active") {
 				$("#totp_miseenpalce").hide();
 				$("#totp_state").show();

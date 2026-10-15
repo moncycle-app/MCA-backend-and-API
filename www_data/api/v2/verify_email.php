@@ -20,11 +20,20 @@ require_once __DIR__ . "/../../lib/input.php";
 if (http_method() !== 'POST') http_exit_method_not_allowed(["POST"]);
 input_exit_unless_path_fits(input_path(), 0);
 
+// A link is a secret of 256 bits that nobody guesses; what the limit stops is an anonymous client making the server work. Every request
+// is written against the address first (the pool of the sign-in), and given back when the link worked.
+$attempt = sec_attempt_reserve($db, sec_client_ip());
+if (is_null($attempt)) {
+	log_event("account.refused", ["act" => "verify_email", "err" => "rate_limited"]);
+	http_error(429, "rate_limited", "Too many attempts from this network, please try again later.");
+}
+
 $issues = [];
 input_query([], $issues);
 $body = input_body(["purpose", "token", "newPassword"], $issues);
 
 $outcome = email_token_complete($db, $body, $issues);
 if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);
+sec_attempt_release($db, $attempt);
 
 http_data($outcome["status"], $outcome["data"]);

@@ -20,6 +20,7 @@ require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/mail.php";
 require_once __DIR__ . "/sec.php";
 require_once __DIR__ . "/sec_captcha.php";
+require_once __DIR__ . "/sec_token.php";
 
 // ---------------------------------------------------------------------------
 // nfp_method: one 1-4 int in the DB, a method name and a temperature flag everywhere else (NFP_METHOD_BY_ID)
@@ -260,15 +261,19 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	input_exit_if_issues($issues);
 
 	if ($sensitive) {
+		sec_token_reauth_exit_if_locked($user_account);
 		if (!user_account_password_matches($db, $user_account, $password)) {
+			sec_token_reauth_failed($db, $user_account);
 			log_event("account.refused", ["act" => "account", "err" => "invalid_password"]);
 			return $refuse(401, "invalid_password", "Incorrect password.");
 		}
 		if (!is_null($new_login_email) && $totp_active && !sec_totp_code_valid($user_account, $body["code"] ?? "")) {
 			$given = is_scalar($body["code"] ?? null) && strlen((string) $body["code"]) > 0;
+			if ($given) sec_token_reauth_failed($db, $user_account);   // a code asked for and not sent is no guess
 			log_event("account.refused", ["act" => "account", "err" => $given ? "totp_invalid" : "totp_required"]);
 			return $given ? $refuse(401, "totp_invalid", "The TOTP code is incorrect.") : $refuse(401, "totp_required", "A TOTP code is required.");
 		}
+		sec_token_reauth_passed($db, $user_account);
 		if (!is_null($new_password) && user_account_password_matches($db, $user_account, $new_password)) {
 			input_exit_if_issues([input_issue("newPassword", "password_unchanged", "'newPassword' is identical to the current password.")]);
 		}

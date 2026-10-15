@@ -32,7 +32,9 @@ if ($path === ["deletion"]) {
 	$password = input_secret($body, "password", $issues);
 	input_exit_if_issues($issues);
 
+	sec_token_reauth_exit_if_locked($user_account);
 	if (!user_account_password_matches($db, $user_account, $password)) {
+		sec_token_reauth_failed($db, $user_account);
 		log_event("account.refused", ["act" => "delete", "err" => "invalid_password"]);
 		http_error(401, "invalid_password", "Incorrect password.");
 	}

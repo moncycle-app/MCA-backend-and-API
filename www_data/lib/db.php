@@ -235,9 +235,9 @@ function db_update_user_account_totp($db, $no_user_account, int $totp_state, ?st
 function db_select_user_account_auth_token($db, string $auth_token_str): ?array {
 	return db_row($db,
 		"SELECT J.no_user_account, J.no_auth_token, J.auth_token_prefix AS prefix_auth_token, C.name AS name_user_account, J.contry_code, J.name AS name_auth_token,
-		J.scope AS scope_auth_token, (J.date_expire IS NOT NULL AND J.date_expire <= NOW()) AS expired_auth_token,
+		J.scope AS scope_auth_token, " . db_sql_old_auth_token("J.") . " AS expired_auth_token,
 		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.login_email, C.notification_emails,
-		C.nb_connection_attempts, C.sponsor, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
+		C.nb_connection_attempts, C.last_failed_attempt, C.sponsor, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
 		C.last_password_change, C.register_comment, C.totp_secret, C.totp_state, C.research, C.timeline_asc, C.auto_mail_export, C.last_write_client_UTC
 		FROM auth_token AS J INNER JOIN user_account AS C ON J.no_user_account = C.no_user_account
 		WHERE auth_token_str = :auth_token_str LIMIT 1",
@@ -302,13 +302,21 @@ function db_delete_auth_tokens_other($db, $no_user_account, $no_auth_token_kept)
 }
 
 // The tokens past their date, and those without one unused for AUTH_TOKEN_IDLE_DAYS or older than AUTH_TOKEN_DEFAULT_LIFETIME_DAYS.
-function db_sql_old_auth_token(): string {
-	return "(date_expire < NOW() OR (expire > 0 AND (date_creation < CURDATE() - INTERVAL " . AUTH_TOKEN_DEFAULT_LIFETIME_DAYS . " DAY OR date_use < CURDATE() - INTERVAL " . AUTH_TOKEN_IDLE_DAYS . " DAY)))";
+// One rule for the purge and for the request that carries the token ($alias: the table's alias with its dot, "J." or ""); NULL
+// (no date, nothing to compare) counts as not old.
+function db_sql_old_auth_token(string $alias = ""): string {
+	return "COALESCE({$alias}date_expire < NOW() OR ({$alias}expire > 0 AND ({$alias}date_creation < CURDATE() - INTERVAL " . AUTH_TOKEN_DEFAULT_LIFETIME_DAYS
+		. " DAY OR {$alias}date_use < CURDATE() - INTERVAL " . AUTH_TOKEN_IDLE_DAYS . " DAY)), 0)";
 }
 
 // Deletes them, or with $dry_run counts them. Answers how many.
 function db_purge_auth_token($db, bool $dry_run): int {
 	return $dry_run ? intval(db_value($db, "SELECT COUNT(*) FROM auth_token WHERE " . db_sql_old_auth_token())) : db_exec($db, "DELETE FROM auth_token WHERE " . db_sql_old_auth_token());
+}
+
+// A password or code that passed on a session: the failures before it are forgiven (a sign-in does the same, with the log-in date).
+function db_update_login_failures_clear($db, $no_user_account): int {
+	return db_exec($db, "UPDATE user_account SET nb_connection_attempts = 0 WHERE no_user_account = :no_user_account AND nb_connection_attempts <> 0", ["no_user_account" => $no_user_account]);
 }
 
 function db_update_user_account_logged_in($db, $no_user_account): int {

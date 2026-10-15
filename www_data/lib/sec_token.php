@@ -152,6 +152,24 @@ function sec_token_login_over(array $user_account, int $threshold): bool {
 	return $threshold > 0 && sec_token_login_attempts($user_account) >= $threshold;
 }
 
+// A password or code asked again on a session (POST /api/v2/account, account deletion, the TOTP routes) counts against the same
+// counters as a sign-in, so a stolen session cannot guess them freely: past LOGIN_LOCKOUT_THRESHOLD failures in
+// LOGIN_ATTEMPTS_DECAY_MINUTES every such check is a 403 "account_locked", even for the right secret. The session itself stays valid.
+// The counters are those of the request's start: requests that come together still pass, as at sign-in.
+function sec_token_reauth_exit_if_locked(array $user_account): void {
+	if (!sec_token_login_over($user_account, LOGIN_LOCKOUT_THRESHOLD)) return;
+	log_event("account.refused", ["act" => "reauth", "err" => "account_locked"]);
+	http_error(403, "account_locked", "Account temporarily locked after too many failed attempts.");
+}
+
+function sec_token_reauth_failed($db, array $user_account): void {
+	db_update_login_failure($db, $user_account["login_email"]);
+}
+
+function sec_token_reauth_passed($db, array $user_account): void {
+	if (intval($user_account["nb_connection_attempts"] ?? 0) > 0) db_update_login_failures_clear($db, $user_account["no_user_account"]);
+}
+
 // A sign-in. $body has been checked by the endpoint (email normalised, password a non-empty string, the types of code, captcha and
 // captchaToken), and so have $token_options. Answers ["status" => 201, "data" => ...] or ["status", "code", "message", "meta"].
 // Every outcome is logged. A refusal is counted against the address (a row reserved before the checks, given back on success), and a
