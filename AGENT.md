@@ -157,8 +157,8 @@ require_once __DIR__ . "/../../lib/input.php";   // plus the lib files the endpo
 [$db, $user_account] = api_start();   // api_start(false) when logged-out visitors are fine
 ```
 
-- The URL after the script name is `PATH_INFO` (`/api/v2/day/2026-03-10` reaches `api/v2/day.php`: Apache MultiViews does it, and so does
-  `server_conf/php-server-router.php`). `input_path()` reads it, `input_exit_unless_path_fits()` ends an extra segment with a 404,
+- The URL after the script name is `PATH_INFO` (`/api/v2/day/2026-03-10` reaches `api/v2/day.php`: Apache MultiViews does it).
+  `input_path()` reads it, `input_exit_unless_path_fits()` ends an extra segment with a 404,
   `http_exit_method_not_allowed([...])` answers a method the URL does not take.
 - A `DELETE` and a `GET` take no body (`input_check_no_body()`).
 - Browser downloads and pages do not use `api_start`: they use `sec_redirect_if_logged_out()`.
@@ -344,8 +344,8 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
 
 There is no test suite in the repository: a change is checked by running the app and calling it.
 
-- **Run it** with Docker (see `dev.env.example` and `docker-compose.exemple.yml`) or without it, on PHP's built-in server with
-  `server_conf/php-server-router.php` (README, "Without Docker"). Set `DEMO_ENABLED` to sign in with the demo accounts and no mail
+- **Run it** with Docker (see `dev.env.example` and `docker-compose.exemple.yml`) or without it, on your own Apache or PHP-FPM
+  (README, "Without Docker"; docs/deployment.md). Set `DEMO_ENABLED` to sign in with the demo accounts and no mail
   server.
 - **Syntax**, of one file or all of them (prints only the failures):
 

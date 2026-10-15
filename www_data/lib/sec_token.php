@@ -54,7 +54,8 @@ function sec_token_clear_cookie(): void {
 // token past its expiry date opens nothing, whether or not the cron has erased it yet.
 function sec_token_authenticate($db): ?array {
 	$token = sec_token_from_cookie();
-	$authorization = getallheaders()["Authorization"] ?? null;
+	// $_SERVER first: mod_php, FPM and CGI all fill it (getallheaders() is missing in some SAPIs); REDIRECT_ when a rewrite ran first
+	$authorization = $_SERVER["HTTP_AUTHORIZATION"] ?? $_SERVER["REDIRECT_HTTP_AUTHORIZATION"] ?? null;
 	if (is_string($authorization) && str_contains($authorization, "Bearer ")) $token = explode(' ', trim($authorization), 2)[1] ?? "";
 	if ($token === "") return null;
 

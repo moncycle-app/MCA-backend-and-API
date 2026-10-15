@@ -12,7 +12,7 @@ from where**, and never the content. "Account 21 wrote day 4412 (2026-09-20)" is
 
 ## Where, what and how much
 
-- **Where.** `stdout` by default (`docker logs`, or the terminal of `php -S`); `stderr` or a file are options (`LOG_OUTPUT`). Nothing
+- **Where.** `stdout` by default (`docker logs`; PHP-FPM drops it, use `stderr` with `catch_workers_output = yes`, or a file); `stderr` or a file are options (`LOG_OUTPUT`). Nothing
   goes to the database: it would copy the users' history into it. Rotation, shipping and retention are yours.
 - **What.** Everything that authenticates, changes, deletes, discloses or mails, and every request that reaches the app
   (`http.request`, which stands in for Apache's access log). Static files (pages, scripts, images) do not reach the app and are not

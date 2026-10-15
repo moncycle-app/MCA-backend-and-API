@@ -22,7 +22,7 @@ Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-prof
 |---|---|
 | `www_data/` | The whole app, and the web server's document root: the web app (static pages and scripts, no build step), the HTTP API (`api/v2/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`). |
 | `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description. |
-| `server_conf/` | What the Docker image runs on: Apache and PHP settings, the entrypoint, the crontabs. Also a router to run the app on PHP's built-in server. |
+| `server_conf/` | What the Docker image runs on: Apache and PHP settings, the entrypoint, the crontabs. `zz-moncycleapp.conf` is the reference for any Apache. |
 | `docs/` | Security, deployment, upgrading and the log reference. |
 | `Dockerfile`, `docker-compose.exemple.yml` | The image and a compose file to start from. |
 
@@ -56,8 +56,9 @@ You need PHP 8.4 with the extensions `gd` (with FreeType and JPEG: the captcha i
 `iconv`, `ctype`, `fileinfo` and `json`; [Composer](https://getcomposer.org); and a MariaDB server. `composer install` names any
 extension that is missing.
 
-This is the shortest way to a running instance, on PHP's built-in web server. It is meant to look at the app or to develop on it, not
-to host it: for a real site read [Without Docker, in production](docs/deployment.md#without-docker-in-production).
+The app is plain PHP files behind a web server: Apache (`mod_php`, or PHP-FPM through `mod_proxy_fcgi`) or nginx with PHP-FPM. This
+section installs the code, the database and `config.php`; the web server's own setup (extension-less URLs, files to refuse, headers)
+is in [Without Docker, in production](docs/deployment.md#without-docker-in-production), with an Apache + PHP-FPM example.
 
 1. **Get the code and its dependencies.**
 
@@ -88,10 +89,10 @@ to host it: for a real site read [Without Docker, in production](docs/deployment
 
    | Setting | Value |
    |---|---|
-   | `APP_URL` | `http://127.0.0.1:8000/`, with a trailing `/` (it builds the links in mails) |
+   | `APP_URL` | the public URL of your site, with a trailing `/` (it builds the links in mails) |
    | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_ID`, `DB_PASSWORD` | the database above |
    | `REGISTRATION_ENABLED`, `LOGIN_ENABLED` | `true` (the example ships with both off) |
-   | `PHP_SECURE_COOKIES` | `false` while you use plain HTTP |
+   | `PHP_SECURE_COOKIES` | `true` over HTTPS (the default); `false` only on plain HTTP |
    | `CAPTCHA_SECRET` | 32 characters or more, random (`openssl rand -base64 48`): without it sign-up and password recovery answer `503 captcha_unavailable` |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_MAIL`, `SMTP_PASSWORD` | your mail server, for sign-up and password links |
    | `DEMO_ENABLED` | `true` to sign in with the two demo buttons and no mail server (see [Demo accounts](#demo-accounts)) |
@@ -103,14 +104,10 @@ to host it: for a real site read [Without Docker, in production](docs/deployment
    database (and the demo accounts if `DEMO_ENABLED`). It leaves a database that has tables as it is; `php auto_upgrade.php` brings an older
    one to the version of the code.
 
-5. **Start the server** from the root of the repository:
-
-   ```sh
-   php -S 127.0.0.1:8000 -t www_data server_conf/php-server-router.php
-   ```
-
-   and open <http://127.0.0.1:8000/>. The router gives the built-in server what Apache does for the app: the pages and the API are
-   asked for without their extension, and files that are not public answer 403. The app's log goes to the terminal.
+5. **Point your web server at `www_data/`** as its document root and set it up as
+   [deployment.md](docs/deployment.md#without-docker-in-production) describes, then open your `APP_URL`.
+   The app's log goes to `stdout` by default, which PHP-FPM does not keep: set `LOG_OUTPUT` to `stderr` (with `catch_workers_output = yes`)
+   or to a file (see [logs](docs/logs.md)).
 
 6. **Run the cron** if you want the mails and the clean-up: see [Cron](#cron).
 
@@ -306,8 +303,8 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X
 
 ## Development
 
-- **Without Docker:** the [built-in server](#without-docker) above. Set `PHP_SECURE_COOKIES` to `false`, and `DEMO_ENABLED` to `true` to
-  sign in without a mail server.
+- **Without Docker:** your own Apache or PHP-FPM on `www_data/` ([deployment](docs/deployment.md#without-docker-in-production)). Set
+  `PHP_SECURE_COOKIES` to `false` on plain HTTP, and `DEMO_ENABLED` to `true` to sign in without a mail server.
 - **With Docker:** the image is production by default, so forgetting a setting never turns debugging on. Development is opt-in with
   one env file: copy [`dev.env.example`](dev.env.example) to `dev.env` and give it to the container (`docker run --env-file dev.env`,
   or `env_file: ./dev.env` in compose). It shows PHP errors, reports everything, enables assertions, turns off OPcache and every

@@ -92,9 +92,10 @@ and a front end that calls an API on another origin adds that origin to its `con
 
 ## Without Docker, in production
 
-The [README](../README.md#without-docker) shows how to run the app on PHP's built-in server, to try it. For a real site, use a
-proper web server (Apache with `mod_php` or PHP-FPM, nginx with PHP-FPM) with `www_data/` as its document root, and make it do
-what the Docker image's Apache does. [`server_conf/zz-moncycleapp.conf`](../server_conf/zz-moncycleapp.conf) is the reference.
+The [README](../README.md#without-docker) installs the code, the database and `config.php` (every setting is a `define()` line there, so
+no environment variable and no Docker is needed). The web server is yours: Apache with `mod_php` or PHP-FPM, or nginx with PHP-FPM,
+with `www_data/` as its document root, doing what the Docker image's Apache does.
+[`server_conf/zz-moncycleapp.conf`](../server_conf/zz-moncycleapp.conf) is the reference.
 
 1. **Serve the pages and the API without their extension.** `/auth` is `auth.html`, `/api/v2/token` is `api/v2/token.php`, and what
    follows the script name is its `PATH_INFO`: `/api/v2/day/2026-03-10` runs `api/v2/day.php` with `PATH_INFO=/2026-03-10`. Apache does it
@@ -116,3 +117,51 @@ what the Docker image's Apache does. [`server_conf/zz-moncycleapp.conf`](../serv
    See [Cron](../README.md#cron).
 8. **Settings** are the `define()` lines of `www_data/config.php`, made from `config.exemple.php` ([Settings](../README.md#settings)).
    Put `config.php` out of reach of the web (rule 2 does that) and readable by the web user only.
+9. **PHP-FPM needs two more things.** The app reads the `Authorization: Bearer` header from `$_SERVER`, and Apache hides that header
+   from CGI/FastCGI backends unless told (`CGIPassAuth On`, Apache 2.4.13+; on older versions
+   `SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1`). Without it every token call is a 401. And FPM keeps no `stdout`: send the app's
+   log to `stderr` (`LOG_OUTPUT`, with `catch_workers_output = yes` in the pool) or to a file.
+
+### Example: Apache + PHP-FPM
+
+A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rewrite`, `mod_headers`, `mod_negotiation` enabled
+(`a2enmod proxy_fcgi rewrite headers negotiation`) and the socket of your FPM pool (here the Debian one):
+
+```apache
+<VirtualHost *:443>
+    ServerName moncycle.example.org
+    DocumentRoot /var/www/moncycle/www_data
+    # TLS directives here
+
+    LimitRequestBody 262144
+    CGIPassAuth On
+
+    <Directory /var/www/moncycle/www_data>
+        Options +MultiViews -Indexes
+        MultiviewsMatch Any
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    # PHP goes to FPM; MultiViews resolves /api/v2/day/2026-03-10 to day.php and keeps the rest as PATH_INFO
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php8.4-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    <FilesMatch "^(config(\.[a-z]+)?\.php|constants\.php|composer\.(json|lock)|.*\.(sql|md|bak|pw)|.*\.bak\..*)$">
+        Require all denied
+    </FilesMatch>
+    <DirectoryMatch "^/var/www/moncycle/www_data/(lib|script|vendor)(/|$)">
+        Require all denied
+    </DirectoryMatch>
+    <DirectoryMatch "^/var/www/moncycle/www_data/vendor/(components/jquery|chartjs|swagger-api/swagger-ui/dist)(/|$)">
+        Require all granted
+    </DirectoryMatch>
+
+    # security headers, Cache-Control and the rest: copy them from server_conf/zz-moncycleapp.conf
+</VirtualHost>
+```
+
+In the pool (`/etc/php/8.4/fpm/pool.d/www.conf`): `catch_workers_output = yes`, and the PHP settings of rule 6 above as
+`php_admin_value[...]` lines (`post_max_size = 256K`, `open_basedir`, `display_errors = Off`). `script/` is refused to the web but stays runnable from the command
+line for the cron.
