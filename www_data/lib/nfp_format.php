@@ -7,46 +7,18 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-/*
-** The NFP interchange format: its vocabulary, its hard limits, its JSON Schemas, and the
-** translation of older variants of the format into the one shape the rest of the code reads.
-**
-** This file knows the *format*. lib/nfp_export.php and lib/nfp_import.php know how the format maps onto this app's
-** storage. Nothing here touches the DB or the request.
-**
-** The reference for schema version 1.0 is the format's own structure document: a per-field
-** description carrying _type, _required, _customValuesAllowed and _methodValidation (which
-** fields make sense for which planning method). Two deliberate notes on reading it:
-**
-**  - fields marked "_customValuesAllowed": true accept values outside their listed enum, so
-**    the enums below are only validated where the spec leaves no room for custom values
-**    (stampColor, sexUnion, the Yes/No/Undecided triples, ...).
-**  - "_methodValidation": null for a method means "this field is not part of that method",
-**    which is advisory. It is reported, never used to reject a file -- see
-**    nfp_import_day() in lib/nfp_import.php.
-*/
-
-// The constants of the format (the schema version, the limits, the temperature band, the
-// vocabularies, the field inventories) are in the NFP FILE FORMAT section of constants.php. The
-// limits are of two kinds: HARD ones refuse a file (the body size, the widths of the columns a
-// value must land in), ADVISORY ones only draw a warning, because this app's own /export can
-// write more than they allow -- an account dormant for years exports one cycle padded with
-// thousands of gap days -- and refusing those would mean writing files it will not read back.
-
-// ---------------------------------------------------------------------------
-// JSON Schemas, validated against the *canonical* shape -- so run
-// nfp_format_normalize() first. They cover structure and types only; range,
-// calendar, length and cross-field consistency checks live in lib/nfp_import.php,
-// which can report the cycle and day a problem belongs to.
+// The NFP interchange format: its JSON Schema, its reading helpers, and the older variants of the format brought to the one shape the
+// rest of the code reads. Its constants are the NFP FILE FORMAT section of constants.php. How the format maps onto this app's storage is
+// lib/nfp_export.php and lib/nfp_import.php; nothing here touches the DB or the request.
 //
-// Deliberately absent: maxItems on "cycles", on a cycle's "days", and on the two
-// freeMucus arrays, and the hh:mm:ss pattern on a day's "temperatureTime". Those
-// counts are advisory (see the NFP_LIMIT_ block above), and day_timeline.time_temp_taken
-// is a TIME column, which MariaDB lets run to 838:59:59 -- so this app's own /export can
-// write all four. Capping them here would reject the file at stage 2, before stage 3 has
-// any chance to report it as a warning instead; stage 3 still checks the time, and keeps
-// the temperature while dropping an hour it cannot read.
-// ---------------------------------------------------------------------------
+// The reference of schema 1.0 is the format's structure document. A field marked _customValuesAllowed accepts values outside its enum,
+// so only the closed vocabularies are enforced (stampColor, sexUnion, Yes/No/Undecided...); a _methodValidation null ("not part of
+// that method") is advisory: reported, never a reason to refuse a file.
+
+// The schema, for the canonical shape (nfp_format_normalize() first): structure and types only, the rest is lib/nfp_import.php, which
+// can name the cycle and the day. No maxItems on cycles, days or the freeMucus lists, and no hh:mm:ss pattern on temperatureTime: this
+// app's own export can exceed them (a cycle padded with years of gaps; a TIME column runs to 838:59:59), and refusing here would deny
+// stage 3 the chance to report them as warnings.
 
 const NFP_FILE_SCHEMA = <<<'JSON'
 {
@@ -157,27 +129,8 @@ const NFP_FILE_SCHEMA = <<<'JSON'
 JSON;
 
 // ---------------------------------------------------------------------------
-// Field inventories.
-//
-// Every day and cycle field schema 1.0 defines, split by what this app can do
-// with it. The "not stored" lists are what makes the import report honest: a
-// field named here is reported back to the caller rather than silently dropped.
-// A day or cycle key in neither list is reported as unknown to schema 1.0.
-// The lists are NFP_DAY_FIELDS_* and NFP_CYCLE_FIELDS_* in constants.php.
-// ---------------------------------------------------------------------------
-
-function nfp_format_day_fields_known(): array {
-	return array_merge(NFP_DAY_FIELDS_STORED, array_keys(NFP_DAY_FIELDS_NOT_STORED));
-}
-
-function nfp_format_cycle_fields_known(): array {
-	return array_merge(NFP_CYCLE_FIELDS_STRUCTURAL, array_keys(NFP_CYCLE_FIELDS_NOT_STORED));
-}
-
-// ---------------------------------------------------------------------------
-// Reading helpers. An explicit null is treated as an absent field throughout:
-// the format marks almost everything optional, and "key present, value null" is
-// what most serialisers produce for "not set".
+// Reading a decoded file. A null is a field not set: the format marks almost everything optional, and most serialisers write "not
+// set" as null.
 // ---------------------------------------------------------------------------
 
 function nfp_format_get(mixed $holder, string $key): mixed {
@@ -189,15 +142,13 @@ function nfp_format_has(mixed $holder, string $key): bool {
 	return !is_null(nfp_format_get($holder, $key));
 }
 
-// The keys actually present on a decoded object, used to report fields that are not part of
-// the schema at all. Returns nothing for anything that is not an object.
+// The keys of an object (to report the ones the schema does not know); none for anything else.
 function nfp_format_object_keys(mixed $holder): array {
 	if (!is_object($holder)) return [];
 	return array_keys(get_object_vars($holder));
 }
 
-// true for a stdClass, and for the empty array json_decode() hands back for "{}" when a
-// caller decoded associatively. A populated list is not an object.
+// A stdClass, or the [] json_decode() gives for "{}" when decoding associatively.
 function nfp_format_is_object(mixed $value): bool {
 	return is_object($value) || (is_array($value) && empty($value));
 }
@@ -208,23 +159,11 @@ function nfp_format_is_whole_number(mixed $value): bool {
 }
 
 // ---------------------------------------------------------------------------
-// Legacy -> canonical.
-//
-// Three shapes of the format are in circulation, all stamped schemaVersion 1.0:
-//
-//   - the current one, described by the structure document: nested
-//     fileInformation / userInformation objects, "preferredMethod", a per-day
-//     "comments" array.
-//   - an early draft: flat "source_app" / "source_app_version" /
-//     "file_creation_timestamp", "userInformation" as a positional array,
-//     "preferedMethod" (one r), a per-day "comment" string, "dayNotObserved".
-//   - what moncycle.app 14 and early 15dev actually exported: the early draft,
-//     plus freeMucusSensation / freeMucusObservation as comma-joined strings
-//     rather than arrays, and sexUnion as a boolean rather than its enum.
-//
-// Users hold files of all three, so all three import. This function only moves
-// and re-types values; it never validates. Anything it cannot make sense of is
-// left where it is for the schema to reject with a clear message.
+// The variants of schema 1.0 -> the canonical shape. Users hold files of three: the structure document's (nested fileInformation and
+// userInformation, "preferredMethod", per-day "comments"); an early draft (flat "source_app" / "source_app_version" /
+// "file_creation_timestamp", a positional "userInformation", "preferedMethod", per-day "comment" and "dayNotObserved"); and the draft
+// with freeMucus* as comma-joined strings and sexUnion as a boolean. Values are only moved and re-typed, never validated: what cannot be
+// made sense of is left for the schema to refuse with a clear message.
 // ---------------------------------------------------------------------------
 
 function nfp_format_normalize(object $raw): object {
@@ -329,7 +268,7 @@ function nfp_format_normalize_day(mixed $raw_day): mixed {
 	}
 	unset($day->comment);
 
-	// moncycle.app 14 wrote these two as comma-joined strings, against its own schema
+	// comma-joined strings
 	foreach (["freeMucusSensation", "freeMucusObservation"] as $field) {
 		$value = nfp_format_get($day, $field);
 		if (is_string($value)) {
@@ -338,7 +277,7 @@ function nfp_format_normalize_day(mixed $raw_day): mixed {
 		}
 	}
 
-	// moncycle.app 14 wrote sexUnion as a boolean; the format wants its enum
+	// a boolean union
 	$union = nfp_format_get($day, "sexUnion");
 	if (is_bool($union)) {
 		if ($union) $day->sexUnion = "Union";
@@ -388,20 +327,10 @@ function nfp_format_normalize_day(mixed $raw_day): mixed {
 	return $day;
 }
 
-// ---------------------------------------------------------------------------
-// Nulls.
-//
-// An explicit null is a field that is not set (see the reading helpers above), so it leaves the
-// file before the schema sees it: the format marks almost everything optional, and an app that
-// writes every unset field as null would otherwise be refused on all of them. Run it after
-// nfp_format_normalize(), which reads the early draft's positional userInformation, where a null
-// holds a place.
-//
-// $found receives how many nulls were dropped, by field, with the indexes of the lists left out
-// ("cycles[].days[].temperature"): one line per field, not one per day. A null in a list of days
-// is a day with nothing on it, since the day's place in the list is its date; in any other list it
-// is a null item, and goes.
-// ---------------------------------------------------------------------------
+// A null is a field not set: it leaves the file before the schema sees it, or a file that writes every unset field as null would be
+// refused on all of them. After nfp_format_normalize(), for which a null holds a place in the draft's positional userInformation.
+// $found counts the nulls dropped by field, list indexes left out ("cycles[].days[].temperature": one line per field, not per day). A
+// null in a list of days is a day with nothing on it (its place is its date); in any other list it goes.
 
 function nfp_format_drop_nulls(mixed $node, string $path, array &$found): mixed {
 	if (is_object($node)) {

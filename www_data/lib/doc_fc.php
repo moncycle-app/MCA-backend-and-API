@@ -7,13 +7,9 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-/*
-** The FertilityCare chart (nfp_method 3 and 4): a grid, A3 landscape. Sizes are in mm.
-**
-** One row of the grid per cycle, 35 days wide; a longer cycle carries on in the next row. Each
-** day is a column of cells: stamp, baby, peak, date, bleeding, mucus, other (arrow, pain codes,
-** union), [temperature,] comment. The layout (DOC_FC_*) is in constants.php.
-*/
+// The FertilityCare chart (nfp_method 3 and 4): a grid, A3 landscape, in mm. A row per cycle, DOC_FC_DAYS_PER_ROW days wide (a longer
+// cycle carries on in the next row); a day is a column of cells: stamp, baby, peak, date, bleeding, mucus, other (arrow, pain, union),
+// [temperature,] comment.
 
 require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/date.php";
@@ -55,9 +51,7 @@ function doc_fc_pdf(array $days, int $nfp_method, string $name, bool $anonymous 
 	return $pdf;
 }
 
-// The measures of the grid, all in one place: the width of a day, the height of a line of text, of
-// the stamp cell and of one row of the grid, the margins, the grey of the lines, and the legend
-// column (row => [label, height]).
+// The measures of the grid, and the legend column (row => [label, height]).
 function doc_fc_layout(DocPdf $pdf, bool $with_temperature, bool $anonymous): array {
 	$legend = [];
 	foreach (DOC_FC_ROW_LABELS as $row => $label) {
@@ -111,9 +105,8 @@ function doc_fc_draw_bar(DocPdf $pdf, array $grid, float $y, bool $set_line_colo
 	$pdf->Cell($grid["full_w"], $grid["separator_h"], '', 'TLBR', 0, '', true);
 }
 
-// One row of the grid: the bar above it, the legend column, the cells of its days, and the vertical
-// lines between them. $cells are the days of the row (see doc_fc_grid_rows()), none for an empty
-// row. Returns the y under the row.
+// One row of the grid: the bar above it, the legend, the cells of its days ($cells: none for an empty row), the lines between them.
+// Returns the y under it.
 function doc_fc_draw_row(DocPdf $pdf, array $cells, array $grid, float $y): float {
 	doc_fc_draw_bar($pdf, $grid, $y);
 	$y += $grid["separator_h"];
@@ -142,9 +135,8 @@ function doc_fc_draw_row(DocPdf $pdf, array $cells, array $grid, float $y): floa
 	return $y + $grid["row_h"];
 }
 
-// The rows of the grid: a new row at every cycle start, and when a row is full. Each cell is
-// ["day" => display day, "peak" => text]. The peak count runs to the end of its cycle, so on
-// into the next row when a long cycle wraps, and gaps are counted as the calendar days they are.
+// The rows of the grid: a new one at every cycle start and when one is full. A cell is ["day", "peak" => text]; the peak count runs to
+// the end of its cycle (on into the next row), gaps counted as the calendar days they are.
 function doc_fc_grid_rows(array $days): array {
 	$rows = [];
 	$row = [];
@@ -175,9 +167,7 @@ function doc_fc_grid_rows(array $days): array {
 
 function doc_fc_stamp_key(?array $day): string {
 	if (is_null($day)) return "";          // padding after a cycle's last day
-	// not "G": that is the green stamp since stamps took their English codes (d75cf3e), which
-	// had silently turned every pregnancy cell into a green "V"
-	if ($day["booleanPregnancyDetected"]) return "Gi";
+	if ($day["booleanPregnancyDetected"]) return "Gi";   // not "G", the green stamp
 	if ($day["isGap"] || $day["mucusNotObserved"]) return "?";
 	return day_format_stamp_encode($day["stampColor"], $day["stampBaby"]);
 }
@@ -271,8 +261,8 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 	}
 }
 
-// A comment in a cell a few millimetres wide, as large as it fits: one line at 6pt, one line at
-// 3pt, three lines at 3pt, and past that five lines at 3pt, cut short with an ellipsis.
+// A comment in a cell a few millimetres wide, as large as it fits: one line at 6pt, one at 3pt, three at 3pt, else five at 3pt cut
+// with an ellipsis.
 function doc_fc_draw_comment(DocPdf $pdf, string $comment, float $x, float $y, float $w, float $h, array $color): void {
 	if ($comment === '') return;
 	$room = $w - 2 * $pdf->GetCellMargin();

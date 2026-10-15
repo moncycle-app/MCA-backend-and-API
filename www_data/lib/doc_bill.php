@@ -7,22 +7,11 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-/*
-** The Billings chart (nfp_method 1 and 2): a table, one line per day, A4 portrait. Sizes are in mm.
-**
-** A day's line, left to right: date | day of the cycle | stamp | [peak] | [counter] | [union] |
-** sensations | observations | [other] | comment, and method 1 ends with the temperature and its
-** curve. The columns in brackets only exist when the export uses them.
-**
-** A line is as tall as its tallest text: sensations, observations, other and the comment wrap
-** inside their column, and a text that would take more than DOC_BILL_MAX_LINES lines is cut
-** short with an ellipsis. Every line is measured before anything is drawn, so that the pages
-** are known up front: a cycle starts a new page, and one that does not fit carries on to the
-** next, under the same column headers.
-**
-** PDF_BILLINGS_BORDERS (config file) turns every line of the table off at once. The layout
-** (DOC_BILL_*), the text styles (DOC_PDF_STYLES) and the colours are in constants.php.
-*/
+// The Billings chart (nfp_method 1 and 2): a table, one line per day, A4 portrait, in mm. A line: date | day of the cycle | stamp |
+// [peak] | [counter] | [union] | sensations | observations | comment, and method 1 ends with the temperature and its curve; the columns
+// in brackets only exist when a day uses them. A line is as tall as its tallest text (cut with an ellipsis past DOC_BILL_MAX_LINES).
+// Every line is measured before anything is drawn, so the pages are known up front: a cycle starts a page, and one that does not fit
+// carries on to the next under the same headers. PDF_BILLINGS_BORDERS (config) turns the table's lines off.
 
 require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/date.php";
@@ -69,8 +58,8 @@ function doc_bill_pdf(array $days, int $nfp_method, string $name, bool $anonymou
 	return $pdf;
 }
 
-// What each day shows. The peak (+1..+3 after it) and counter (+1..+n from its start) run over
-// calendar days, gaps included, and start over at every cycle start. Texts are windows-1252.
+// What each day shows. The peak (+1..+3 after it) and the counter (+1..+n) run over calendar days, gaps included, and start over at
+// every cycle start. Texts are windows-1252.
 function doc_bill_rows(array $days): array {
 	$rows = [];
 	$since_peak = null;    // days since this cycle's last peak
@@ -97,14 +86,13 @@ function doc_bill_rows(array $days): array {
 		if (!is_null($counter) && $counter[0] < $counter[1]) $count = ['bill.counter', "+" . ++$counter[0]];
 		else $counter = null;
 
-		// A day that was not observed, and one that was never filled in, show the same stamp. The
-		// stamp is cleared for the first by doc_display_day().
+		// a day not observed and a day never filled in show the same stamp
 		$stamp = null;
 		if ($day["booleanPregnancyDetected"]) $stamp = "pregnancy";
 		elseif ($day["isGap"] || $day["mucusNotObserved"]) $stamp = "unknown";
 		elseif (!is_null($day["stampColor"])) $stamp = $day["stampColor"];
 
-		// each description list on one line, comma joined like the old free text
+		// each description list on one line, comma joined
 		$texts = [];
 		foreach (["freeMucusSensation", "freeMucusObservation"] as $field) {
 			$texts[$field] = doc_pdf_text(doc_one_line(implode(", ", $day[$field])));
@@ -130,13 +118,9 @@ function doc_bill_rows(array $days): array {
 	return $rows;
 }
 
-// The columns shared by every day of the export, computed once so that the days line up: which
-// ones there are, their x and width, and the temperature scale. $temperature is whether the
-// method tracks it.
-//
-// The comment takes the room the description columns leave. Those are as wide as their widest
-// value, within DOC_BILL_TEXT_MIN_W and DOC_BILL_TEXT_MAX_W, and give way to keep the comment
-// DOC_BILL_COMMENT_WANTED_W wide when they would take too much.
+// The columns of the whole export, so that the days line up: which there are, their x and width, and the temperature scale ($temperature:
+// the method tracks it). The description columns are as wide as most of their values, within DOC_BILL_TEXT_MIN_W and _MAX_W, and give
+// way to keep the comment DOC_BILL_COMMENT_WANTED_W wide; the comment takes the rest.
 function doc_bill_layout(DocPdf $pdf, array $rows, bool $temperature): array {
 	$margin = $pdf->GetCellMargin();
 	$width = $pdf->GetPageWidth() - 2 * DOC_PDF_MARGIN;
@@ -159,8 +143,7 @@ function doc_bill_layout(DocPdf $pdf, array $rows, bool $temperature): array {
 	foreach (DOC_BILL_TEXT_COLUMNS as $field => [$label, $style]) {
 		if ($field === "comments") continue;
 
-		// the width most values fit in on one line: a single long list does not get a column
-		// wide enough for it, it wraps
+		// the width most values fit in on one line: a single long list wraps
 		$pdf->UseStyle($style);
 		$widths = [];
 		foreach ($rows as $row) {
@@ -210,19 +193,12 @@ function doc_bill_layout(DocPdf $pdf, array $rows, bool $temperature): array {
 	return $layout;
 }
 
-// Cuts each day's texts to what its column holds (the ones that are too long end with an
-// ellipsis) and gives the day its height. Texts are measured in the style they are drawn in, on
-// MultiCell()'s own line breaking. $rows is changed in place: a long export has thousands of
-// days, and a copy of them is memory it needs.
+// Each day's texts cut to their column (with an ellipsis), and the day's height, measured in the style they are drawn in. In place: a long
+// export has thousands of days, and a copy is memory it needs.
 function doc_bill_fit_rows(DocPdf $pdf, array &$rows, array $layout): void {
 	foreach ($rows as &$row) {
 		$lines = 1;
 		foreach (DOC_BILL_TEXT_COLUMNS as $field => [$label, $style]) {
-			if (!isset($layout["columns"][$field])) {
-				// the legacy column, when no day has such text
-				unset($row["texts"][$field]);
-				continue;
-			}
 			$pdf->UseStyle($style);
 			[$row["texts"][$field], $text_lines] = $pdf->FitLines($layout["columns"][$field]["w"], $row["texts"][$field], DOC_BILL_MAX_LINES);
 			$lines = max($lines, $text_lines);
@@ -231,8 +207,7 @@ function doc_bill_fit_rows(DocPdf $pdf, array &$rows, array $layout): void {
 	}
 }
 
-// The pages, each as the [first day, number of days] it holds. A cycle starts a page, and so does
-// a day that would run past the bottom of one. A single day always fits: its height is capped.
+// The pages as [first day, number of days]: a cycle starts one, and so does a day that would run past the bottom (one day always fits).
 function doc_bill_paginate(DocPdf $pdf, array $rows): array {
 	$limit = $pdf->GetPageHeight() - DOC_BILL_BOTTOM;
 	$pages = [];
@@ -268,8 +243,7 @@ function doc_bill_draw_title(DocPdf $pdf, string $name, string $subtitle, int $p
 	$pdf->Cell($side_w, 4, sprintf("page %d sur %d", $page, $page_count), 0, 1, 'R');
 }
 
-// The table's lines, when borders are on: a rule across the table at $y, which every band of cells
-// (the header, each day) has under it and the first one over it...
+// With borders: a rule across the table at $y (under every band of cells, and over the first)...
 function doc_bill_draw_rule(DocPdf $pdf, array $layout, float $y): void {
 	if (!PDF_BILLINGS_BORDERS) return;
 
@@ -278,7 +252,7 @@ function doc_bill_draw_rule(DocPdf $pdf, array $layout, float $y): void {
 	$pdf->Line(DOC_PDF_MARGIN, $y, DOC_PDF_MARGIN + $layout["width"], $y);
 }
 
-// ... and the edges of the columns, drawn once for the whole page, from $top to $bottom.
+// ... and the edges of the columns, once for the whole page.
 function doc_bill_draw_edges(DocPdf $pdf, array $layout, float $top, float $bottom): void {
 	if (!PDF_BILLINGS_BORDERS) return;
 
@@ -366,8 +340,7 @@ function doc_bill_draw_row(DocPdf $pdf, array $row, array $layout, float $y, boo
 		$pdf->MultiCell($columns[$field]["w"], DOC_BILL_LINE_H, $text, 0, 'L');
 	}
 
-	// method 1: the reading and the time it was taken, then its point on the curve, joined to
-	// the one of the day before. A day without a reading breaks the curve.
+	// method 1: the reading and its time, then its point on the curve, joined to the day before's; a day without one breaks the curve
 	if ($layout["temperature"] && !is_null($row["temperature"])) {
 		$runs = [['bill.temperature', $row["temperature_label"], 0]];
 		if ($row["temperature_time"] !== '') $runs[] = ['bill.temperature_time', $row["temperature_time"], 1];
@@ -393,9 +366,7 @@ function doc_bill_draw_row(DocPdf $pdf, array $row, array $layout, float $y, boo
 	doc_bill_draw_rule($pdf, $layout, $y + $h);
 }
 
-// The stamp, a square: the colour of the day, with the baby on it when there is one. A day that
-// was not observed or filled in is a light grey "?", a pregnancy a pink "G". A day with no stamp
-// at all draws nothing.
+// The stamp: a square of the day's colour, with the baby on it. Not observed or not filled in is a grey "?", a pregnancy a pink "G".
 function doc_bill_draw_stamp(DocPdf $pdf, ?string $kind, bool $baby, float $x, float $y, float $size): void {
 	if (is_null($kind)) return;
 

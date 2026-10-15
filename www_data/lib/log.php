@@ -7,28 +7,15 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// The app's own log: what happened, to which account, to which row, from where -- never the
-// content. The app holds personal data, so a line says "account 21 wrote day 4412", not what the day
-// holds; what is never logged is in docs/logs.md, and log_scrub() is how a message that may
-// carry an address or an SQL fragment is made fit for it.
+// The app's own log: what happened, to which account and row, from where -- never the content ("account 21 wrote day 4412", not what the
+// day holds; what is never logged is in docs/logs.md). One line per event of LOG_EVENTS: flat JSON or "key=value" text, to stdout, stderr
+// or a file (LOG_OUTPUT). Logging never breaks a request: nothing here throws, answers or queries the database.
 //
-// One line per event: a flat JSON object (or "key=value" text), to stdout, stderr or a file
-// (LOG_OUTPUT). The events are LOG_EVENTS (constants.php), the keys their glossary in docs/logs.md.
-//
-// Logging never breaks a request: nothing here throws, writes to the response or queries the
-// database. An unwritable file, an unencodable value or a bad setting is swallowed.
-//
-// A web request is started by log_start() (api_start() does it), which also writes its `http.request`
-// line when the request ends. log_context() holds what every line of the request shares (the
-// account and the session, and the ids of the rows it handles), log_note() what only the request's
-// own line carries (the error code, the number of rows a read returned).
-//
-// Traceability costs no query: an id goes in a line only when the code already holds it (a row it
-// read, an insert's id, the RETURNING of a delete), and a read says how many rows it returned
-// (count() of what it built), never which.
+// log_start() starts a web request and writes its `http.request` line at the end. log_context() holds what every line of the request
+// shares (the account, the session, the ids of the rows it handles), log_note() what only its own line carries (the error code, the
+// number of rows read). An id is logged only when the code already holds it, and a read says how many rows, never which: no query.
 
-// The state of the running request or run. Returned by reference so that the callers and the
-// shutdown functions share it (a PHP static does not outlive a request under mod_php).
+// The state of the request or run, by reference so that the shutdown functions share it.
 function &log_state(): array {
 	static $state = [
 		"rid" => null, "ip" => null, "started" => null, "context" => [], "note" => [],
@@ -37,8 +24,7 @@ function &log_state(): array {
 	return $state;
 }
 
-// The LOG_* settings, each one checked: a missing one (a config.php written before the logs) or a
-// value that is not allowed is the default, never "off".
+// The LOG_* settings, each checked: a missing or wrong one is the default, never "off".
 function log_settings(): array {
 	$state = &log_state();
 	if ($state["settings"] !== null) return $state["settings"];
@@ -62,9 +48,8 @@ function log_settings(): array {
 // A web request
 // ---------------------------------------------------------------------------
 
-// Starts the log of a web request, first thing: gives it its id (sent back as X-Request-Id) and
-// registers the `http.request` line. $client_ip is sec_client_ip(); it is passed in so that this
-// file knows nothing of sec.php. Safe to call twice.
+// First thing in a web request: its id (sent back as X-Request-Id) and its `http.request` line at the end. $client_ip is sec_client_ip(),
+// passed in so that this file knows nothing of sec.php.
 function log_start(string $client_ip = ""): void {
 	try {
 		$state = &log_state();
@@ -77,8 +62,7 @@ function log_start(string $client_ip = ""): void {
 	}
 }
 
-// The endpoint of the request as the log names it: "/api/day" for /api/day/2026-03-10 and for /api/day?dates=... The arguments of the URL
-// (a date, a row number, a token prefix) are content: they are never logged, nor is the query string.
+// "/api/day" for /api/day/2026-03-10 and /api/day?dates=...: the arguments of the URL and the query string are content, never logged.
 function log_endpoint(): ?string {
 	$script = $_SERVER["SCRIPT_NAME"] ?? "";
 	if (is_string($script) && $script !== "") return preg_replace('/\.php\z/', '', $script);
@@ -86,8 +70,7 @@ function log_endpoint(): ?string {
 	return is_string($path) ? $path : null;
 }
 
-// The `http.request` line: method, endpoint (never the arguments of the URL nor the query string), status, duration, and what the
-// endpoint noted (the API error code, the number of rows a read returned).
+// method, endpoint, status, duration, and what the endpoint noted
 function log_request_end(): void {
 	try {
 		$state = &log_state();
@@ -103,11 +86,9 @@ function log_request_end(): void {
 	}
 }
 
-// What the lines of the request share: "uid" (the account) and "sid" (the session, never the token),
-// and the database ids of the rows the request handles ("day", "dsc", "rev"), set as soon as the code
-// knows them so that every line of the request names them: its events, its `http.request` line, and a
-// `system.exception` that cuts it short. An id the event writes itself wins over the request's. A null
-// value removes the key. Ids only, never what a row holds, and nothing that costs a query to find.
+// What every line of the request carries: "uid" (the account), "sid" (the session, never the token), and the ids of the rows it handles
+// ("day", "dsc", "rev"), set as soon as the code knows them, so that a `system.exception` names them too. An event's own value wins; null
+// removes the key.
 function log_context(array $fields): void {
 	$state = &log_state();
 	foreach ($fields as $key => $value) {
@@ -116,14 +97,13 @@ function log_context(array $fields): void {
 	}
 }
 
-// Fields for the request's own `http.request` line, and for no other (err, n, full).
+// Fields of the request's own `http.request` line only (err, n, full).
 function log_note(array $fields): void {
 	$state = &log_state();
 	$state["note"] = array_merge($state["note"], $fields);
 }
 
-// The id of the request: the one the client or the proxy sent in the header LOG_REQUEST_ID_HEADER
-// when it is plain (it is client-controlled, so it only serves correlation), else a new one.
+// The id the client or the proxy sent (LOG_REQUEST_ID_HEADER) when it is plain (it only serves correlation), else a new one.
 function log_rid(): string {
 	$state = &log_state();
 	if ($state["rid"] !== null) return $state["rid"];
@@ -139,8 +119,7 @@ function log_rid(): string {
 	}
 }
 
-// The client address as LOG_IP allows it: whole, cut to its network (a.b.c.0, or the first 3 groups
-// of an IPv6 address), or not at all. Null when there is none to write.
+// The address as LOG_IP allows it: whole, cut (a.b.c.0, the first 3 groups of IPv6), or none.
 function log_ip(string $ip): ?string {
 	$mode = log_settings()["ip"];
 	if ($ip === "" || $mode === "none") return null;
@@ -159,9 +138,7 @@ function log_ip(string $ip): ?string {
 // Writing an event
 // ---------------------------------------------------------------------------
 
-// Logs an event of LOG_EVENTS. $fields are its own keys (see the glossary of docs/logs.md); a "uid" or "sid"
-// among them wins over the request's. $level overrides the event's, for the one whose outcome
-// decides it. Nothing is written when the level or the category is not kept.
+// An event of LOG_EVENTS with its own keys (the glossary of docs/logs.md). $level overrides the event's, for one whose outcome decides it.
 function log_event(string $event, array $fields = [], ?string $level = null): void {
 	try {
 		$level ??= LOG_EVENTS[$event] ?? "info";
@@ -187,8 +164,7 @@ function log_event(string $event, array $fields = [], ?string $level = null): vo
 	}
 }
 
-// Logs an exception: its class, where it was thrown, its message scrubbed. A PDOException gives its
-// SQLSTATE and no message: it can hold the SQL, or the value that broke a unique key.
+// The class, where it was thrown, the message scrubbed. A PDOException gives its SQLSTATE and no message, which can hold the SQL or a value.
 function log_exception(\Throwable $e): void {
 	try {
 		$sql = $e instanceof PDOException ? (string) ($e->errorInfo[0] ?? $e->getCode()) : null;
@@ -202,9 +178,7 @@ function log_exception(\Throwable $e): void {
 	}
 }
 
-// A text made fit for a line: addresses masked, control characters gone, clipped. For what the
-// code does not write itself -- an exception message, PHPMailer's ErrorInfo -- which can embed an
-// address or an SQL fragment.
+// A text the code did not write (an exception message, PHPMailer's ErrorInfo) made fit for a line: addresses masked, controls gone, clipped.
 function log_scrub(string $text): string {
 	$text = preg_replace('/[\x00-\x1F\x7F]+/', ' ', mb_substr(mb_scrub($text), 0, 4 * LOG_LIMIT_FIELD_CHARS)) ?? "";
 	$text = preg_replace('/[^\s@\'"<>(),;:\[\]]+@[^\s@\'"<>(),;:\[\]]+/u', '[email]', $text) ?? "";
@@ -217,8 +191,7 @@ function log_timestamp(): string {
 	return gmdate("Y-m-d\TH:i:s", (int) $now) . sprintf(".%03dZ", (int) (($now - floor($now)) * 1000));
 }
 
-// A value as the log keeps it: a string clipped, a list cut to its first items, a number or a
-// boolean as is. Null, objects and nested lists are dropped (null).
+// A string clipped, a list cut to its first items, a number or a boolean as is; anything else is null.
 function log_value(mixed $value, bool $in_list = false): mixed {
 	if (is_string($value)) return mb_substr($value, 0, LOG_LIMIT_FIELD_CHARS);
 	if (is_int($value) || is_float($value) || is_bool($value)) return $value;
@@ -227,7 +200,7 @@ function log_value(mixed $value, bool $in_list = false): mixed {
 	return array_values(array_filter($items, fn($item) => $item !== null));
 }
 
-// array with the values of log_value() and the keys whose value is null left out
+// the values of log_value(), without the nulls
 function log_clean(array $fields): array {
 	$clean = [];
 	foreach ($fields as $key => $value) {
@@ -237,8 +210,7 @@ function log_clean(array $fields): array {
 	return $clean;
 }
 
-// The line of an event: the common keys, then the event's. Too long for one atomic write, it loses
-// its last keys one by one and says so with "cut".
+// The common keys, then the event's; too long for one atomic write, it loses its last keys and says "cut".
 function log_line(array $common, array $fields): string {
 	$common = log_clean($common);
 	$fields = log_clean($fields);
@@ -250,8 +222,7 @@ function log_line(array $common, array $fields): string {
 	return $line;
 }
 
-// A line, in the format of LOG_FORMAT. No newline in it, in either: JSON escapes it, and a text
-// value that has a control character is quoted as JSON.
+// No newline in either format: JSON escapes it, and a text value with a control character is quoted as JSON.
 function log_render(array $pairs): string {
 	if (log_settings()["format"] !== "text") return (string) json_encode($pairs, LOG_JSON_FLAGS);
 
@@ -269,8 +240,7 @@ function log_render(array $pairs): string {
 // The sink: stdout, stderr or a file
 // ---------------------------------------------------------------------------
 
-// Where the lines go: [kind, path]. stdout and stderr in any case, a value that starts with "/" is
-// a file, anything else (empty, a relative path, a typo) is stdout: the log is never turned off by mistake.
+// [kind, path]: stdout, stderr, or a file for a value that starts with "/"; anything else is stdout, so a typo never turns the log off.
 function log_sink(): array {
 	$output = log_settings()["output"];
 	if (strtolower($output) === "stderr") return ["stderr", ""];
@@ -278,9 +248,8 @@ function log_sink(): array {
 	return ["stdout", ""];
 }
 
-// Opens the sink once per request (a rename-based logrotate then needs no signal). A file is
-// appended to, never locked: O_APPEND and a line under LOG_LIMIT_LINE_BYTES keep lines whole
-// between workers. False when it cannot be opened; the reason is in the state.
+// Opened once per request (a rename-based logrotate needs no signal). A file is appended to, never locked: O_APPEND and a line under
+// LOG_LIMIT_LINE_BYTES keep lines whole between workers. False when it cannot be opened, the reason in the state.
 function log_open(array $sink) {
 	[$kind, $path] = $sink;
 	error_clear_last();
@@ -292,8 +261,7 @@ function log_open(array $sink) {
 	return false;
 }
 
-// Why a file could not be opened, in a word. PHP 8.4 words an open_basedir refusal "Operation not
-// permitted", so that one is told from the setting: a path under none of its directories.
+// Why, in a word. PHP 8.4 words an open_basedir refusal "Operation not permitted": that one is told from the setting.
 function log_open_failure(string $path, string $error): string {
 	$allowed = array_filter(explode(PATH_SEPARATOR, (string) ini_get("open_basedir")));
 	if ($allowed && !array_filter($allowed, fn($dir) => $path === rtrim($dir, "/") || str_starts_with($path, rtrim($dir, "/") . "/"))) return "open_basedir";
@@ -308,8 +276,8 @@ function log_open_failure(string $path, string $error): string {
 	};
 }
 
-// Writes one line, in one fwrite. A file that cannot be opened or written does not lose it: this
-// line and the rest of the request go to stdout, and `system.log_sink_failed` says so (once).
+// One line in one fwrite. A file that cannot be opened or written does not lose it: the rest goes to stdout, and
+// `system.log_sink_failed` says so once.
 function log_write(string $line): void {
 	if ($line === "") return;
 	$state = &log_state();
@@ -334,10 +302,8 @@ function log_write(string $line): void {
 // script/cron.php
 // ---------------------------------------------------------------------------
 
-// Starts the log of a cron run, first thing: one request id for the run, `system.cron_started`, and
-// a shutdown function that writes `system.cron_ended` with ok:false if the run dies before
-// log_cron_end() (an uncaught exception, a fatal error, a timeout). A dry run says so (`dry`) on both
-// lines; a normal run has no such key.
+// First thing in a cron run: one id for the run, `system.cron_started`, and `system.cron_ended` with ok:false if the run dies before
+// log_cron_end(). A dry run says so (`dry`) on both lines.
 function log_cron_start(bool $dry_run = false): void {
 	$state = &log_state();
 	$state["cron"] = ["started" => microtime(true), "done" => false, "dry" => $dry_run ?: null, "count" => array_fill_keys(["sent", "ko", "del", "tok", "ipa"], 0)];
@@ -345,17 +311,14 @@ function log_cron_start(bool $dry_run = false): void {
 	log_event("system.cron_started", ["dry" => $state["cron"]["dry"]]);
 }
 
-// Counts what the run did: sent and ko (mails), del (accounts deleted), tok (tokens purged), ipa
-// (login attempts purged).
+// sent and ko (mails), del (accounts deleted), tok (tokens purged), ipa (login attempts purged)
 function log_cron_count(string $counter, int $by = 1): void {
 	$state = &log_state();
 	if (isset($state["cron"]["count"][$counter])) $state["cron"]["count"][$counter] += $by;
 }
 
-// `system.cron_step`: a step of the run is done, written even when it had nothing to do ($handled 0), so
-// that the lines between `system.cron_started` and `system.cron_ended` tell how far a run that died got.
-// $handled is what the step took care of (accounts, rows purged, counters reset), $failed the mails among
-// them that could not be sent; a dry run says what it would have done. The line belongs to no account.
+// A step done, even with nothing to do, so that a run that died tells how far it got. $handled: what it took care of, $failed: the mails
+// among them not sent. The line belongs to no account.
 function log_cron_step(string $step, ?int $handled = null, ?int $failed = null): void {
 	$state = &log_state();
 	log_context(["uid" => null]);
@@ -373,7 +336,7 @@ function log_cron_shutdown(): void {
 	log_cron_finish(false, $fatal ? log_fatal_message($error["message"]) : null);
 }
 
-// `system.cron_ended`, once: the counters are what had been done up to then.
+// `system.cron_ended`, once, with the counters as they are.
 function log_cron_finish(bool $ok, ?string $message): void {
 	$state = &log_state();
 	if (($state["cron"]["done"] ?? true) === true) return;
@@ -382,8 +345,7 @@ function log_cron_finish(bool $ok, ?string $message): void {
 	log_event("system.cron_ended", $fields, $ok ? null : "error");
 }
 
-// The message of a fatal error for a line: its first line, scrubbed, and of an uncaught
-// PDOException only the SQLSTATE (the rest may hold SQL).
+// The first line of a fatal error, scrubbed; of an uncaught PDOException only the SQLSTATE.
 function log_fatal_message(string $message): string {
 	if (preg_match('/^Uncaught PDOException: SQLSTATE\[(\w+)\]/', $message, $found)) return "Uncaught PDOException SQLSTATE[" . $found[1] . "]";
 	return log_scrub(strtok($message, "\n") ?: "");

@@ -7,22 +7,11 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-/*
-** The NFP import: an NFP file read into day_timeline, in four stages the endpoint calls in order:
-**
-**   nfp_import_parse()          raw request body -> canonical object, or a transport-level refusal
-**   nfp_import_schema_errors()  structure and types, via the JSON Schema
-**   nfp_import_build_plan()     semantics, consistency, and the per-day write plan
-**   nfp_import_write_plan()     the only stage that writes, and only inside a transaction
-**
-** Nothing is written before all three checking stages have passed, so a file is either imported
-** whole or not at all. lib/nfp_format.php owns the format (vocabulary, limits, schema, legacy
-** variants); this file owns the mapping onto this app's storage.
-**
-** The per-day encoding is not duplicated here: a day of the file is read into the JSON day of
-** lib/day_format.php, and from there it is stored by the same code as a day posted to /api/day
-** (data_write_day()), so the packed-code knowledge stays in one place.
-*/
+// The NFP import, in four stages the endpoint calls in order: nfp_import_parse() (the body -> the canonical object, or a refusal of the
+// transport), nfp_import_schema_errors() (structure and types), nfp_import_build_plan() (meaning and consistency -> the days to write),
+// nfp_import_write_plan() (the only one that writes, in one transaction). Nothing is written before the three checks have passed: a
+// file is imported whole or not at all. A day of the file is read into the JSON day of lib/day_format.php and stored by data_write_day(),
+// like a day posted to /api/day.
 
 require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/data.php";
@@ -30,22 +19,19 @@ require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/nfp_format.php";
 
-// ===========================================================================
-// IMPORT -- stage 1: the request body
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Stage 1: the body
+// ---------------------------------------------------------------------------
 
-// Returns ["ok" => true, "file" => object, "warnings" => []] or ["ok" => false, "code" =>,
-// "message" =>, "details" => []]. Everything refused here is a transport-level refusal: too big,
-// not UTF-8, not JSON, or a schema version this build does not implement. The warnings are what
-// was made of the file on the way in (its nulls); they go on to stage 3's report.
+// ["ok" => true, "file" => object, "warnings" => [its nulls, for stage 3's report]] or ["ok" => false, "code", "message", "details"]:
+// too big, not UTF-8, not JSON, or a schema version this build does not implement.
 function nfp_import_parse(string $raw, ?int $content_length = null): array {
 	$refuse = fn(string $code, string $message, array $details = []) =>
 		["ok" => false, "code" => $code, "message" => $message, "details" => $details];
 
 	if ($raw === '') {
-		// Apache refuses such a body before PHP starts (server_conf/zz-moncycleapp.conf); behind another
-		// server, PHP discards a body larger than post_max_size and may leave php://input empty, so an
-		// empty body with a Content-Length is almost always a file over the limit.
+		// Apache refuses a body over the limit before PHP starts; behind another server PHP drops one over post_max_size and leaves
+		// php://input empty, so an empty body with a Content-Length is almost always a file too big.
 		if (!is_null($content_length) && $content_length > 0) {
 			return $refuse("file_too_large", sprintf(
 				"The request body was dropped before it reached the application: %d bytes against a server limit of %s (post_max_size). Split the file into fewer cycles.",
@@ -76,8 +62,7 @@ function nfp_import_parse(string $raw, ?int $content_length = null): array {
 		return $refuse("invalid_json", "The top level of the file must be a JSON object.");
 	}
 
-	// The version gate runs before normalization: a file claiming a version this build does
-	// not implement must say so plainly, not fail later on individual fields.
+	// before the normalising: a version this build does not implement must say so plainly, not fail later on fields
 	$version = nfp_format_get($decoded, "schemaVersion");
 	if (!is_string($version) || trim($version) === '') {
 		return $refuse("missing_schema_version", "'schemaVersion' is required and must not be empty.");
@@ -110,15 +95,12 @@ function nfp_import_null_warnings(array $nulls): array {
 	return $warnings;
 }
 
-// ===========================================================================
-// IMPORT -- stage 2: structure and types
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Stage 2: structure and types
+// ---------------------------------------------------------------------------
 
-// Each error reads "[where] what is wrong", with "where" the path inside the file
-// (cycles[0].days[7].temperature). Expects the canonical shape, so run nfp_import_parse() first.
-//
-// A wrong value in a field this app never stores cannot break anything, so it is not an error:
-// its message is added to $warnings and the file goes on (stage 3 reports the field as ignored).
+// Errors "[where] what is wrong" ("cycles[0].days[7].temperature"). A wrong value in a field this app never stores breaks nothing: it is
+// a warning, and stage 3 reports the field as ignored.
 function nfp_import_schema_errors(object $file, array &$warnings = []): array {
 	$schema = json_decode(NFP_FILE_SCHEMA);
 
@@ -138,7 +120,7 @@ function nfp_import_schema_errors(object $file, array &$warnings = []): array {
 		}
 		$errors[] = sprintf("[%s] %s", $where, $error['message']);
 	}
-	// a file wrong in one structural way is wrong on every day; keep the answer readable
+	// a file wrong in one way is wrong on every day: keep the answer readable
 	if (count($errors) > 50) {
 		$remaining = count($errors) - 50;
 		$errors = array_slice($errors, 0, 50);
@@ -147,8 +129,7 @@ function nfp_import_schema_errors(object $file, array &$warnings = []): array {
 	return $errors;
 }
 
-// Is $where (a path the schema reported) inside a field this app never stores: the two blocks about
-// the user, or a day or cycle field of the NOT_STORED lists of constants.php?
+// Is the path inside a field this app never stores: the two blocks about the user, or a field of the NOT_STORED lists?
 function nfp_import_is_unstored_field(string $where): bool {
 	if (preg_match('/^(?:userInformation|userMethodPreferences)(?:[.\[]|$)/', $where)) return true;
 	if (preg_match('/^cycles\[\d+\]\.days\[\d+\]\.(\w+)(?:[.\[]|$)/', $where, $m)) return isset(NFP_DAY_FIELDS_NOT_STORED[$m[1]]);
@@ -156,44 +137,19 @@ function nfp_import_is_unstored_field(string $where): bool {
 	return false;
 }
 
-// ===========================================================================
-// IMPORT -- stage 3: semantics, consistency, and the write plan
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Stage 3: meaning, consistency, and the days to write
+// ---------------------------------------------------------------------------
 
-/*
-** Reading a file is keeping a report, which every step below adds to, each message starting
-** with where it is ("[cycles[0]] ...", "[2026-04-01] ..."):
-**
-**   issues[]     hard inconsistencies -- any one of them rejects the file
-**   warnings[]   accepted, but the caller should know (method mismatch, ...)
-**   ignored[]    a field the file carries and this app has nowhere to store
-**   mapped[]     a field stored as something narrower than the file said
-**   duplicates[] dates the file itself carries twice -- also in issues[], where they do the
-**                rejecting; here as bare dates, because a dry run has to show them as a list
-**
-** issues[] refuse the file; warnings[] do not. The line between them is whether the value can be
-** stored at all: a temperature the column cannot hold is an issue, a storable one outside the
-** plausible band is a warning. Anything this app's own /export can write has to end up on the
-** warning side, or the app would be emitting files it refuses to read back.
-*/
-function nfp_import_report(): array {
-	return ["issues" => [], "warnings" => [], "ignored" => [], "mapped" => [], "duplicates" => []];
-}
-
-/*
-** The whole file -> the write plan. Returns the report, and
-**   plan[]    one entry per day to write, already encoded for db_update_day_timeline()
-**   cyclesRead, daysRead   what the file holds
-**
-** $warnings are the ones the stages before this one made (parse, schema): they open the report's
-** list, so the caller reads one list.
-**
-** Nothing here touches the DB.
-*/
+// The file read into a report, every message starting with where it is ("[cycles[0]] ...", "[2026-04-01] ..."): issues (any one refuses
+// the file), warnings (accepted, but say so), ignored (a field this app has nowhere to store), mapped (stored narrower than the file
+// said), duplicates (dates the file holds twice, also in issues, as a list for the dry run). Issue or warning is whether the value can be
+// stored at all: whatever this app's own export writes must stay a warning, or it would write files it refuses to read back. Answers the
+// report with "plan" (one entry per day to write, encoded for db_update_day_timeline()), "cyclesRead" and "daysRead". $warnings are the
+// earlier stages': they open the list. Nothing here touches the DB.
 function nfp_import_build_plan(object $file, array $user_account, array $warnings = []): array {
 	$account_method = user_account_method_name(intval($user_account["nfp_method"]));
-	$report = nfp_import_report();
-	$report["warnings"] = $warnings;
+	$report = ["issues" => [], "warnings" => $warnings, "ignored" => [], "mapped" => [], "duplicates" => []];
 	$plan = [];
 	$days_read = 0;
 
@@ -205,11 +161,8 @@ function nfp_import_build_plan(object $file, array $user_account, array $warning
 		return nfp_import_plan_result($report, $plan, 0, 0);
 	}
 
-	// The three count limits are advisory (see the NFP_LIMIT_ block in constants.php): /export is
-	// bounded by the date range asked for, not by them, so a long enough export breaks all three.
-	// They are reported and the file is read in full. The body size, already enforced in stage 1,
-	// is what bounds the work -- stages 1 and 2 have decoded and validated the whole file before
-	// any of these is looked at.
+	// The count limits are advisory (the export is bounded by its dates, not by them): reported, and the file read in full. The body
+	// size of stage 1 is what bounds the work.
 	if (count($cycles) > NFP_LIMIT_CYCLES) {
 		$report["warnings"][] = sprintf("[file] %d cycles, more than the %d a file usually carries. All of them were read.", count($cycles), NFP_LIMIT_CYCLES);
 	}
@@ -220,8 +173,7 @@ function nfp_import_build_plan(object $file, array $user_account, array $warning
 		$header = nfp_import_cycle($cycle, $where, $account_method, $report);
 		if (is_null($header)) continue;
 
-		// a cycle runs until the next first day is marked, so an account left alone for years
-		// exports one cycle padded with gaps all the way to today
+		// a cycle runs to the next first day: an account left alone for years exports one cycle of gaps
 		if (count($header["days"]) > NFP_LIMIT_DAYS_PER_CYCLE) {
 			$report["warnings"][] = sprintf("[%s] %d days, more than the %d a cycle usually runs. The cycle was read in full.", $where, count($header["days"]), NFP_LIMIT_DAYS_PER_CYCLE);
 		}
@@ -251,8 +203,7 @@ function nfp_import_plan_result(array $report, array $plan, int $cycles_read, in
 	];
 }
 
-// An imported file never rewrites the account itself. Letting it would mean a file could change
-// the address and the method of the account importing it.
+// An import never changes the account itself: a file must not change its address or its method.
 function nfp_import_account_notes(object $file, string $account_method, array &$report): void {
 	if (nfp_format_has($file, "userInformation")) {
 		$report["ignored"][] = "[file] userInformation: the account's own identity is never changed by an import.";
@@ -269,14 +220,12 @@ function nfp_import_account_notes(object $file, string $account_method, array &$
 	$report["ignored"][] = $note . ".";
 }
 
-// The days of a file are real dates between these: nothing older than the floor, nothing later than
-// today plus the grace (a client a timezone ahead of the server is fine).
+// The days of a file are between these: nothing older than the floor, nothing after today plus the grace (a client a time zone ahead).
 function nfp_import_date_limits(): array {
 	return [new DateTime(NFP_DATE_FLOOR), new DateTime('today +' . NFP_FUTURE_GRACE_DAYS . ' day')];
 }
 
-// What a cycle needs before its days are read: ["method", "start_date", "days"], or null when the
-// cycle is refused (an issue says why).
+// What a cycle needs before its days are read: ["method", "start_date", "days"], or null when it is refused (an issue says why).
 function nfp_import_cycle(mixed $cycle, string $where, string $account_method, array &$report): ?array {
 	[$floor, $ceiling] = nfp_import_date_limits();
 
@@ -320,7 +269,7 @@ function nfp_import_cycle(mixed $cycle, string $where, string $account_method, a
 		if (nfp_format_has($cycle, $field)) $report["ignored"][] = sprintf("[%s] %s: %s.", $where, $field, $why);
 	}
 	foreach (nfp_format_object_keys($cycle) as $key) {
-		if (!in_array($key, nfp_format_cycle_fields_known(), true)) {
+		if (!in_array($key, NFP_CYCLE_FIELDS_STRUCTURAL, true) && !isset(NFP_CYCLE_FIELDS_NOT_STORED[$key])) {
 			$report["ignored"][] = sprintf("[%s] %s: not a cycle field of schema %s.", $where, $key, NFP_SCHEMA_VERSION);
 		}
 	}
@@ -334,8 +283,8 @@ function nfp_import_cycle(mixed $cycle, string $where, string $account_method, a
 	return ["method" => $method, "start_date" => $start_date, "days" => $days];
 }
 
-// The days of a cycle -> the plan entries to write. The day at index n is the nth day from the
-// cycle's start date; $dates_seen (date => where) is shared by all the cycles of the file.
+// The days of a cycle -> the entries to write. The day at index n is the nth from the cycle's start; $dates_seen (date => where) is shared
+// by the cycles of the file.
 function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, array &$report): array {
 	[, $ceiling] = nfp_import_date_limits();
 	$plan = [];
@@ -352,9 +301,7 @@ function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, 
 		}
 		if (is_array($nfp_day)) $nfp_day = new stdClass();
 
-		// Overlapping cycles leave a date belonging to two of them; the file is ambiguous and is
-		// refused rather than guessed at. Gaps count, because the overlap is structural whether
-		// or not the day carries anything.
+		// overlapping cycles put a date in two of them: refused rather than guessed at (gaps count too)
 		if (isset($dates_seen[$date])) {
 			$report["issues"][] = sprintf("[%s] %s appears twice in the file (also in %s): the cycles overlap.", $where, $date, $dates_seen[$date]);
 			$report["duplicates"][] = $date;
@@ -365,23 +312,19 @@ function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, 
 		$is_cycle_first_day = ($day_index === 0);
 		$mapping = nfp_import_day($nfp_day, $cycle["method"], $date, $report);
 
-		// A day past today is only a problem when it carries something. Our own export pads a
-		// cycle with gaps up to today, and a client a timezone ahead would otherwise make its own
-		// file unimportable around midnight.
+		// a day past today is only a problem when it carries something: the export pads a cycle with gaps up to today, and a client a
+		// time zone ahead would otherwise make its own file unimportable around midnight
 		if ($day_date > $ceiling && ($mapping["content"] || $is_cycle_first_day)) {
 			$report["issues"][] = sprintf("[%s] day %d falls on %s, which is in the future.", $where, $day_index, $date);
 			continue;
 		}
 
-		// The first day of a cycle is always written, even with nothing recorded on it: it is
-		// what marks the cycle boundary (day_timeline.cycle_1st_day), and dropping it would lose
-		// the cycle itself. Any other empty day is a gap in the timeline, and is not written.
+		// the first day of a cycle is written even empty (it marks the cycle); any other empty day is a gap, not written
 		if (!$mapping["content"] && !$is_cycle_first_day) continue;
 
 		$fields = day_format_from_json($mapping["day"] + ["cycleFirstDay" => $is_cycle_first_day]);
 
-		// fc_score is varchar(32); the five note groups are packed into it, so this is the only
-		// place the packed length is knowable.
+		// the five note groups packed in fc_score: only here is the packed length known
 		if (!is_null($fields["fc_score"]) && mb_strlen($fields["fc_score"]) > DAY_LIMIT_FC_SCORE_CHARS) {
 			$report["issues"][] = sprintf("[%s] the FertilityCare notes pack into %d characters; the limit is %d.", $date, mb_strlen($fields["fc_score"]), DAY_LIMIT_FC_SCORE_CHARS);
 			continue;
@@ -399,16 +342,9 @@ function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, 
 	return $plan;
 }
 
-/*
-** One NFP day -> the JSON day of lib/day_format.php: ["day" =>, "sensations" =>, "observations" =>,
-** "content" =>]. "content" is false for a day the file leaves empty. What is found wrong or not
-** storable goes to the report.
-**
-** How a field is treated depends on the cycle's method, because the format reuses the same key
-** for different vocabularies: codifiedMucusSensation is "0".."10WL" under FertilityCare but
-** "Dry|Humid|Wet|Lubricated" under symptothermic_fr. Only the FertilityCare reading can be
-** stored, so under any other method those keys are reported rather than written.
-*/
+// One NFP day -> ["day" => the JSON day, "sensations", "observations", "content" => false for a day the file leaves empty]; what is wrong
+// or not storable goes to the report. The format reuses keys across methods (codifiedMucusSensation is "0".."10WL" under FertilityCare,
+// "Dry|Humid|Wet|Lubricated" under symptothermic_fr): only the FertilityCare reading can be stored, others are reported.
 function nfp_import_day(object $nfp_day, string $method, string $date, array &$report): array {
 	$day = [];
 
@@ -449,11 +385,8 @@ function nfp_import_day_comment(object $nfp_day, string $date, array &$day, arra
 	$day["comment"] = $joined;
 }
 
-// The format calls mucusNotObserved incompatible with any observation, but day_timeline has no
-// such rule: day_not_observed is just another column, and a day can carry it alongside a stamp or
-// a label -- so /export writes that combination, and refusing it here would make this app's own
-// files unimportable. Both are kept, exactly as the account had them, and the contradiction is
-// only reported.
+// The format calls mucusNotObserved incompatible with any observation; the app stores both side by side, and its export writes them:
+// both are kept, and the contradiction is reported.
 function nfp_import_day_not_observed(object $nfp_day, string $date, array &$day, array &$report): void {
 	if (nfp_format_get($nfp_day, "mucusNotObserved") !== true) return;
 
@@ -473,8 +406,7 @@ function nfp_import_day_stamp(object $nfp_day, string $date, array &$day, array 
 
 	if (is_string($colour) && $colour !== '') {
 		$day["stampColor"] = $colour;          // the schema has checked the enum
-		// stamp is ''|R|G|Y with an optional BB: a white stamp is the absence of a colour, so on its
-		// own it cannot be told from a day with no stamp at all.
+		// a white stamp is the baby on no colour: without the baby it is no stamp
 		if ($colour === 'White' && !$baby) {
 			$report["mapped"][] = sprintf("[%s] stampColor 'White' without stampBaby is stored as no stamp.", $date);
 		}
@@ -505,8 +437,7 @@ function nfp_import_day_notes(object $nfp_day, string $method, string $date, arr
 		return;
 	}
 
-	// Bleeding is the one codified field with a meaning outside FertilityCare: a bleeding day is a
-	// red stamp here. The rest of the codified vocabulary has no equivalent.
+	// bleeding is the one codified field with a meaning outside FertilityCare: a red stamp here
 	$bleeding = nfp_format_get($nfp_day, "codifiedBleedingObservation");
 	if (is_string($bleeding) && trim($bleeding) !== '') {
 		if (!isset($day["stampColor"])) {
@@ -551,9 +482,7 @@ function nfp_import_day_labels(object $nfp_day, string $date, array &$report): a
 		}
 		$names = array_values(array_unique($names));
 
-		// Nothing caps how many labels a day is linked to -- link_day_timeline_description has no
-		// such key -- so /export can write more than the format's advisory count. They are all
-		// imported; dropping the overflow would lose data the account already had.
+		// nothing caps the labels of a day, so the export can write more than the advisory count: all are imported
 		if (count($names) > NFP_LIMIT_DESCRIPTIONS_PER_DAY) {
 			$report["warnings"][] = sprintf(
 				"[%s] %d %s entries, more than the %d a day usually carries. All of them were imported.",
@@ -597,9 +526,7 @@ function nfp_import_day_temperature(object $nfp_day, string $date, array &$day, 
 	$value = floatval($temperature);
 	$printed = rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
 
-	// Outside what decimal(4,2) unsigned holds there is nothing to write, so the file is refused.
-	// Inside the column but outside the band a body reaches, the reading is kept: nothing stopped
-	// it being recorded in the first place, and /export writes it back.
+	// outside what the column holds the file is refused; inside it but outside a body's band the reading is kept (the export writes it)
 	if ($value < DAY_TEMPERATURE_STORABLE_MIN || $value > DAY_TEMPERATURE_STORABLE_MAX) {
 		$report["issues"][] = sprintf(
 			"[%s] temperature %s cannot be stored: the column holds %.1f-%.2f C.",
@@ -618,8 +545,7 @@ function nfp_import_day_temperature(object $nfp_day, string $date, array &$day, 
 	$time = nfp_format_get($nfp_day, "temperatureTime");
 	if (!is_string($time) || trim($time) === '') return;
 
-	// a TIME column can hold values outside a clock day (MariaDB goes to 838:59:59), so this is
-	// reachable from stored data: keep the reading, drop the hour
+	// a TIME column runs to 838:59:59, so stored data reaches this: the reading is kept without its hour
 	if (!is_null($clock = day_format_time($time))) $day["temperatureTime"] = $clock;
 	else {
 		$report["warnings"][] = sprintf("[%s] temperatureTime '%s' is not an hh:mm:ss time of day; the temperature was imported without it.", $date, trim($time));
@@ -632,34 +558,19 @@ function nfp_import_day_unmapped(object $nfp_day, string $date, array &$report):
 		if (nfp_format_has($nfp_day, $field)) $report["ignored"][] = sprintf("[%s] %s: %s.", $date, $field, $why);
 	}
 	foreach (nfp_format_object_keys($nfp_day) as $key) {
-		if (!in_array($key, nfp_format_day_fields_known(), true)) {
+		if (!in_array($key, NFP_DAY_FIELDS_STORED, true) && !isset(NFP_DAY_FIELDS_NOT_STORED[$key])) {
 			$report["ignored"][] = sprintf("[%s] %s: not a day field of schema %s.", $date, $key, NFP_SCHEMA_VERSION);
 		}
 	}
 }
 
-// ===========================================================================
-// IMPORT -- stage 3b: what stage 4 would do, read instead of written
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Stage 3b: what stage 4 would do, read instead of written (the dry run)
+// ---------------------------------------------------------------------------
 
-/*
-** The dry run's answer, in the same shape nfp_import_write_plan() returns, so one report
-** describes a checked file and an imported one alike.
-**
-** Re-running the checks is not enough on its own: the question a user has before importing is
-** "what does this file touch that I already have?", and the answer only exists in the account.
-** So this resolves, by reading, the two things stage 4 would otherwise discover as it writes:
-**
-**   - the dates the account already holds a day on. A real run skips them (override=0) or
-**     replaces them whole (override=1); both lists are filled the way the passed $override
-**     would have it, and daysAlreadyInAccount carries them regardless of it, since that is the
-**     set the user needs in order to choose.
-**   - the free-text labels the file uses: the ones the account does not have yet would be
-**     created, and the ones it records under the other type keep the type they have, which is
-**     the single narrowing data_resolve_description() reports.
-**
-** Read-only: two SELECTs, no transaction, nothing here can write.
-*/
+// The answer of nfp_import_write_plan(), read: the question before an import is "what does this file touch that I already have?". The
+// dates the account has a day on (skipped, or with $override replaced; daysAlreadyInAccount lists them either way, to choose), and the
+// labels the file uses (new ones would be created; one recorded under the other type keeps its type). Two SELECTs, nothing written.
 function nfp_import_preview_plan($db, int $no_user_account, array $plan, bool $override): array {
 	$already = [];
 	$created = [];
@@ -667,8 +578,7 @@ function nfp_import_preview_plan($db, int $no_user_account, array $plan, bool $o
 	$skipped = [];
 
 	if (!empty($plan)) {
-		// the plan holds no duplicate date -- a file carrying one is rejected in stage 3 --
-		// so one range query over its span answers every date in it
+		// the plan holds no date twice (stage 3 refuses it): one range query answers every date
 		$dates = array_column($plan, "date");
 		$existing = array_flip(db_select_day_timeline_dates_frame($db, min($dates), max($dates), $no_user_account));
 
@@ -683,9 +593,7 @@ function nfp_import_preview_plan($db, int $no_user_account, array $plan, bool $o
 		}
 	}
 
-	// Same walk as nfp_import_write_plan(): over the days it would write (a skipped day writes no
-	// labels either), sensations before observations, each name resolved once with its first
-	// use deciding the type. $recorded plays the part its $cache does, holding only the type.
+	// the walk of nfp_import_write_plan(): the days it would write, sensations then observations, a name's first use deciding its type
 	$recorded = [];
 	foreach (db_select_description_name_type($db, $no_user_account) as $description) {
 		$recorded[$description["name"]] = intval($description["type"]);
@@ -720,16 +628,13 @@ function nfp_import_preview_plan($db, int $no_user_account, array $plan, bool $o
 	];
 }
 
-// ===========================================================================
-// IMPORT -- stage 4: the write
-// ===========================================================================
+// ---------------------------------------------------------------------------
+// Stage 4: the write
+// ---------------------------------------------------------------------------
 
-// The one narrowing a label can go through: the file uses a name under one type and the
-// account already records it under the other. The label keeps the type it has, so this is a
-// report and not a change. nfp_import_preview_plan() has to predict exactly what
-// data_resolve_description() says, hence the shared wording.
+// A name the file uses under one type that the account records under the other: the label keeps its type. Shared by the dry run and the
+// write, which must say the same.
 function nfp_import_narrowed_note(string $date, string $name, int $recorded_type): string {
-	// a label of undefined type is just called a label
 	$type_name = $recorded_type === DESCRIPTION_TYPE_UNDEFINED ? "label" : (DESCRIPTION_TYPE_NAMES[$recorded_type] ?? "label");
 	return sprintf(
 		"[%s] '%s' is recorded as a %s on this account and stays one: a label carries a single type here.",
@@ -737,18 +642,9 @@ function nfp_import_narrowed_note(string $date, string $name, int $recorded_type
 	);
 }
 
-/*
-** Writes the plan, in one transaction: a failure anywhere leaves the account untouched.
-**
-** $override decides what happens on a date that already has data: false skips it and reports
-** it, true replaces it. A replaced day is replaced whole, including its linked descriptions --
-** same semantics as a POST to /api/day, which also carries the full state of a day, and which
-** writes through the same data_write_day().
-**
-** $written_days, when the caller passes one, receives the [no_day, date] of each day written, and
-** $created_descriptions the id of each description made, for the log (nfp_import_log_fields()); the
-** array returned, and so the API answer, does not change.
-*/
+// The plan in one transaction: a failure anywhere leaves the account untouched. A date that has a day is skipped, or with $override
+// replaced whole, descriptions included (a POST /api/day does the same, through data_write_day()). $written_days receives the [no_day,
+// date] of each day written and $created_descriptions the id of each description made, for the log.
 function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $override, string $last_write_client_UTC, ?array &$written_days = null, ?array &$created_descriptions = null): array {
 	$written_days = [];
 	$created_descriptions = [];
@@ -781,7 +677,7 @@ function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $ove
 						$descriptions_created += 1;
 						$created_descriptions[] = $description["id"];
 					}
-					// asking for the other type is a narrowing: the label keeps the one it has
+	
 					if ($description["type"] !== $type) $narrowed[] = nfp_import_narrowed_note($date, $name, $description["type"]);
 					$no_descriptions[] = $description["id"];
 				}
@@ -794,10 +690,7 @@ function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $ove
 			else $overwritten[] = $date;
 		}
 
-		// daysAlreadyInAccount is the union of the two lists above, and it is reported on its own
-		// because it is the one that does not depend on $override: it says which days of the file
-		// the account already had, whichever way they were treated. nfp_import_preview_plan() answers
-		// with the same keys, so a dry run and a real one report the same shape.
+		// daysAlreadyInAccount: the days of the file the account had, whatever $override did with them
 		return [
 			"daysCreated" => $created,
 			"daysOverwritten" => $overwritten,
@@ -809,10 +702,8 @@ function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $ove
 	});
 }
 
-// The fields of the `data.import` log line, from the report api/import.php answers with: the counts
-// and the options. For a real run, $written_days and $created_descriptions (see nfp_import_write_plan())
-// add the bounds of what it wrote -- earliest and latest date, smallest and largest day id, smallest and
-// largest id of the descriptions made, not a list. A dry run writes nothing, and so has no bounds.
+// The `data.import` log line: the counts and the options, and for a real run the bounds of what it wrote (dates, day ids, ids of the
+// descriptions made), not a list.
 function nfp_import_log_fields(array $report, array $written_days = [], array $created_descriptions = []): array {
 	$fields = [
 		"dry" => $report["dryRun"],

@@ -7,18 +7,14 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// What the two PDF charts are drawn with: DocPdf, an FPDF with the helpers both charts use, and the
-// conversion of text to what FPDF's core fonts can show. The PDFs only use those fonts: they are
-// not embedded, which keeps the files tiny, but they only cover windows-1252, so every string drawn
-// goes through doc_pdf_text() first.
+// What both charts are drawn with: DocPdf, an FPDF with their shared helpers. The PDFs use FPDF's core fonts only: not embedded, so the
+// files are tiny, but they only cover windows-1252, so every string drawn goes through doc_pdf_text() first.
 
 use Fpdf\Fpdf;
 
-// DocPdf extends Fpdf as soon as this file loads, so the autoloader has to be there first
-require_once __DIR__ . "/../vendor/autoload.php";
-// The core fonts only speak windows-1252. Everything drawn in a PDF goes through here, read as
-// UTF-8 -- the DB and this source file both are, so nothing is guessed. A character cp1252 has
-// no glyph for (an emoji, a CJK character) is drawn as "?".
+require_once __DIR__ . "/../vendor/autoload.php";   // DocPdf extends Fpdf as this file loads
+
+// UTF-8 (the DB and this file) to windows-1252; a character it has no glyph for (an emoji) is drawn as "?".
 function doc_pdf_text(?string $text): string {
 	if (is_null($text) || $text === '') return '';
 	$substitute = mb_substitute_character();
@@ -33,9 +29,7 @@ class DocPdf extends Fpdf {
 	// $title and $author are UTF-8: the document properties are not limited to windows-1252.
 	public function __construct(string $orientation, string $size, string $title, string $author) {
 		parent::__construct($orientation, 'mm', $size);
-		// Every row is measured before it is drawn, and the breaks are decided from that, so
-		// FPDF must never break a page on its own -- in the middle of a MultiCell, say.
-		$this->SetAutoPageBreak(false);
+		$this->SetAutoPageBreak(false);   // the rows are measured first and the breaks decided from that, never in a MultiCell
 		$this->SetTitle($title, true);
 		$this->SetAuthor($author, true);
 		$this->SetCreator("moncycle.app", true);
@@ -52,9 +46,8 @@ class DocPdf extends Fpdf {
 		return $this->cMargin;
 	}
 
-	// Draws runs of differently styled text side by side, on the baseline Cell($w, $h, $txt)
-	// would use at ($x, $y) in the first run's style, but with no cell margin. $runs is
-	// [[style, text, space before it in mm], ...], the text already windows-1252.
+	// Runs of differently styled text side by side, on the baseline Cell() would use at ($x, $y) in the first run's style, without the
+	// cell margin. $runs: [[style, text (windows-1252), space before it in mm], ...].
 	public function TextRuns(float $x, float $y, float $h, array $runs): void {
 		$baseline = null;
 		foreach ($runs as [$style, $text, $gap]) {
@@ -66,8 +59,7 @@ class DocPdf extends Fpdf {
 		}
 	}
 
-	// $txt, cut short with an ellipsis if it is wider than Cell($w, ..., $txt) can hold, in the
-	// current font.
+	// $txt cut short with an ellipsis when it is wider than Cell($w, ...) holds, in the current font.
 	public function FitText(string $txt, float $w): string {
 		$room = $w - 2 * $this->cMargin;
 		if ($this->GetStringWidth($txt) <= $room) return $txt;
@@ -77,9 +69,8 @@ class DocPdf extends Fpdf {
 		return rtrim($txt) . $ellipsis;
 	}
 
-	// How many lines MultiCell($w, $h, $txt) takes in the current font: MultiCell()'s own line
-	// breaking, as in FPDF's "Table with MultiCells" script. It is what lets a row's height be
-	// known before anything of it is drawn.
+	// How many lines MultiCell($w, $h, $txt) takes in the current font, by its own line breaking (FPDF's "Table with MultiCells" script):
+	// a row's height is known before anything of it is drawn.
 	public function NbLines(float $w, string $txt): int {
 		$cw = $this->CurrentFont['cw'];
 		$wmax = ($w - 2 * $this->cMargin) * 1000 / $this->FontSize;
@@ -118,8 +109,7 @@ class DocPdf extends Fpdf {
 		return $nl;
 	}
 
-	// $txt cut short with an ellipsis, if it needs more than $max lines in MultiCell($w, ...) in
-	// the current font. Returns [the text to draw, the lines it takes].
+	// $txt cut short with an ellipsis when it needs more than $max lines in MultiCell($w, ...): [the text to draw, the lines it takes].
 	public function FitLines(float $w, string $txt, int $max): array {
 		$lines = $this->NbLines($w, $txt);
 		if ($lines <= $max) return [$txt, $lines];
