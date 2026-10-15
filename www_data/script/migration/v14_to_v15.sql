@@ -203,6 +203,13 @@ ADD UNIQUE `email_token_hash` (`email_token_hash`),
 ALGORITHM=INPLACE, LOCK=NONE;
 UPDATE `user_account` SET `email_verified_at` = `inscription_date`;
 
+-- The terms of service are accepted when the account is made (POST /api/register, `termsAccepted`): terms_accepted_at is the moment, the
+-- trace of a consent that has to be shown (the terms, section 7.2). NULL for every account that exists, which accepted nothing on record,
+-- and for the two demo accounts.
+ALTER TABLE `user_account`
+ADD `terms_accepted_at` timestamp NULL DEFAULT NULL,
+ALGORITHM=INSTANT;
+
 -- The two addresses of an account get names that say what they are for. login_email signs in and receives the links of the account;
 -- notification_emails is a list of addresses (separated by ";", 5 at most) that receive the cycles, the reminders and the warnings with it:
 -- the column is wider than the address it held (1024 characters, in place: a utf8mb4 varchar already has a two-byte length).

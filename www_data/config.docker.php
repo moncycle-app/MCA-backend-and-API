@@ -75,10 +75,14 @@ define("WEB_APP_ORIGINS", env_origins("WEB_APP_ORIGINS"));
 // throttling and the log use it). Empty: every request is a client, whatever it sends.
 define("TRUSTED_PROXIES", env_ip_ranges("TRUSTED_PROXIES"));
 
-// The news banner of the web app: the https page whose h4, p, b, i, br, ul, li, a and time it shows (nothing else
-// gets through). Unset: the official instance's. Set empty: no banner and no request to anybody. The Docker
-// image also reads it for the CSP (connect-src, server_conf/zz-moncycleapp.conf): a URL with no query or fragment.
+// The news banner of the web app: an https page shown in an iframe (sandboxed, no script), which keeps the design of the page. Unset: the
+// official instance's. Set empty: no banner. The Docker image also reads it for the CSP (frame-src, server_conf/docker-entrypoint.sh).
 define("NEWS_URL", getenv("NEWS_URL") === false ? "https://www.moncycle.app/actu.html" : trim(getenv("NEWS_URL")));
+
+// The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
+// GET /api/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
+// required). The Docker image also reads it for the CSP (frame-src, server_conf/docker-entrypoint.sh).
+define("TERMS_OF_SERVICE_URL", getenv("TERMS_OF_SERVICE_URL") === false ? "https://www.moncycle.app/ToS/term_of_service_fr.html" : trim(getenv("TERMS_OF_SERVICE_URL")));
 
 // Login brute-force defense. A value of 0 turns the feature it sets off.
 // Failed attempts on an account older than this many minutes restart at 1 (0: they are not

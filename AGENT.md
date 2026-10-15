@@ -91,7 +91,8 @@ Also:
   `code`; everything is checked before anything is written; it answers the account in `data` and `fieldsUpdated` /
   `loggedOutDevices` / `loginEmailLinkSent` in `meta`), `account_notification_emails_parse()` (`user_account.notification_emails` is a
   list of at most 5 addresses separated by `;`, lower case, no duplicate, 1024 characters; `mail_recipients()` adds the login
-  address), and the two requests that make a link: `account_register()` (a new address gets an unverified account and a verify link;
+  address), and the two requests that make a link: `account_register()` (a new address gets an unverified account, with the moment it accepted
+  the terms in `terms_accepted_at` (`POST /api/register` refuses a request without `termsAccepted: true`), and a verify link;
   an address that has an account is never touched and gets a reset link; same answer either way; the insert that finds the address
   taken ENDS its transaction and goes round again, because a share lock on the key plus a locking read is a deadlock, measured) and
   `account_recover_password()` (a link only: the password is not touched).
@@ -127,7 +128,7 @@ Also:
   with ONE answer: `input_exit_if_issues()` = 400 `validation_failed` with `details.issues`. A message names the field, the type that
   came and what is expected; it never holds a password, a code or a text.
 - **`server.php`** `server_info()` (`GET /api/server_info`: `apiVersion` = `API_VERSION`, `maintenanceMode`, the toggles, `newsUrl`,
-  `limits`; made from the settings alone, **no database**, so it answers in maintenance too, and it tells neither the release nor the
+  `termsOfServiceUrl`, `limits`; made from the settings alone, **no database**, so it answers in maintenance too, and it tells neither the release nor the
   schema), `server_exit_if_schema_mismatch()` (503 `schema_mismatch`, run by every endpoint that opens the database after the
   maintenance exit), `server_build()` (release, build date and commit of `lib/build.json`: the NFP export stamps them, the API does not
   tell them).
@@ -248,8 +249,10 @@ refactoring the old code.
   `js/account.js`, `js/tableau.js`, `js/swagger-init.js`).
 - **Nothing a user can store goes into the page as HTML.** Names, comments and labels go through `.text()`, `.val()` or text nodes
   (`moncycle_app_show_error()` for a server message). jQuery's `append(string)` reads a `<` or an entity in a string as HTML, so a text
-  is `document.createTextNode()`. The news banner (`NEWS_URL`, the `newsUrl` of `GET /api/server_info`) is rebuilt from an allow-list
-  (`moncycle_app.news_node` in `js/tableau.js`).
+  is `document.createTextNode()`. The two pages from outside, the news banner (`NEWS_URL`, the `newsUrl` of `GET /api/server_info`) and
+  the terms of service (`TERMS_OF_SERVICE_URL`, `termsOfServiceUrl`), are never read by the page: each is a sandboxed iframe
+  (`sandbox` without `allow-scripts`, `referrerpolicy="no-referrer"`), and the CSP's `frame-src` names their origins. An iframe of
+  another origin cannot be read, so "OK merci" of the banner hides it for 7 days instead of remembering a title.
 - **Forms carry the data, the script only submits it.** Every value sent to the remote API lives in an HTML `<form>` of the page: a
   visible field for what the user fills in, a hidden one (`<input type="hidden">`) for what the user need not know. The script catches
   the form's `submit` event (`preventDefault()`), reads the form, builds the JSON body, calls the API and shows the answer; it holds

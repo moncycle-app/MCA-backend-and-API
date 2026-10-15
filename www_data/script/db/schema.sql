@@ -30,6 +30,7 @@ CREATE TABLE `user_account` (
   `email_token_purpose` tinyint(1) unsigned DEFAULT NULL,
   `email_token_expires_at` timestamp NULL DEFAULT NULL,
   `email_token_new_email` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
+  `terms_accepted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`no_user_account`),
   UNIQUE KEY `login_email` (`login_email`),
   UNIQUE KEY `email_token_hash` (`email_token_hash`)

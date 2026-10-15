@@ -42,9 +42,13 @@ RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 # the scripts of script/ answer to this machine only (Require ip, see zz-moncycleapp.conf)
 ENV APP_SCRIPT_ALLOW="127.0.0.1 ::1"
-# the news page of the web app: the app reads it as the NEWS_URL setting, and Apache puts it in the CSP's
-# connect-src (zz-moncycleapp.conf). Same default as config.docker.php; set it empty to turn the banner off.
+# the news page and the terms of service of the web app, both shown in an iframe: the app reads them as the NEWS_URL and
+# TERMS_OF_SERVICE_URL settings. Same defaults as config.docker.php; NEWS_URL empty turns the banner off. The entrypoint derives
+# the CSP's frame-src from them (CSP_FRAME_SRC, zz-moncycleapp.conf): this value is only the one of the default URLs, for Apache
+# to start with when the entrypoint does not run.
 ENV NEWS_URL="https://www.moncycle.app/actu.html"
+ENV TERMS_OF_SERVICE_URL="https://www.moncycle.app/ToS/term_of_service_fr.html"
+ENV CSP_FRAME_SRC="https://www.moncycle.app"
 # the daily job (cron.php at 3:30, container time zone) runs inside the container, and so does the hourly reset of the
 # demo accounts when DEMO_ENABLED (a setting of the app, off by default); false to run them from the host (README,
 # "Cron") or not at all.

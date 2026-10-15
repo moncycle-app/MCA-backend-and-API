@@ -616,49 +616,22 @@ moncycle_app = {
 		}
 		else moncycle_app.charger_cycle();
 	},
-	// The news banner: the HTML of the instance's NEWS_URL (the server says it in the account, null when it
-	// is off), once per page. What comes back is another site's markup: it is parsed in an inert document and
-	// rebuilt from the tags below, no attribute copied but an https href.
+	// The news banner: the page of the instance's NEWS_URL (the server says it in the account, null when it is off), once per page, in a
+	// sandboxed iframe: it is another site's page, and it keeps its own design. A frame of another origin cannot be read, so the banner
+	// cannot tell a new news from the one already read: "OK merci" hides it for news_hidden_days days.
 	news_requested : false,
-	news_tags : ["h4", "p", "b", "i", "br", "ul", "li", "a", "time"],
-	news_node : function (node) {
-		if (node.nodeType == Node.TEXT_NODE) return document.createTextNode(node.textContent);
-		if (node.nodeType != Node.ELEMENT_NODE) return null;
-		let tag = node.tagName.toLowerCase();
-		if (["script", "style", "template"].includes(tag)) return null;
-		// a tag outside the list is dropped but its text stays
-		let copy = moncycle_app.news_tags.includes(tag) ? document.createElement(tag) : document.createDocumentFragment();
-		if (tag == "a") {
-			let href = node.getAttribute("href") || "";
-			if (/^https:\/\//i.test(href)) {
-				copy.setAttribute("href", href);
-				copy.setAttribute("target", "_blank");
-				copy.setAttribute("rel", "noopener noreferrer");
-			}
-		}
-		node.childNodes.forEach(function (child) {
-			let child_copy = moncycle_app.news_node(child);
-			if (child_copy) copy.appendChild(child_copy);
-		});
-		return copy;
-	},
+	news_hidden_days : 7,
 	charger_actu : function() {
 		let url = moncycle_store.account ? moncycle_store.account.newsUrl : null;
-		if (!url || moncycle_app.news_requested) return;
+		if (!url || !/^https:\/\//i.test(url) || moncycle_app.news_requested) return;
 		moncycle_app.news_requested = true;
-		$.get(url, function(data) {
-			let news = new DOMParser().parseFromString(String(data), "text/html");
-			$("#actu_contenu").empty();
-			news.body.childNodes.forEach(function (node) {
-				let copy = moncycle_app.news_node(node);
-				if (copy) $("#actu_contenu")[0].appendChild(copy);
-			});
-			let titre = $("#actu_contenu").find("h4").text();
-			if (titre && localStorage.actu_lu != titre) $("#actu").show();
-			$("#fermer_actu").click(function () {
-				localStorage.actu_lu = $("#actu_contenu").find("h4").text();
-				$("#actu").hide();
-			});
+		if (parseInt(localStorage.actu_hidden_until) > Date.now()) return;
+		$("#actu_frame").attr("src", url);
+		$("#actu").show();
+		$("#fermer_actu").click(function () {
+			localStorage.actu_hidden_until = Date.now() + moncycle_app.news_hidden_days * 24 * 60 * 60 * 1000;
+			$("#actu").hide();
+			$("#actu_frame").removeAttr("src");
 		});
 	},
 	charger_cycle : function() {

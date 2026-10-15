@@ -38,6 +38,20 @@ form {
 	display: none;
 }
 
+/* the terms of service of the sign-up page: another site's page, in a frame that scrolls (its height cannot follow the page's) */
+.terms_frame {
+	display: block;
+	width: 90%;
+	height: 22em;
+	margin: 5px 0;
+	border: 1px solid #1e824c;
+	border-radius: 6px;
+}
+
+.terms_frame[hidden] {
+	display: none;
+}
+
 .register_commente {
 	text-decoration: none;
 }

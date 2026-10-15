@@ -3,6 +3,7 @@ openapi: 3.0.3
 info:
   title: moncycle.app API
   version: "2.0"
+  termsOfService: https://www.moncycle.app/ToS/term_of_service_fr.html
   license:
     name: CC BY-NC-SA 4.0
     url: https://creativecommons.org/licenses/by-nc-sa/4.0
@@ -10,6 +11,11 @@ info:
     This API stores **daily fertility observations** for one person, or for one couple sharing
     an account. It is the backend of the moncycle.app web app. Other clients (mobile apps,
     scripts, research tools) can use the same API.
+
+    **Using this API means accepting its terms of service** (`termsOfService` above). An operator may publish
+    others: the address of the terms of the server you talk to is `termsOfServiceUrl` in `GET /server_info`.
+    A client that creates accounts for people must have them accept the terms first: `POST /register` requires
+    `termsAccepted: true`.
 
     Read this page from top to bottom the first time, then use it as a reference. Domain words
     (peak day, stamp, Billings…) are explained in the **Glossary** at the end.
@@ -518,7 +524,7 @@ paths:
       description: |-
         Public, no token. **Call it first**, before anything else: it says which API this server speaks
         (`apiVersion`), whether the operator put it in maintenance, which optional features it has (new accounts, the
-        demo accounts, the captcha, the news banner), and the numbers a client needs to check a form before sending it.
+        demo accounts, the captcha, the news banner), the address of the terms of service, and the numbers a client needs to check a form before sending it.
         It is made from the settings of the server alone: the database is not opened, so it answers in maintenance too.
 
         ### The contract of this call
@@ -696,7 +702,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [nickname, email, password, birthYear, captcha, captchaToken]
+              required: [nickname, email, password, birthYear, termsAccepted, captcha, captchaToken]
               properties:
                 nickname:
                   type: string
@@ -745,7 +751,14 @@ paths:
                 okForResearch:
                   type: boolean
                   default: false
-                  description: Consent to share anonymous data with research programs.
+                  description: Consent to share anonymous data with research programs. Optional, and the user can change it later (`research` in `POST /account`).
+                termsAccepted:
+                  type: boolean
+                  description: |-
+                    Must be `true`: the user has read and accepts the terms of service (`termsOfServiceUrl` in `GET /server_info`). `false`
+                    is refused with the issue code `terms_not_accepted`, a missing field with `missing_field`. The moment is kept with the
+                    account, as the trace of the consent. Ignored, like the rest, when the address already has an account.
+                  example: true
       responses:
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
@@ -3963,7 +3976,7 @@ components:
         code:
           type: string
           description: A stable slug to branch on.
-          enum: [unknown_field, read_only_field, missing_field, wrong_type, invalid_value, out_of_range, too_long, too_many, invalid_date, invalid_timestamp, invalid_email, date_mismatch, body_not_allowed, password_required, password_too_short, password_too_long, password_invalid, password_unchanged, email_unchanged, invalid_range]
+          enum: [unknown_field, read_only_field, missing_field, wrong_type, invalid_value, out_of_range, too_long, too_many, invalid_date, invalid_timestamp, invalid_email, date_mismatch, body_not_allowed, password_required, password_too_short, password_too_long, password_invalid, password_unchanged, email_unchanged, invalid_range, terms_not_accepted]
           example: invalid_value
         message:
           type: string
@@ -4021,9 +4034,18 @@ components:
           format: uri
           nullable: true
           description: |-
-            The https page the web app reads its news banner from: the `NEWS_URL` setting of the instance. `null` when it is off, and
-            for any value that is not an https URL.
+            The https page the web app shows as its news banner, in an iframe: the `NEWS_URL` setting of the instance. `null` when it is off,
+            and for any value that is not an https URL.
           example: https://www.moncycle.app/actu.html
+        termsOfServiceUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: |-
+            The https page of the terms of service of this instance: the `TERMS_OF_SERVICE_URL` setting. Whoever uses the API accepts them, and
+            `POST /register` requires `termsAccepted: true`. A client that signs people up shows this page (or links to it) beside the box to
+            tick. `null` when the instance has no page, and for any value that is not an https URL.
+          example: https://www.moncycle.app/ToS/term_of_service_fr.html
         limits:
           type: object
           description: The numbers a form can check before it sends anything.

@@ -243,6 +243,7 @@ const INPUT_ISSUE_CODES = [
 	"password_unchanged",
 	"email_unchanged",
 	"invalid_range",        // two bounds in the wrong order
+	"terms_not_accepted",   // the terms of service are not accepted (sign-up)
 ];
 
 // ===========================================================================

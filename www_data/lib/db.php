@@ -156,12 +156,13 @@ function db_select_user_account_exists($db, $email): bool {
 }
 
 // The new id, or null when the email already has an account: the unique key on login_email is what
-// decides, so of two registrations racing for one address only one gets an id.
+// decides, so of two registrations racing for one address only one gets an id. The terms are accepted at this moment:
+// the only caller is the sign-up, which has refused a request that does not say so.
 function db_insert_user_account($db, $name, $nfp_method, $age, $email, $password_hash, $register_comment, $research): ?string {
 	try {
 		return db_insert($db,
-			"INSERT INTO user_account (name, nfp_method, age, login_email, password, language, register_comment, research)
-			VALUES (:name, :nfp_method, :age, :login_email, :password, :language, :register_comment, :research)",
+			"INSERT INTO user_account (name, nfp_method, age, login_email, password, language, register_comment, research, terms_accepted_at)
+			VALUES (:name, :nfp_method, :age, :login_email, :password, :language, :register_comment, :research, NOW())",
 			["name" => $name, "nfp_method" => $nfp_method, "age" => $age, "login_email" => $email, "password" => $password_hash, "language" => ACCOUNT_DEFAULT_LANGUAGE, "register_comment" => $register_comment, "research" => $research]
 		);
 	}

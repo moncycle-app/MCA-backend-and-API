@@ -304,6 +304,14 @@ $(document).ready(function(){
 		});
 	});
 
+	// THE TERMS OF SERVICE: their page is a setting of the server (TERMS_OF_SERVICE_URL, told by server_info). None told: the paragraph that sums them up is not shown
+	$.ajax({type : "GET", url : "api/server_info", dataType : "json"}).done(function(ret) {
+		const url = ((ret || {}).data || {}).termsOfServiceUrl;
+		if (!/^https:\/\//i.test(url || "")) return;
+		$("#a_terms").attr("href", url);
+		$("#terms_about").show();
+	});
+
 	// TELECHARGEMENT DES DONNES DES UTILISATEUR
 	$.get("api/account", {}).done(function(ret) {
 		moncycle_app_usr = ret.data;
@@ -312,7 +320,6 @@ $(document).ready(function(){
 		document.title = "moncycle.app - compte " + moncycle_app_usr.nickname;
 		$("#i_nickname").val(moncycle_app_usr.nickname);
 		$("#tech_info_no").text(moncycle_app_usr.userId);
-		if(moncycle_app_usr.sponsor) $("#merci_don").show();
 		if (moncycle_store.is_demo(moncycle_app_usr.userId)) $("#warning_demo").show();
 		if(moncycle_app_usr.method == "fertilityCare") $("#description_section").hide();
 		$("#tech_info_id").text(moncycle_app_usr.loginEmail);

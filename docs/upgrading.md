@@ -19,7 +19,7 @@ one version at a time.
    directory, hence `-w`. `script/` answers only to `127.0.0.1` over HTTP, so run it through the command line as above. Without
    Docker: `cd www_data/script/migration && php v14_to_v15.php`.
 4. **Without Docker, a `config.php` written by hand needs the settings the new version adds.** Copy them from `config.exemple.php`
-   (for v15: `MAINTENANCE_MODE`, `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `DEMO_ENABLED`, `CAPTCHA_SECRET`,
+   (for v15: `MAINTENANCE_MODE`, `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `TERMS_OF_SERVICE_URL`, `DEMO_ENABLED`, `CAPTCHA_SECRET`,
    and the `LOGIN_*` ones). A missing one is a fatal "Undefined constant". The Docker image reads them from its environment and needs
    nothing.
 5. **Start the new version**, sign in, write a day, export it, sign out, and read the log for `system.exception`.

@@ -146,7 +146,9 @@ A request with none of these headers (curl, a script, a mobile app) is not a bro
 
 What a user can store (the account nickname, a comment, a label, whether typed or imported from a file) is written into the page
 as text, never as HTML. The pages are served with a Content-Security-Policy whose `script-src` is `'self'`: no inline script runs.
-The news banner is the only HTML from outside, and it is rebuilt from an allow-list of tags (`NEWS_URL`).
+The only pages from outside are the news banner (`NEWS_URL`) and the terms of service (`TERMS_OF_SERVICE_URL`). Each is shown in an
+iframe with `sandbox` (no script, no same origin; links open in a new tab) and `referrerpolicy="no-referrer"`, and the CSP's
+`frame-src` allows the origin of those two pages and no other.
 
 ## What is not public
 

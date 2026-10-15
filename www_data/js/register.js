@@ -23,6 +23,16 @@ else {
 			bands.unshift(`<option value="${yy}">entre ${yy} et ${yy+4}</option>`);
 		}
 		$("#i_anaissance").append(bands.join(""));
+		// the terms of service are a page of the server's choice (TERMS_OF_SERVICE_URL, told by server_info): shown here in a frame, and in a tab of
+		// their own from the link below it. None told: no frame and no link, the box stays.
+		$.ajax({type : "GET", url : "api/server_info", dataType : "json"}).done(function(ret) {
+			const url = ((ret || {}).data || {}).termsOfServiceUrl;
+			if (!/^https:\/\//i.test(url || "")) return;
+			$("#f_terms").attr("src", url).prop("hidden", false);
+			$("#a_terms").attr("href", url).prop("hidden", false);
+		}).fail(function() {
+			$("#terms_error_msg").text("Les conditions d'utilisation n'ont pas pu être chargées: rechargez la page.");
+		});
 		// the picture and its token are asked for once the address is typed (a click on the picture asks for another)
 		const register_captcha = moncycle_captcha.attach({
 			purpose: "register",
@@ -60,7 +70,7 @@ else {
 				method: method,
 				temperatureTracking: $("#m_temp").is(':checked'),
 				discoveredComment: $("#i_comment").val(),
-				okForResearch: $("#jc_research").is(':checked'),
+				termsAccepted: $("#i_terms").is(':checked'),
 			};
 			$.ajax({type : 'POST', "url" : "api/register", contentType: "application/json", "data" : JSON.stringify(payload)}).done(function(ret){
 				console.log(ret);
@@ -90,7 +100,8 @@ else {
 					password_invalid: "Le mot de passe contient un caractère interdit.",
 					birthYear: "La date de naissance n'est pas réaliste.",
 					nickname: "Le pseudo est invalide ou trop long.",
-					discoveredComment: "Le commentaire est invalide ou trop long."
+					discoveredComment: "Le commentaire est invalide ou trop long.",
+					termsAccepted: "Vous devez accepter les conditions d'utilisation pour créer un compte."
 				};
 				$("#register_error_msg").text(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR));
 				reactivate_form();

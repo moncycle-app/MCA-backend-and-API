@@ -81,12 +81,14 @@ API sends no CORS header, so a browser page on another origin cannot call it. Wh
 The image sends this policy for the pages it serves (`server_conf/zz-moncycleapp.conf`):
 
 ```
-default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' <NEWS_URL>;
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-src <origins of NEWS_URL and TERMS_OF_SERVICE_URL>;
 frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
 ```
 
-Pages served by anything else need the same policy from their own server, and a front end that calls an API on another origin adds
-that origin to its `connect-src`. Swagger UI is one of the image's pages and is covered by the same policy.
+The news banner and the terms of service are shown in iframes, so `frame-src` lists the origin of each of the two pages (the
+image's entrypoint makes it from `NEWS_URL` and `TERMS_OF_SERVICE_URL`; `'none'` when neither is set). An origin, not the page: the
+terms page links to its other languages inside the frame. Pages served by anything else need the same policy from their own server,
+and a front end that calls an API on another origin adds that origin to its `connect-src`. Swagger UI is one of the image's pages and is covered by the same policy.
 
 ## Without Docker, in production
 

@@ -21,7 +21,7 @@ input_exit_unless_path_fits(input_path(), 0);
 
 $issues = [];
 input_query([], $issues);
-$body = input_body(["nickname", "email", "password", "birthYear", "method", "temperatureTracking", "discoveredComment", "okForResearch", "captcha", "captchaToken"], $issues);
+$body = input_body(["nickname", "email", "password", "birthYear", "method", "temperatureTracking", "discoveredComment", "okForResearch", "termsAccepted", "captcha", "captchaToken"], $issues);
 
 if (!is_null($user_account) && !sec_session_is_demo($user_account)) {
 	http_error(409, "already_authenticated", "Account already logged in.", ["userId" => $user_account["no_user_account"]]);
@@ -32,7 +32,7 @@ if (!REGISTRATION_ENABLED) {
 	http_error(403, "registration_disabled", "Account creation has been disabled.");
 }
 
-foreach (["nickname", "email", "password", "birthYear"] as $field) input_require($body, $field, $issues);
+foreach (["nickname", "email", "password", "birthYear", "termsAccepted"] as $field) input_require($body, $field, $issues);
 
 if (array_key_exists("email", $body)) {
 	if (!is_string($body["email"])) input_wrong_type($issues, "email", $body["email"], "a string (an e-mail address)");
@@ -59,6 +59,9 @@ $nickname = day_format_body_text($body, "nickname", ACCOUNT_LIMIT_NICKNAME_CHARS
 $discovered_comment = day_format_body_text($body, "discoveredComment", ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS, $issues);
 $nfp_method = account_method_id_from_json($body, $issues);
 $research = input_bool_field($body, "okForResearch", $issues);
+if (input_bool_field($body, "termsAccepted", $issues) === false) {
+	$issues[] = input_issue("termsAccepted", "terms_not_accepted", "'termsAccepted' must be true: an account is not created unless its owner accepts the terms of service (their address is 'termsOfServiceUrl' in GET /api/server_info).");
+}
 foreach (["captcha", "captchaToken"] as $field) {
 	if (array_key_exists($field, $body) && !is_string($body[$field])) input_wrong_type($issues, $field, $body[$field], "a string");
 }

@@ -38,7 +38,6 @@
 			<h1>mon<span class="gradiant_logo">cycle</span>.app</h1>
 			<div id="name">Mon compte</div>
 			<a href="/"><button type="button" class="nav_button">👈 Revenir aux cycles</button></a> <form id="f_logout" action="api/token" method="delete"><button type="submit" id="but_logout" class="nav_button rouge">🔑 Déconnexion</button></form>
-			<p id="merci_don" style="display:none">🎖️ Merci pour votre don sur <a href="https://fr.tipeee.com/moncycleapp" target="_blank">Tipeee</a>.</p>
 			<p id="warning_demo" style="font-weight:bold; display:none">&#x1F6A8; Vous visualisez actuellement le compte de démonstration.<br /><br /><a style="color:#fbca0b" href='/register'><button type='button'>&#x1F680; créer votre compte</button></a></p>
 		</center>
 
@@ -326,11 +325,23 @@
 
 
 			<h2>À propos et contact</h2>
-			<p>Cette application est gratuite et sans publicité/vente de données! Vous pouvez cependant contribuer au financement de l'application et aider le développeur via </label><a target="_blank" href="https://fr.tipeee.com/moncycleapp">tipeee.com/moncycleapp</a>.</p>
+			<p>Cette application est gratuite et sans publicité/vente de données!</p>
 			<p>Cette application est Open Source: le code est disponible sur <a href="https://github.com/moncycle-app/backend-api-web-app" target="_blank">github.com/moncycle-app/backend-api-web-app</a>.</p>
 			<p>Retrouvez toutes les informations de cette application sur <a href="https://www.moncycle.app" target="_blank">www.moncycle.app</a>.</p>
 			<p>Vous avez des difficultés dans la compréhension de vos cycles ou l'interprétation de votre tableau? Faites vous aider par le <a href="https://www.methode-billings.com/trouver-un-formateur" target="_blank">Centre Billings France</a> ou par <a href="https://www.fertilitycare.fr/instructrices-et-medecins" target="_blank">l'assocaition FertilityCare</a>.</p>
-			<p>Un bug? Besoin d'aide? Une question? Une suggestion? Une demande liée aux données personnelles ?<br /> Envoyez-nous un mail à <a href="mailto:bonjour@moncycle.app">bonjour@moncycle.app</a> ou un message sur Signal à <a target="_blank" href="https://signal.me/#eu/NZ99WMZSpp6NHkUBUhdKvADr4todXR+V8E20xbHQmtvZHRUK6cBOmIXE0PVQddrc">@jean.11</a>.</p>
+			<div id="terms_about" style="display:none">
+				<p>📜 L'application est éditée par l'association Tech 4 Fertility. Lisez ses <a id="a_terms" target="_blank" rel="noopener noreferrer">conditions d'utilisation et sa politique de confidentialité</a>. L'essentiel:</p>
+				<ul>
+					<li>moncycle.app est un carnet de suivi de cycle, un outil de bien-être: ni un dispositif médical, ni un moyen de contraception.</li>
+					<li>Il faut avoir 18 ans et avoir suivi une formation à sa méthode (Billings, FertilityCare…).</li>
+					<li>L'application ne garantit rien: les décisions vous appartiennent, à vous et à votre partenaire le cas échéant.</li>
+					<li>Ne saisissez aucune information qui vous identifie, ni aucune information médicale (maladie, traitement, diagnostic).</li>
+					<li>Vos données sont hébergées en France et ne sont jamais vendues.</li>
+					<li>Vous exportez, modifiez ou supprimez tout, quand vous voulez, depuis cette page.</li>
+					<li>Un compte sans activité pendant 4 ans est supprimé, après avertissement.</li>
+				</ul>
+			</div>
+			<p>Un bug? Besoin d'aide? Une question? Une suggestion? Une demande liée aux données personnelles ?<br /> Envoyez-nous un mail à <a href="mailto:hello@tech4fertility.org">hello@tech4fertility.org</a>.</p>
 			<br /><br /><br />
 
 

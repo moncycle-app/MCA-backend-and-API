@@ -80,6 +80,7 @@ function server_info(): array {
 		"demoEnabled" => DEMO_ENABLED,
 		"captchaAvailable" => captcha_ready(),
 		"newsUrl" => str_starts_with(NEWS_URL, "https://") ? NEWS_URL : null,
+		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
 		"limits" => server_limits(),
 	];
 }

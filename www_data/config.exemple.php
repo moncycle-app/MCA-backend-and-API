@@ -62,9 +62,13 @@ define("WEB_APP_ORIGINS", []);
 // use it). Empty: every request is a client, whatever it sends.
 define("TRUSTED_PROXIES", []);
 
-// The news banner of the web app: the https page whose h4, p, b, i, br, ul, li, a and time it shows (nothing else
-// gets through). Empty: no banner and no request to anybody.
+// The news banner of the web app: an https page shown in an iframe (sandboxed, no script), which keeps the design of the page.
+// Empty: no banner.
 define("NEWS_URL", "https://www.moncycle.app/actu.html");
+
+// The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
+// GET /api/server_info tells it to every client. Empty: no page to show or link (the box stays required).
+define("TERMS_OF_SERVICE_URL", "https://www.moncycle.app/ToS/term_of_service_fr.html");
 
 // Login brute-force defense. A value of 0 turns the feature it sets off.
 // Failed attempts on an account older than this many minutes restart at 1 (0: they are not
