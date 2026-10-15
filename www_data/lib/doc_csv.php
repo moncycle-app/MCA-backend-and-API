@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The CSV of a period, and the raw data export of an account (api/all_of_my_data_plz.php). The most compatible shape for text editors,
 // Excel (FR and EN), Google Sheets and LibreOffice: UTF-8 with a BOM, CSV_SEP between fields, RFC 4180 quoting, CRLF line ends, and as
 // many fields on every row as in the header.

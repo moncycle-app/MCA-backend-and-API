@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // Passwords, TOTP, client addresses, login throttling and the origin of writes. The session token is lib/sec_token.php, the
 // captcha lib/sec_captcha.php.
 

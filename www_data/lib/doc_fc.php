@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The FertilityCare chart (nfp_method 3 and 4): a grid, A3 landscape, in mm. A row per cycle, DOC_FC_DAYS_PER_ROW days wide (a longer
 // cycle carries on in the next row); a day is a column of cells: stamp, baby, peak, date, bleeding, mucus, other (arrow, pain, union),
 // [temperature,] comment.

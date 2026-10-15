@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The NFP export: an account's days as an NFP file, to move to another app. The day is the JSON day of lib/day_format.php with the few
 // fields the format names differently; the way back is lib/nfp_import.php, and a file this app exports must always import.
 

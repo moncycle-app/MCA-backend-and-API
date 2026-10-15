@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The Billings chart (nfp_method 1 and 2): a table, one line per day, A4 portrait, in mm. A line: date | day of the cycle | stamp |
 // [peak] | [counter] | [union] | sensations | observations | comment, and method 1 ends with the temperature and its curve; the columns
 // in brackets only exist when a day uses them. A line is as tall as its tallest text (cut with an ellipsis past DOC_BILL_MAX_LINES).

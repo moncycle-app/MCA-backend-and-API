@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // An NFP file into the account, through the four stages of lib/nfp_import.php: the account gets the whole file or nothing. ?dryRun=true
 // answers what the write would do (the days the account already has, the new labels) to decide on ?override (replace those days, or by
 // default leave them), and a refused dry run answers everything the checks found: a diagnosis is the point of asking for one.

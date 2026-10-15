@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // Environment variables read as the type of the setting, for config.docker.php -- the one lib
 // file loaded before the config is, so it uses nothing the config defines. getenv() answers
 // false when a variable is unset and a string otherwise, so an unset or empty one takes the

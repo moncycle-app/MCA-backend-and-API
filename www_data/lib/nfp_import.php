@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The NFP import, in four stages the endpoint calls in order: nfp_import_parse() (the body -> the canonical object, or a refusal of the
 // transport), nfp_import_schema_errors() (structure and types), nfp_import_build_plan() (meaning and consistency -> the days to write),
 // nfp_import_write_plan() (the only one that writes, in one transaction). Nothing is written before the three checks have passed: a

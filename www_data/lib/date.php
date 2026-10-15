@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 function date_human(DateTimeInterface $date, string $sep = '/'): string {
 	return $date->format('d' . $sep . 'm' . $sep . 'y');
 }

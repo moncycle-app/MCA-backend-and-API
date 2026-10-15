@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // Router for PHP's built-in web server, to try the app without Docker or Apache (README, "Install"):
 //
 //     php -S 127.0.0.1:8000 -t www_data server_conf/php-server-router.php

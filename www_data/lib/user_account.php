@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The account: its method, the sign-up and the password recovery, GET and POST /api/account.
 
 require_once __DIR__ . "/day_format.php";

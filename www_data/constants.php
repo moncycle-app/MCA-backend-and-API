@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
 // config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db.php) stay next
 // to the code that runs them.

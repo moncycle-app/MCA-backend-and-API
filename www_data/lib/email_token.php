@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The link by mail: it proves an address, lets a new password be chosen, or changes the login address. An account has ONE slot for it
 // (user_account.email_token_*): a new link replaces the one before, whatever it was for, so whoever can ask for a reset can cancel a
 // pending link (accepted). Only the SHA-256 of the token is kept; a link is single use, has a lifetime (EMAIL_TOKEN_LIFETIME_MINUTES) and

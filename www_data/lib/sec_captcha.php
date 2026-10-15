@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The captcha: a signed challenge kept nowhere. The visitor gets a picture and a token "<exp>.<mac>", the HMAC-SHA256 (CAPTCHA_SECRET)
 // of the purpose, the address the account is looked up by, the expiry, the phrase, the visitor's network and a state of the account
 // that its own use changes, so that a token works once. To check an answer the server signs again with what was typed and compares.

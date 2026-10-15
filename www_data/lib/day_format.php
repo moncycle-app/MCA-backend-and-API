@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // A day in its shapes: the row of day_timeline with its packed columns (stamp, fc_score, fc_arrow), and the JSON day of the API on the
 // vocabulary of the NFP format (stampColor, isPeak, codifiedArrow...), which the NFP export and import also go through. The only file
 // that knows the packed encoding, and the rules a day must follow to be stored.

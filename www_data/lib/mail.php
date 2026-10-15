@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The mails of the app. A name or an address comes from a user: it is escaped before it reaches the HTML.
 
 use PHPMailer\PHPMailer\PHPMailer;

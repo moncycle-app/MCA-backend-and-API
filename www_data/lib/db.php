@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // Every SQL statement of the app, one function each: its SQL and its parameters, no business logic. Reads answer a list of rows, one
 // row or null, a column or a value; writes the number of rows changed, inserts the new id. MariaDB, utf8mb4_bin: "=" is exact.
 

@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 require_once __DIR__ . "/../../config.php";
 require_once __DIR__ . "/../../lib/db.php";
 require_once __DIR__ . "/../../lib/sec.php";
@@ -43,7 +45,7 @@ try {
     $v14_to_v15_shema_migration = file_get_contents(__DIR__ . "/v14_to_v15.sql");
 
     if ($v14_to_v15_shema_migration === false) {
-        throw new RuntimeException("cannot read ./v14_to_v15.sql: run the script from its own directory, nothing has been changed");
+        throw new RuntimeException("cannot read v14_to_v15.sql: nothing has been changed");
     }
 
     print("looking for addresses held by several accounts ...");

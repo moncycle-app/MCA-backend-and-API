@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The app's own log: what happened, to which account and row, from where -- never the content ("account 21 wrote day 4412", not what the
 // day holds; what is never logged is in docs/logs.md). One line per event of LOG_EVENTS: flat JSON or "key=value" text, to stdout, stderr
 // or a file (LOG_OUTPUT). Logging never breaks a request: nothing here throws, answers or queries the database.

@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // the fixed constants of the app (DB codes, vocabularies, limits, export layouts)
 require_once __DIR__ . "/constants.php";
 

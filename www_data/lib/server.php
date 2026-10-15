@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // What the server says of itself (GET /api/server_info), and the check that the database is at the schema of this code. The contract
 // (API_VERSION) and the schema (SCHEMA_VERSION) are constants, the release in lib/build.json (build.sh), the database's schema the row
 // `schema_version` of key_value. Only API_VERSION is told to a client.

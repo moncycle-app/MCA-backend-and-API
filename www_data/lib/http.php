@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The request's body and method, and the JSON envelope of every answer: {"data", "meta"?} or {"error": {"code", "message", "details"?}}.
 
 require_once __DIR__ . "/log.php";

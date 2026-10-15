@@ -50,6 +50,11 @@ The rule of the codebase: **`lib/` holds every function, `api/` holds none.** An
 
 Also:
 
+- Every PHP file declares `declare(strict_types=1);`, right after its licence header. A value from the database or a client is cast or
+  checked before it reaches a typed parameter, a built-in function included: `strlen(null)` and `round("1.5")` throw.
+- Every `require_once` is `__DIR__`-based, and no lib file shares its name with an endpoint (`lib/user_account.php`,
+  `lib/sec_token.php` and `lib/sec_captcha.php` beside `api/account.php`, `api/token.php` and `api/captcha.php`).
+- Comments say why (a reason, a risk, a contract), once, where the code is: no paraphrase of the code and no history.
 - An endpoint requires what its own code reaches, and a lib file requires what it calls and nothing it does not (each lib file
   requires its own dependencies).
 - No function or constant that nothing uses.
@@ -58,9 +63,12 @@ Also:
 ## The library, file by file
 
 - **`db.php`** every SQL statement, one small function each, built on `db_rows/row/column/value/exec/insert` (statements prepared
-  once per connection, parameters bound by PHP type) and `db_transaction()`. A read answers what the caller needs: a list of rows, one
-  row or `null`, a column, a scalar; a write answers a row count, an insert the new id. No business logic.
-- **`data.php`** what the app does with its data: `data_construct_day`, `data_sync` (the answer of `GET /api/timeline_sync`),
+  once per connection, parameters bound by PHP type), `db_transaction()` and `db_unless_duplicate()` (null when a unique key refuses
+  the write). A read answers what the caller needs: a list of rows, one row or `null`, a column, a scalar; a write answers a row count,
+  an insert the new id. No business logic.
+- **`data.php`** what the app does with its data: `data_day` (a day built from its row, its cycle and its descriptions, no query: the
+  sync, `GET /api/day` and the exports all go through it), `data_construct_day` (one day read), `data_days_range`,
+  `data_descriptions_by_day`, `data_sync` (the answer of `GET /api/timeline_sync`),
   `data_save_description` (create, or rename / retype: partial), `data_save_day` / `data_write_day` (the one way a day is written, by
   the API and the NFP import alike), `data_resolve_description`, `data_reactivate_account`, and the two SQL files of `script/db/`:
   `data_init_database` (schema, plus demo when `DEMO_ENABLED`, into a database with no table) and `data_reload_demo_accounts` (the
@@ -115,7 +123,8 @@ Also:
   (HMAC-SHA256 with `CAPTCHA_SECRET`, over purpose, address, expiry, phrase, `sec_captcha_ip_scope` of the client and `sec_captcha_state` of the
   account) / `sec_captcha_ready`. Closed without a secret of 32+ characters: 503 `captcha_unavailable`. No cookie, no row, no `db_*` call.
   `sec_captcha_exit_unless_attempt_allowed()` / `sec_captcha_exit_unless_ok()` are the two ends of register and recover_password.
-- **`mail.php`** `mail_send()` and the mails (names and addresses escaped; returns false rather than throwing). The links are
+- **`mail.php`** `mail_send()` and the mails (names and addresses escaped; returns false rather than throwing); `mail_send_link()` is
+  the mail of a link, by kind (verify_email, account_exists, reset_password, confirm_email). The links are
   `APP_URL` + `verify_email#purpose=..&t=..` (the page `verify_email.html` and `js/verify_email.js` post the fragment to
   `POST /api/verify_email`). A mail never holds a password.
 - **`log.php`** the app's own log: see [The log](#the-log).
@@ -128,7 +137,9 @@ Also:
   (`input_query()`, unknown names refused) and its body (`input_body()`: unknown names refused with a "did you mean", `null` = not
   sent) through here, collects the problems as issues `{field, code, message}` (`input_issue()`, codes `INPUT_ISSUE_CODES`) and ends
   with ONE answer: `input_exit_if_issues()` = 400 `validation_failed` with `details.issues`. A message names the field, the type that
-  came and what is expected; it never holds a password, a code or a text.
+  came and what is expected; it never holds a password, a code or a text. The checks a field needs are here once: `input_email()`,
+  `input_choice()` (a value of a vocabulary), `input_secret()`, `input_code()`, `input_last_write()` (the client's moment of a write),
+  `input_check_strings()`, `input_exit_unless_none()` (a request that takes no query and no body).
 - **`server.php`** `server_info()` (`GET /api/server_info`: `apiVersion` = `API_VERSION`, `maintenanceMode`, the toggles, `newsUrl`,
   `termsOfServiceUrl`, `limits`; made from the settings alone, **no database**, so it answers in maintenance too, and it tells neither the release nor the
   schema), `server_exit_if_schema_mismatch()` (503 `schema_mismatch`, run by every endpoint that opens the database after the
@@ -138,9 +149,11 @@ Also:
 ## Writing an endpoint
 
 ```php
-require_once "../config.php";
-require_once "../lib/api.php";
-require_once "../lib/input.php";   // plus the lib files the endpoint itself calls
+declare(strict_types=1);
+
+require_once __DIR__ . "/../config.php";
+require_once __DIR__ . "/../lib/api.php";
+require_once __DIR__ . "/../lib/input.php";   // plus the lib files the endpoint itself calls
 
 [$db, $user_account] = api_start();   // api_start(false) when logged-out visitors are fine
 ```
@@ -289,6 +302,8 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
 `log_cron_*`. It never throws and never logs content.
 
 - A new event goes in `LOG_EVENTS`, in the events table of `docs/logs.md` and, for a new key, in its key glossary.
+- `log_event()` names its event as a literal (`log_event("account.totp_enabled")`, not a ternary), so that an event can be found in the
+  code by its name.
 - **Every line of a request names the rows it handles:** the code that learns a row's id calls
   `log_context(["day" => ..., "dsc" => ..., "rev" => ...])` at once (a refused write and an exception name it too), never after a
   query of its own for the log. A read says how many rows (`log_note(["n" => ...])`, a `count()` of what it built), never which. The
@@ -306,7 +321,7 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
   (`0 * * * *` runs `demo_reset.php`; one crontab per process). `cron.php` must run once a day (it mails and erases), hence the
   separate `script/demo_reset.php` for the hourly demo reload. `DEMO_ENABLED` (default **false**) gates the sign-in and the sessions
   of accounts 2 and 3 (`sec_account_enabled()`, answering `403 account_disabled` / 401) and that reload.
-- **Every `require_once` is `__DIR__`-based** (`require_once __DIR__ . "/../config.php"`): a script runs from any directory.
+- **Every `require_once` is `__DIR__`-based**: a script runs from any directory.
 - **Three versions.** `SCHEMA_VERSION` (`constants.php`) is the schema this code is written for and the row `schema_version` of
   `key_value` (`schema.sql` inserts it, **every migration ends by setting it**; the three must agree; a database that says another
   number is served nothing). `API_VERSION` is the integer of the HTTP contract, the only version `GET /api/server_info` tells. The release
@@ -364,7 +379,7 @@ There is no test suite in the repository: a change is checked by running the app
 
 Delete a line when it is fixed.
 
-- `db.php` breaks the SQL rules above in 9 `SELECT *`, kept on purpose where a whole row is wanted: the raw data export, the account
+- `db.php` breaks the SQL rules above in 7 `SELECT *`, kept on purpose where a whole row is wanted: the raw data export, the account
   and day rows, the two retention queries.
 - The web client repeats server logic in JS: the day codec and the FertilityCare groups in `js/tableau.js`, the method table in
   `js/account.js` (`NFP_METHOD_BY_ID` is its server twin: change both), and in `js/store.js` the day a body will become

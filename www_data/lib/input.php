@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // What a request may say. Every endpoint reads its path, its query string and its body through here and collects the problems as
 // issues {"field", "code", "message"} (codes: INPUT_ISSUE_CODES), so that one 400 `validation_failed` tells the client everything that
 // is wrong at once. A message names the field, the type that came and what is expected; it never holds the value sent (a password, a

@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // What the app does with its data, on top of lib/db.php: a day built and saved, the descriptions (the free-text labels of a day), the
 // sync, the public numbers, and the SQL files of script/db/. The shape of a day is lib/day_format.php.
 

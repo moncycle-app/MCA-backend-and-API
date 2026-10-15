@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The account's tokens, and /api/token: the sign-in that makes one, the request that carries one (cookie or Bearer), the list and the
 // revocation. A browser session and a script's token are the same row; only the name tells them apart. The token itself is kept nowhere:
 // its SHA-256, and its first AUTH_TOKEN_PREFIX_CHARS characters in the clear (unique per account), which name it in the list and in
@@ -88,14 +90,14 @@ function sec_token_user_agent(): ?string {
 // A cookie session replaces the one the browser held: nobody can use that one any more, so its row goes. A custom token does not touch
 // the cookie of the session it is made from.
 function sec_token_create($db, array $user_account, array $options): array {
-	$no_auth_token = null;
-	for ($try = 0; is_null($no_auth_token); $try++) {
-		if ($try === AUTH_TOKEN_PREFIX_TRIES) throw new \RuntimeException("no free token prefix after $try tries");
+	$try = 0;
+	do {
+		if ($try++ === AUTH_TOKEN_PREFIX_TRIES) throw new \RuntimeException("no free token prefix after " . AUTH_TOKEN_PREFIX_TRIES . " tries");
 		$token = sec_token_random();
 		$prefix = substr($token, 0, AUTH_TOKEN_PREFIX_CHARS);
 		$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $options["name"], $options["scope"], $options["expires_in_days"],
 			sec_token_user_agent(), sec_client_ip(), sec_token_hash($token), $prefix);
-	}
+	} while (is_null($no_auth_token));
 	log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($no_auth_token)]);
 	db_update_user_account_logged_in($db, $user_account["no_user_account"]);
 	if ($options["cookie"]) {
@@ -115,7 +117,7 @@ function sec_token_parse_options(array $body, array &$issues): array {
 	$name = AUTH_TOKEN_DEFAULT_NAME;
 	$text = day_format_body_text($body, "name", AUTH_TOKEN_LIMIT_NAME_CHARS, $issues);
 	if (!is_null($text)) {
-		$text = trim(preg_replace('/\s+/u', ' ', $text));   // a label in a list: one line
+		$text = trim(preg_replace('/\s+/u', ' ', $text) ?? '');   // a label in a list: one line
 		if ($text !== "") $name = $text;
 	}
 

@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The start of every JSON endpoint, and so the lib files every endpoint can count on.
 
 require_once __DIR__ . "/db.php";

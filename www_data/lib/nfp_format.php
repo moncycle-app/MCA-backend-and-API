@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // The NFP interchange format: its JSON Schema, its reading helpers, and the older variants of the format brought to the one shape the
 // rest of the code reads. Its constants are the NFP FILE FORMAT section of constants.php. How the format maps onto this app's storage is
 // lib/nfp_export.php and lib/nfp_import.php; nothing here touches the DB or the request.

@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 require_once __DIR__ . "/../config.php";
 require_once __DIR__ . "/../lib/api.php";
 require_once __DIR__ . "/../lib/data.php";
@@ -49,7 +51,7 @@ if ($method === "GET") {
 
 	$account = user_account_to_json($user_account);
 	// a client that keeps the account sends back the ETag it was given and is told when nothing changed
-	$etag = 'W/"' . md5(json_encode($account)) . '"';
+	$etag = 'W/"' . md5((string) json_encode($account)) . '"';
 	header("ETag: $etag");
 	if (($_SERVER['HTTP_IF_NONE_MATCH'] ?? "") === $etag) {
 		http_response_code(304);

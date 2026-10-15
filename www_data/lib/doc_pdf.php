@@ -7,6 +7,8 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
+declare(strict_types=1);
+
 // What both charts are drawn with: DocPdf, an FPDF with their shared helpers. The PDFs use FPDF's core fonts only: not embedded, so the
 // files are tiny, but they only cover windows-1252, so every string drawn goes through doc_pdf_text() first.
 
