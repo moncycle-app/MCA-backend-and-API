@@ -151,19 +151,19 @@ log_cron_step("unverified_deletions", $handled);
 
 log_context(["uid" => null]);
 if ($dry_run) {
-	$count = db_count_old_auth_token($db);
+	$count = db_purge_auth_token($db, true);
 	echo "[dry run] $count old tokens would be deleted" . PHP_EOL;
 	log_cron_step("tokens", $count);
-	$count = db_count_old_login_attempt_ip($db);
+	$count = db_purge_login_attempt_ip($db, true);
 	echo "[dry run] $count old login attempts (IP) would be deleted" . PHP_EOL;
 	log_cron_step("login_attempts", $count);
 }
 else {
-	$deleted = db_delete_old_auth_token($db);
+	$deleted = db_purge_auth_token($db, false);
 	log_cron_count("tok", $deleted);
 	echo $deleted . " old tokens deleted" . PHP_EOL;
 	log_cron_step("tokens", $deleted);
-	$deleted = db_delete_old_login_attempt_ip($db);
+	$deleted = db_purge_login_attempt_ip($db, false);
 	log_cron_count("ipa", $deleted);
 	echo $deleted . " old login attempts (IP) deleted" . PHP_EOL;
 	log_cron_step("login_attempts", $deleted);

@@ -138,7 +138,7 @@ function email_token_request_email_change($db, array $user_account, string $new_
 	// null when the address belongs to an account already
 	$token = db_transaction($db, function () use ($db, $no_user_account, $new_email) {
 		db_select_user_account_for_update($db, $no_user_account);
-		return db_select_user_account_exists($db, $new_email) ? null : email_token_issue($db, $no_user_account, EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL, $new_email);
+		return !is_null(db_select_user_account_by_email($db, $new_email)) ? null : email_token_issue($db, $no_user_account, EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL, $new_email);
 	});
 
 	if (is_null($token)) return mail_send_email_change_taken($new_email);

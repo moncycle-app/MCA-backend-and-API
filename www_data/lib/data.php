@@ -330,8 +330,7 @@ function data_public_stats_count($db): array {
 function data_public_stats_store($db): void {
 	foreach (data_public_stats_count($db) as $name => $count) {
 		[$key] = PUB_STAT_KEYS[$name];
-		if (db_select_key_value($db, $key) === false) db_insert_key_value($db, $key, intval($count));
-		else db_update_key_value($db, $key, intval($count));
+		db_upsert_key_value($db, $key, intval($count));
 	}
 }
 

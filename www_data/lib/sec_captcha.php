@@ -7,11 +7,9 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// The captcha: a signed challenge that is kept nowhere. The visitor is given a picture and a token "<exp>.<mac>"; the
-// MAC is HMAC-SHA256 (CAPTCHA_SECRET) of what the answer must be tied to: the purpose, the address the account is
-// looked up by, the expiry, the phrase of the picture, the visitor's network and a state of the account that its own
-// use changes (so a token works once: a new password, a failed login, and it no longer matches). The server stores
-// nothing; to check an answer it signs again with what the visitor typed and compares.
+// The captcha: a signed challenge kept nowhere. The visitor gets a picture and a token "<exp>.<mac>", the HMAC-SHA256 (CAPTCHA_SECRET)
+// of the purpose, the address the account is looked up by, the expiry, the phrase, the visitor's network and a state of the account
+// that its own use changes, so that a token works once. To check an answer the server signs again with what was typed and compares.
 
 use Gregwar\Captcha\CaptchaBuilder;
 use Gregwar\Captcha\PhraseBuilder;
@@ -22,47 +20,20 @@ require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/sec.php";
 
-// Is the captcha open? Without a secret of CAPTCHA_SECRET_MIN_CHARS characters it is closed: nothing is signed with a
-// short or empty key, and what needs a captcha is refused with a 503.
+// Without a key of CAPTCHA_SECRET_MIN_CHARS nothing is signed, and what needs a captcha answers 503.
 function sec_captcha_ready(): bool {
 	return strlen(CAPTCHA_SECRET) >= CAPTCHA_SECRET_MIN_CHARS;
 }
 
-// The picture and its phrase, from the CAPTCHA_* constants. The library's own defaults (a wave distortion, and
-// an alphabet of both cases with i, l, o, 0, 1...) make a picture that few visitors read: this one is medium.
-function sec_captcha_image(): CaptchaBuilder {
-	$captcha = new CaptchaBuilder(null, new PhraseBuilder(CAPTCHA_LENGTH, CAPTCHA_CHARSET));
-	$captcha->setDistortion(false)->setMaxBehindLines(2)->setMaxFrontLines(1)->setMaxAngle(6)->setMaxOffset(3);
-	return $captcha->build(CAPTCHA_WIDTH, CAPTCHA_HEIGHT);
-}
-
-// A phrase, or what was typed for it, as it is compared: case and spaces do not count (a phone capitalises the first
-// letter and a space slips in; neither is a mistake in the reading).
-function sec_captcha_normalise_phrase(string $text): string {
-	return strtolower(preg_replace('/\s+/', '', $text));
-}
-
-// The visitor's network, as the token is tied to it: the address cut to CAPTCHA_IP_PREFIX_V4 bits (IPv4) or
-// CAPTCHA_IP_PREFIX_V6 bits (IPv6), written "a.b.c.0/24". An IPv4-mapped IPv6 address ("::ffff:10.0.0.1", what a
-// dual-stack socket gives) is read as the IPv4 one. "" when the address is not one.
+// The visitor's network the token is tied to, "a.b.c.0/24" (CAPTCHA_IP_PREFIX_V4 / _V6 bits); "" when the address is none.
 function sec_captcha_ip_scope(string $ip): string {
-	$packed = inet_pton($ip);
-	if ($packed === false) return "";
-	if (strlen($packed) === 16 && str_starts_with($packed, str_repeat("\0", 10) . "\xff\xff")) $packed = substr($packed, 12);
-
-	$bits = strlen($packed) === 4 ? CAPTCHA_IP_PREFIX_V4 : CAPTCHA_IP_PREFIX_V6;
-	$whole_bytes = intdiv($bits, 8);
-	$network = substr($packed, 0, $whole_bytes);
-	if ($bits % 8 !== 0) $network .= chr(ord($packed[$whole_bytes]) & ((0xFF << (8 - $bits % 8)) & 0xFF));
-	return inet_ntop(str_pad($network, strlen($packed), "\0")) . "/" . $bits;
+	$network = sec_ip_network($ip, CAPTCHA_IP_PREFIX_V4, CAPTCHA_IP_PREFIX_V6);
+	return is_null($network) ? "" : $network . "/" . (str_contains($network, ":") ? CAPTCHA_IP_PREFIX_V6 : CAPTCHA_IP_PREFIX_V4);
 }
 
-// What the token is tied to besides the visitor and the phrase, read from the account at $email (the same read whether
-// it exists or not, so that issuing a challenge tells nothing about it):
-//   register, recover: the SHA-256 of the stored password hash and of the link pending in the account's slot (a link made, used or
-//             replaced, or any change of the password, ends the token: one mail per captcha, whether the address has an account or not)
-//   login:    "nb_connection_attempts:last_failed_attempt" as stored (a failed login, or a success, ends the token)
-// "" for an address with no account.
+// What the token is tied to in the account at $email, read the same way whether it exists or not ("" when not), so that a challenge
+// tells nothing about it: for register and recover the password hash and the pending link (a link made or used, a new password, and the
+// token is spent: one mail per captcha), for login the failure counters (a failed or a successful sign-in spends it).
 function sec_captcha_state($db, string $purpose, string $email): string {
 	$account = db_select_user_account_by_email($db, $email);
 	if (is_null($account)) return "";
@@ -70,29 +41,27 @@ function sec_captcha_state($db, string $purpose, string $email): string {
 	return hash("sha256", $account["password"] . "|" . ($account["email_token_hash"] ?? ""));
 }
 
-// The MAC (64 hex characters) of a challenge. The phrase is normalised here, so that the one made at issue and the
-// one typed at check agree. A closed captcha signs nothing: the callers answer 503 before they get here.
+// 64 hex characters. Case and spaces of the phrase do not count: a phone capitalises the first letter, a space slips in.
 function sec_captcha_sign(string $purpose, string $email, int $exp, string $phrase, string $ip_scope, string $state): string {
 	if (!sec_captcha_ready()) throw new RuntimeException("CAPTCHA_SECRET is not set");
-	$data = json_encode([$purpose, $email, $exp, sec_captcha_normalise_phrase($phrase), $ip_scope, $state], JSON_THROW_ON_ERROR);
+	$data = json_encode([$purpose, $email, $exp, strtolower(preg_replace('/\s+/', '', $phrase)), $ip_scope, $state], JSON_THROW_ON_ERROR);
 	return hash_hmac("sha256", $data, CAPTCHA_SECRET);
 }
 
-// A new challenge for this purpose and this address, from the visitor at $ip:
-// ["image" => "data:image/jpeg;base64,...", "token" => "<exp>.<mac>", "expiresAt" => exp]. Nothing is written.
+// A new challenge: ["image" => "data:image/jpeg;base64,...", "token" => "<exp>.<mac>", "expiresAt" => exp]. Nothing is written. The
+// picture is medium on purpose: no distortion, few lines, an alphabet without the glyphs that look alike (CAPTCHA_CHARSET).
 function sec_captcha_issue($db, string $purpose, string $email, string $ip): array {
-	$captcha = sec_captcha_image();
+	$captcha = new CaptchaBuilder(null, new PhraseBuilder(CAPTCHA_LENGTH, CAPTCHA_CHARSET));
+	$captcha->setDistortion(false)->setMaxBehindLines(2)->setMaxFrontLines(1)->setMaxAngle(6)->setMaxOffset(3);
+	$captcha->build(CAPTCHA_WIDTH, CAPTCHA_HEIGHT);
 	$exp = time() + CAPTCHA_VALID_SECONDS;
-	$state = sec_captcha_state($db, $purpose, $email);
-	$mac = sec_captcha_sign($purpose, $email, $exp, $captcha->getPhrase(), sec_captcha_ip_scope($ip), $state);
+	$mac = sec_captcha_sign($purpose, $email, $exp, $captcha->getPhrase(), sec_captcha_ip_scope($ip), sec_captcha_state($db, $purpose, $email));
 	return ["image" => $captcha->inline(), "token" => "$exp.$mac", "expiresAt" => $exp];
 }
 
-// Does the answer read the picture of this token? "ok", "expired" (the expiry is in the token, so it is no secret) or
-// "invalid": one word for everything else (a wrong answer, another purpose, address or network, a token that was
-// altered, cut or already used), so that nothing tells which part was wrong. The token and the answer come from a client:
-// a list, an object or a number where a string is expected is "invalid", never an error. The state is read now,
-// so the caller that needs a token to pass once reads it under the lock of the account.
+// "ok", "expired" (the expiry is in the token: no secret) or "invalid", one word for anything else, so that nothing tells which part
+// was wrong. A token or an answer of the wrong type is "invalid", never an error. The state is read now: a caller that needs a token to
+// pass once reads it under the account's lock.
 function sec_captcha_verify($db, string $purpose, string $email, mixed $token, mixed $answer, string $ip): string {
 	if (!is_string($token) || (!is_string($answer) && !is_int($answer))) return "invalid";
 	$answer = (string) $answer;
@@ -106,10 +75,8 @@ function sec_captcha_verify($db, string $purpose, string $email, mixed $token, m
 	return hash_equals($mac, $parts[2]) ? "ok" : "invalid";
 }
 
-
-// The start of an endpoint that a captcha guards (register, recover_password): ends the request with a 503 when the
-// captcha is closed and with a 429 when the address has used its attempts; otherwise reserves one and answers it, for
-// sec_captcha_exit_unless_ok() to keep or give back. $act is the name the refusals are logged under.
+// The start of register and recover_password: a 503 when the captcha is closed, a 429 when the address has used its attempts, else
+// the attempt reserved for sec_captcha_exit_unless_ok(). $act names the refusals in the log.
 function sec_captcha_exit_unless_attempt_allowed($db, string $act): int {
 	if (!sec_captcha_ready()) {
 		log_event("account.refused", ["act" => $act, "err" => "captcha_unavailable"]);
@@ -123,8 +90,7 @@ function sec_captcha_exit_unless_attempt_allowed($db, string $act): int {
 	return $attempt;
 }
 
-// The end of it, with the verdict of sec_captcha_verify(): a captcha that passes gives its attempt back; any other ends
-// the request with a 403 (`captcha_expired` or `captcha_invalid`) and the attempt stays against the address.
+// The end: a captcha that passes gives its attempt back, any other is a 403 and the attempt stays against the address.
 function sec_captcha_exit_unless_ok($db, int $attempt, string $verdict, string $act): void {
 	if ($verdict === "ok") {
 		sec_attempt_release($db, $attempt);

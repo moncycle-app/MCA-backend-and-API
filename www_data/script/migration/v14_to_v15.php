@@ -356,7 +356,7 @@ try {
     // captcha challenges that shared the table (no_user_account NULL, the answer in the
     // `captcha` column) were deleted by the SQL file above, with the column. Re-running this
     // script is safe: a row already hashed has strlen 64 (sha256 hex), not 256
-    // (sec_random_password(256) output), so it gets skipped on a second pass.
+    // (sec_token_random() output), so it gets skipped on a second pass.
     // This is also the only moment the plain token is here to take its first characters from (auth_token_prefix, unique per
     // account: GET /api/token shows it, DELETE /api/token names a token by it).
     $statement_select_tokens = $db->prepare("SELECT no_auth_token, auth_token_str FROM `auth_token`");

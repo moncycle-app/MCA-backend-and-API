@@ -117,7 +117,7 @@ const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
 const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
 // How much of the user agent the "new login" mail quotes.
 const MAIL_USER_AGENT_CHARS = 120;
-// The rule of a token made without "expiresInDays" (the cron, db_sql_old_auth_token()): it dies after this many days whatever its use,
+// The rule of a token made without "expiresInDays" (the cron, db_purge_auth_token()): it dies after this many days whatever its use,
 // or after this many days without one.
 const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
 const AUTH_TOKEN_IDLE_DAYS = 40;

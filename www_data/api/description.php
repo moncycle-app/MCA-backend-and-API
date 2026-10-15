@@ -43,7 +43,7 @@ elseif ($method === "DELETE") {
 	input_check_no_body($issues);
 	input_exit_if_issues($issues);
 
-	if (!db_select_description_exists($db, $id, $no_user_account)) {
+	if (is_null(db_select_description($db, $id, $no_user_account))) {
 		http_error(404, "not_found", "No description of this account has this id.");
 	}
 

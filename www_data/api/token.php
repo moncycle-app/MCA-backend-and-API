@@ -78,7 +78,7 @@ if ($method === 'DELETE') {
 	input_check_no_body($issues);
 
 	$prefix = $path[0] ?? null;
-	if (!is_null($prefix) && !sec_token_prefix_is_valid($prefix)) {
+	if (!is_null($prefix) && !preg_match('/\A[A-Za-z0-9]{' . AUTH_TOKEN_PREFIX_CHARS . '}\z/', $prefix)) {
 		$issues[] = input_issue("path.prefix", "invalid_value", "The token in the URL must be the first " . AUTH_TOKEN_PREFIX_CHARS . " characters of the token (letters and digits), as GET /token shows them.");
 	}
 	$others = false;

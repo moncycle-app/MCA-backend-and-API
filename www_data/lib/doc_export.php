@@ -11,6 +11,7 @@
 // and the PDF chart that suits an account's method. See lib/doc.php.
 
 require_once __DIR__ . "/user_account.php";
+require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/doc_bill.php";
@@ -34,7 +35,7 @@ require_once __DIR__ . "/doc_fc.php";
 function doc_export_days($db, string $start_date, string $end_date, array $user_account): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 
-	$rows = db_select_day_timelines_export($db, $start_date, $end_date, $no_user_account);
+	$rows = db_select_day_timelines_range($db, $start_date, date_next_day($end_date), $no_user_account);
 	if (empty($rows)) return [];
 
 	// ordered by day, type, then no_description, so a day's descriptions keep a stable order

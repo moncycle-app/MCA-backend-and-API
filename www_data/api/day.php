@@ -87,7 +87,7 @@ elseif ($method === "GET") {
 	}
 
 	$all_days = [];
-	if ($range) $all_days = db_select_day_timelines_frame($db, $range["from"], $range["to"], $no_user_account);
+	if ($range) $all_days = db_select_day_timelines_range($db, $range["from"], date_next_day($range["to"]), $no_user_account);
 	$rows_read += count($all_days);
 
 	// the days come in date order: the cycle is the one the last first day started

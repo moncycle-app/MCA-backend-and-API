@@ -7,11 +7,11 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-function date_human($date, $sep='/') {
+function date_human(DateTimeInterface $date, string $sep = '/'): string {
 	return date_format($date, 'd' . $sep . 'm' . $sep . 'y');
 }
 
-function date_human_week_day($date, $week_days, $sep='/') {
+function date_human_week_day(DateTimeInterface $date, array $week_days, string $sep = '/'): string {
 	return $week_days[intval(date_format($date, 'w'))] . date_format($date, ' d' . $sep . 'm');
 }
 
@@ -31,4 +31,8 @@ function date_parse_rfc3339(mixed $value): ?string {
 	$errors = DateTimeImmutable::getLastErrors();
 	if ($moment === false || ($errors && ($errors["warning_count"] > 0 || $errors["error_count"] > 0))) return null;
 	return $moment->setTimezone(new DateTimeZone("UTC"))->format('Y-m-d H:i:s');
+}
+
+function date_next_day(string $date): string {
+	return (new DateTimeImmutable($date))->modify('+1 day')->format('Y-m-d');
 }

@@ -12,6 +12,7 @@
 // lib/day_format.php, with the few fields the format names differently. The way back is lib/nfp_import.php.
 
 require_once __DIR__ . "/user_account.php";
+require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/server.php";
@@ -86,7 +87,7 @@ function nfp_export_cycles($db, string $start_date, string $end_date, array $use
 
 	$cycle_start_date = db_select_cycle($db, $start_date, $no_user_account) ?? $start_date;
 
-	$raw_days = db_select_day_timelines_frame($db, $cycle_start_date, $end_date, $no_user_account);
+	$raw_days = db_select_day_timelines_range($db, $cycle_start_date, date_next_day($end_date), $no_user_account);
 	$raw_days = array_column($raw_days, null, 'date_obs');
 	$rows_read = count($raw_days);
 

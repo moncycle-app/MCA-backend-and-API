@@ -42,8 +42,8 @@ if ($active > 0) {
 		"nb_user_account_recent" => round(db_count_user_accounts_recent($db)),
 		"nb_cycle" => db_count_cycles($db),
 		"nb_cycle_recent" => db_count_cycles_recent($db),
-		"age_moyen" => round(db_select_average_age($db), 1),
-		"age_moyen_recent" => round(db_select_average_age_recent($db) ?? 0, 1),
+		"age_moyen" => round(db_select_average_age($db) ?? 0, 1),
+		"age_moyen_recent" => round(db_select_average_age($db, true) ?? 0, 1),
 		"nb_total_observation" => db_count_days($db),
 		"nb_observation_aujourdhui" => db_count_days_today($db),
 	];

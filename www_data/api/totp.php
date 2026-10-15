@@ -54,7 +54,7 @@ if ($step === "confirm") {
 		http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
 	}
 
-	db_update_user_account_totp_state($db, TOTP_STATE_ACTIVE, $user_account["no_user_account"]);
+	db_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_ACTIVE, $user_account["totp_secret"]);
 	log_event("account.totp_enabled");
 
 	http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_ACTIVE)]);
@@ -70,8 +70,7 @@ if (!sec_totp_code_valid($user_account, $code)) {
 	http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
 }
 
-db_update_user_account_totp_state($db, TOTP_STATE_DISABLED, $user_account["no_user_account"]);
-db_update_user_account_totp_secret($db, null, $user_account["no_user_account"]);
+db_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_DISABLED, null);
 log_event("account.totp_disabled");
 
 http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_DISABLED)]);
