@@ -26,7 +26,7 @@ framework and no build step: PHP files, one script per endpoint, jQuery in the p
 - `www_data/api/v2/*.php` the endpoints, `www_data/api/moncycle_app_open_api.yaml` the contract
 - `www_data/lib/*.php` every function and class
 - `www_data/js/`, `css/`, `*.html` the web app
-- `www_data/script/` cron, statistics, migrations (`script/migration/`), `db_init.php`, `demo_reset.php`; `script/db/` holds
+- `www_data/script/` cron, statistics, migrations (`script/migration/`), `db_init.php`, `auto_upgrade.php`, `demo_reset.php`; `script/db/` holds
   `schema.sql` (the canonical schema) and `demo.sql`
 - `server_conf/` Apache and PHP settings of the image, its entrypoint and crontabs
 - `docs/` documentation for operators
@@ -46,7 +46,7 @@ The rule of the codebase: **`lib/` holds every function, `api/` holds none.** An
 | `config.php`, `config.docker.php`, `config.exemple.php` | What an operator sets: DB, SMTP, toggles, login throttling, CSV/PDF options | `define()` only, no function. Each loads `constants.php`. A new setting goes in all three, with the same name and default. `config.php` is the operator's own copy (not committed). |
 | `lib/<name>.php` | All functions and classes | Every function is named `<name>_*`: the file name is the prefix. |
 | `api/v2/*.php` | One HTTP endpoint each | No `function`, `class`, `const` or `define`. Answers with `http_data()`, `http_error()` or `http_no_content()` (they `exit`). |
-| `script/*.php` | cron, stats, migrations, `db_init.php`, `demo_reset.php` | Same rules as `api/`. Migrations are `script/migration/vN-1_to_vN.{sql,php}`. |
+| `script/*.php` | cron, stats, migrations, `db_init.php`, `auto_upgrade.php`, `demo_reset.php` | Same rules as `api/`. Migrations are `script/migration/vN-1_to_vN.{sql,php}`. |
 
 Also:
 
@@ -316,7 +316,8 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
 
 - **Docker entrypoint, cron, demo** (`server_conf/docker-entrypoint.sh`, `moncycle.crontab`, `moncycle-demo.crontab`): on the default
   command the entrypoint runs `script/db_init.php --wait=60` (empty database: `schema.sql`, and `demo.sql` if `DEMO_ENABLED`; skipped
-  in `MAINTENANCE_MODE`; exit 1 if the database never answers) and, unless `CRON_ENABLED` is off, starts supercronic as `www-data` on
+  in `MAINTENANCE_MODE`; exit 1 if the database never answers), then `script/auto_upgrade.php --wait=60 --skip-if-maintenance` (see
+  Migrations), and, unless `CRON_ENABLED` is off, starts supercronic as `www-data` on
   `moncycle.crontab` (`30 3 * * *` runs `cron.php`) and, when `DEMO_ENABLED` is on, a second one on `moncycle-demo.crontab`
   (`0 * * * *` runs `demo_reset.php`; one crontab per process). `cron.php` must run once a day (it mails and erases), hence the
   separate `script/demo_reset.php` for the hourly demo reload. `DEMO_ENABLED` (default **false**) gates the sign-in and the sessions
@@ -328,11 +329,14 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
   the NFP export writes it as `sourceAppVersion`. There is no build date, no commit and no `build.json`. Because the number is also
   the schema's, a release that changes no table still ships a migration that sets the row. The other version is the contract's: the
   `v2` of `api/v2/` (see "The API contract"). Bump `APP_VERSION` only when asked, with its migration and the git tag `vN`.
-- **Migrations** are `script/migration/vN-1_to_vN.{sql,php}`; `APP_VERSION` corresponds to the `vN`. A migration is tried on a
-  copy first (MariaDB commits at every `ALTER TABLE`), and never run against a database that holds real data without a dump. A `.php`
-  runner starts by reading the database's `schema_version` and comparing it with `APP_VERSION`: it runs on `APP_VERSION - 1` only
-  (`v14_to_v15.php` also on a database with no version, since v14 had none and its `key_value` was still `cle_valeur`); on any other number
-  it prints `VERSION MISMATCH` with the reason, changes nothing and exits with status 1. Every new runner does the same.
+- **Migrations** are `script/migration/vN-1_to_vN.{sql,php}`; `APP_VERSION` corresponds to the `vN`. **`script/auto_upgrade.php`**
+  (`lib/upgrade.php`) runs them: the Docker entrypoint calls it at every start, and it works from a shell (`php script/auto_upgrade.php`,
+  settings from `config.php`). It reads the database's `schema_version` (none, with the old `cle_valeur` table: v14), refuses a database
+  newer than `APP_VERSION` or one no migration leads from (exit 1, nothing changed), and otherwise runs `vN-1_to_vN` (`.php` before `.sql`)
+  for each version up to `APP_VERSION`, checking after each that the row says the new number; a server lock keeps two instances apart. So
+  **a migration checks no version itself** (no `$to_version`, no mismatch test) and says what it does on stdout; a `.php` runner is
+  CLI-only. A migration is tried on a copy first (MariaDB commits at every `ALTER TABLE`), and a half-run one is undone by restoring the
+  dump, never by running it again.
 - **The captcha** needs a `CAPTCHA_SECRET` of 32+ characters (the image makes one when none is given); without it register,
   recover_password and the login of an account that must answer a captcha answer 503 `captcha_unavailable`.
 

@@ -40,20 +40,8 @@ RUN arch="$(dpkg --print-architecture)" \
 # prod is the default (php.ini-production); dev is opt-in through dev.env, see server_conf/moncycleapp_php.ini
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-# the scripts of script/ answer to this machine only (Require ip, see zz-moncycleapp.conf)
-ENV APP_SCRIPT_ALLOW="127.0.0.1 ::1"
-# the news page and the terms of service of the web app, both shown in an iframe: the app reads them as the NEWS_URL and
-# TERMS_OF_SERVICE_URL settings. Same defaults as config.docker.php; NEWS_URL empty turns the banner off. The entrypoint derives
-# the CSP's frame-src from them (CSP_FRAME_SRC, zz-moncycleapp.conf): this value is only the one of the default URLs, for Apache
-# to start with when the entrypoint does not run.
-ENV NEWS_URL="https://www.moncycle.app/actu.html"
-ENV TERMS_OF_SERVICE_URL="https://www.moncycle.app/ToS/term_of_service_fr.html"
-ENV CSP_FRAME_SRC="https://www.moncycle.app"
-# the daily job (cron.php at 3:30, container time zone) runs inside the container, and so does the hourly reset of the
-# demo accounts when DEMO_ENABLED (a setting of the app, off by default); false to run them from the host (README,
-# "Cron") or not at all.
-ENV CRON_ENABLED="true"
-ENV COMPOSER_ALLOW_SUPERUSER=1
+# No ENV here: the settings come from the container's environment or from config.php (config.docker.php, README "Settings"), and the
+# entrypoint gives the few it needs for Apache their defaults (APP_SCRIPT_ALLOW, CSP_FRAME_SRC; CRON_ENABLED is on unless set off).
 
 COPY --from=composer/composer:latest-bin /composer /usr/bin/composer
 COPY ./server_conf/zz-moncycleapp.conf /etc/apache2/conf-enabled/zz-moncycleapp.conf
@@ -62,7 +50,7 @@ COPY ./www_data/config.docker.php /var/www/html/config.php
 
 # dependencies from composer.lock; the code is root-owned and not writable: the app never writes to disk
 RUN cd /var/www/html \
-	&& composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader --classmap-authoritative \
+	&& COMPOSER_ALLOW_SUPERUSER=1 composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader --classmap-authoritative \
 	&& composer clear-cache \
 	&& chown -R root:root /var/www/html \
 	&& chmod -R a+rX,go-w /var/www/html
@@ -73,7 +61,7 @@ RUN mkdir -p /var/log/moncycle \
 	&& chown www-data:www-data /var/log/moncycle \
 	&& chmod 750 /var/log/moncycle
 
-# the entrypoint makes the schema on a first launch and starts the scheduler, then hands over to Apache
+# the entrypoint makes the schema on a first launch, upgrades an older database and starts the scheduler, then hands over to Apache
 COPY ./server_conf/moncycle.crontab /etc/moncycle.crontab
 COPY ./server_conf/moncycle-demo.crontab /etc/moncycle-demo.crontab
 COPY ./server_conf/docker-entrypoint.sh /usr/local/bin/moncycle-entrypoint

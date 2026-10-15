@@ -14,9 +14,12 @@ one version at a time.
    the schema ones. A run that fails half way is undone by restoring the dump, never by running the script again.
 2. **Stop the old container**, or point the proxy away from it, or start the new one with `MAINTENANCE_MODE=true` (see
    [Maintenance mode](../README.md#maintenance-mode)).
-3. **Run the migration inside a container of the new image** (it already has the database settings):
-   `docker exec <container> php /var/www/html/script/migration/v14_to_v15.php`. `script/` answers only to `127.0.0.1` over HTTP, so run
-   it through the command line as above. Without Docker: `php www_data/script/migration/v14_to_v15.php`.
+3. **Start the new image: it upgrades the database itself.** At every start the entrypoint runs `script/auto_upgrade.php`, which
+   compares the `schema_version` of the database with `APP_VERSION` and, if the database is behind, runs the migrations that lead to
+   it. Their output is in `docker logs`. A start in `MAINTENANCE_MODE` skips it; run it by hand then, from a container of the new image:
+   `docker exec <container> php /var/www/html/script/auto_upgrade.php`. Without Docker: `php www_data/script/auto_upgrade.php` (it
+   reads `config.php`; `--wait=SECONDS` waits for a database that is starting). A database newer than the code, or one a migration
+   cannot lead from, makes it exit with status 1 and change nothing; the container then does not start.
 4. **Without Docker, a `config.php` written by hand needs the settings the new version adds.** Copy them from `config.exemple.php`
    (for v15: `MAINTENANCE_MODE`, `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `TERMS_OF_SERVICE_URL`, `DEMO_ENABLED`, `CAPTCHA_SECRET`,
    and the `LOGIN_*` ones). A missing one is a fatal "Undefined constant". The Docker image reads them from its environment and needs
@@ -36,9 +39,10 @@ The code checks it on every request against `APP_VERSION` ([`constants.php`](../
 are the same number, so a release that changes no table still ships a migration that sets it. A database that says another number is not
 served: every endpoint answers `503 schema_mismatch` (`GET /api/v2/server_info` opens no database and does not say it; it tells `appVersion`).
 
-A migration script reads this row first and runs only on a database one version behind (`v14_to_v15.php` also on a database with none: v14
-did not have it). On the same version, a newer one or an older one it prints `VERSION MISMATCH`, says why, changes nothing and exits with
-status 1.
+`script/auto_upgrade.php` is the only thing that reads this row to decide what to run: a migration script checks nothing itself, so do not
+run one aside. From the version found (a database with no row but the old `cle_valeur` table is v14) it runs `vN-1_to_vN` one version at a
+time up to `APP_VERSION`, and checks after each that the row says the new number. It holds a server lock while it works, so two
+containers started together do not both migrate.
 
 ## From v14 to v15
 

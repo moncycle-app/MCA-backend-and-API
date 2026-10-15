@@ -100,7 +100,8 @@ to host it: for a real site read [Without Docker, in production](docs/deployment
    `config.php` instead if you prefer to export them.
 
 4. **Make the schema.** From `www_data/script/`, `php db_init.php` loads [`schema.sql`](www_data/script/db/schema.sql) into the empty
-   database (and the demo accounts if `DEMO_ENABLED`). It leaves a database that has tables as it is.
+   database (and the demo accounts if `DEMO_ENABLED`). It leaves a database that has tables as it is; `php auto_upgrade.php` brings an older
+   one to the version of the code.
 
 5. **Start the server** from the root of the repository:
 
@@ -262,7 +263,8 @@ full hour.
 
 ### Upgrading
 
-Dump the database, try the migration on a copy, run `vN-1_to_vN` in a container of the new image, and check the `schema_version`. The
+Dump the database, try the migration on a copy, then start the new image: at every start it compares the `schema_version` of the database
+with `APP_VERSION` and runs the migrations it lacks (`script/auto_upgrade.php`, output in `docker logs`; without Docker, run it yourself). The
 steps, and what the v14 to v15 migration does to your data, are in [docs/upgrading.md](docs/upgrading.md).
 
 ### Logs

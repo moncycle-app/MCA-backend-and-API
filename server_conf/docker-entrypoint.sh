@@ -1,6 +1,8 @@
 #!/bin/sh
 # The entrypoint of the image. When the container is the web server (the default command) it first
 #   1. makes the schema if the database has no table yet (script/db_init.php; skipped in MAINTENANCE_MODE),
+#   1b. upgrades the database when its schema_version is behind APP_VERSION (script/auto_upgrade.php; skipped in MAINTENANCE_MODE),
+#       what it does is printed, so `docker logs` shows it,
 #   2. makes the key that signs the captcha challenges when none is given (CAPTCHA_SECRET),
 #   3. makes the frame-src of the CSP from NEWS_URL and TERMS_OF_SERVICE_URL (CSP_FRAME_SRC),
 #   4. starts the schedulers (supercronic) unless CRON_ENABLED is off: one for the daily job (server_conf/moncycle.crontab)
@@ -24,6 +26,14 @@ if [ "${1:-}" = "apache2-foreground" ]; then
 	# restart policy of the container tries again.
 	(as_web_user php /var/www/html/script/db_init.php --wait=60)
 
+	# the database is there: bring it to the version of this code, migrations included. The output goes to the container's log; a failure
+	# (a database newer than the code, a migration that throws) is a failed start, and the database is left as the migration left it.
+	(as_web_user php /var/www/html/script/auto_upgrade.php --wait=60 --skip-if-maintenance)
+
+	# Apache's `Require ip` for script/ (zz-moncycleapp.conf): this machine only unless set.
+	APP_SCRIPT_ALLOW="${APP_SCRIPT_ALLOW:-127.0.0.1 ::1}"
+	export APP_SCRIPT_ALLOW
+
 	# The captcha is signed with CAPTCHA_SECRET (at least 32 characters; shorter or empty and the captcha is closed, 503).
 	# None given: a random one is made for this run, which the web server and the cron inherit. A restart then only voids
 	# the challenges in flight (five minutes at most). Instances behind one address, or a restart that must not void them,
@@ -38,8 +48,11 @@ if [ "${1:-}" = "apache2-foreground" ]; then
 	# The frame-src of the CSP (zz-moncycleapp.conf) lists the origins of the two pages the web app shows in an iframe, NEWS_URL
 	# and TERMS_OF_SERVICE_URL. The origin, not the page: the terms page links to its other languages, inside the frame. Only an
 	# https URL counts; none, and the policy forbids every frame.
+	# The two URLs are read from config.php, which has their defaults (an unset variable is the official instance's, an empty one none),
+	# so that the image holds no copy of them.
+	urls=$(as_web_user php -r 'require "/var/www/html/config.php"; echo TERMS_OF_SERVICE_URL, "\n", NEWS_URL, "\n";')
 	CSP_FRAME_SRC=""
-	for url in "${TERMS_OF_SERVICE_URL:-}" "${NEWS_URL:-}"; do
+	for url in $urls; do
 		origin=$(printf '%s' "$url" | sed -nE 's#^(https://[A-Za-z0-9.-]+(:[0-9]+)?)(/.*)?$#\1#p')
 		[ -n "$origin" ] || continue
 		case " $CSP_FRAME_SRC " in

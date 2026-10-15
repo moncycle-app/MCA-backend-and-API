@@ -114,6 +114,19 @@ function db_count_tables($db): int {
 	return intval(db_value($db, "SELECT COUNT(T.TABLE_NAME) FROM information_schema.TABLES AS T WHERE T.TABLE_SCHEMA = DATABASE()"));
 }
 
+function db_exists_table($db, string $table): bool {
+	return intval(db_value($db, "SELECT COUNT(T.TABLE_NAME) FROM information_schema.TABLES AS T WHERE T.TABLE_SCHEMA = DATABASE() AND T.TABLE_NAME = :table", ["table" => $table])) === 1;
+}
+
+// A named lock of the server, held by this connection until db_release_lock() or the end of the connection. DDL does not release it.
+function db_get_lock($db, string $name, int $wait_seconds): bool {
+	return intval(db_value($db, "SELECT GET_LOCK(:name, :wait)", ["name" => $name, "wait" => $wait_seconds])) === 1;
+}
+
+function db_release_lock($db, string $name): void {
+	db_value($db, "SELECT RELEASE_LOCK(:name)", ["name" => $name]);
+}
+
 // ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------

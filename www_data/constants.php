@@ -182,6 +182,11 @@ const APP_NAME = "moncycle.app";
 
 // The row of key_value that holds the schema's version, which must be APP_VERSION.
 const SCHEMA_VERSION_KEY = "schema_version";
+// v14 had no such row, and its key_value table was still called cle_valeur: a database that has the one and not the other is at this version.
+const UPGRADE_UNVERSIONED_VERSION = 14;
+// Name of the server lock that lets one instance at a time upgrade the database, and how long another waits for it.
+const UPGRADE_LOCK_NAME = "moncycle_upgrade";
+const UPGRADE_LOCK_WAIT_SECONDS = 600;
 
 // The names a POST /api/v2/account body may use, and the ones of GET /api/v2/account that the server alone writes (refused if sent).
 const ACCOUNT_UPDATE_FIELDS = [
