@@ -20,12 +20,13 @@ require_once __DIR__ . "/input.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/mail.php";
 require_once __DIR__ . "/sec.php";
+require_once __DIR__ . "/sec_token.php";
 
 // Writes a link in the account's slot (the one before it is gone) and answers the token for the mail. $new_email is the address a
 // change of address will change to; the other purposes have none.
 function email_token_issue($db, int $no_user_account, int $purpose, ?string $new_email = null): string {
 	$token = rtrim(strtr(base64_encode(random_bytes(EMAIL_TOKEN_BYTES)), "+/", "-_"), "=");
-	db_update_user_account_email_token($db, $no_user_account, sec_hash_token($token), $purpose, EMAIL_TOKEN_LIFETIME_MINUTES[$purpose], $new_email);
+	db_update_user_account_email_token($db, $no_user_account, sec_token_hash($token), $purpose, EMAIL_TOKEN_LIFETIME_MINUTES[$purpose], $new_email);
 	log_context(["uid" => $no_user_account]);
 	log_event("account.email_token_issued", ["purp" => EMAIL_TOKEN_PURPOSE_NAMES[$purpose]]);
 	return $token;
@@ -37,7 +38,7 @@ function email_token_issue($db, int $no_user_account, int $purpose, ?string $new
 // code $apply gave]. "invalid_token" is every link that is not good for this: unknown, already used, replaced, for another purpose.
 function email_token_use($db, mixed $token, int $purpose, callable $apply): array {
 	if (!is_string($token) || $token === "" || strlen($token) > EMAIL_TOKEN_LIMIT_CHARS) return ["error" => "invalid_token"];
-	$token_hash = sec_hash_token($token);
+	$token_hash = sec_token_hash($token);
 	$found = db_select_user_account_by_email_token($db, $token_hash);
 	if (is_null($found)) return ["error" => "invalid_token"];
 
@@ -129,7 +130,7 @@ function email_token_complete($db, array $body, array $issues = []): array {
 	return ["status" => 200, "data" => ["purpose" => EMAIL_TOKEN_PURPOSE_NAMES[$purpose], "loginEmail" => $used["result"]["loginEmail"]]];
 }
 
-// A change of the login address, asked by a session that has given its password (account_update() checks it, and the TOTP code when the
+// A change of the login address, asked by a session that has given its password (user_account_update() checks it, and the TOTP code when the
 // account has one): the link goes to the NEW address, which proves it, and the old one is told. Answers whether the link mail was
 // sent. An address another account has gets no link and no error (nobody can tell who has an account): its owner is told instead.
 function email_token_request_email_change($db, array $user_account, string $new_email): bool {

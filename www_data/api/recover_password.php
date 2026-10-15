@@ -8,7 +8,7 @@
 */
 
 require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/account.php";
+require_once __DIR__ . "/../lib/user_account.php";
 require_once __DIR__ . "/../lib/api.php";
 require_once __DIR__ . "/../lib/input.php";
 require_once __DIR__ . "/../lib/mail.php";
@@ -26,7 +26,7 @@ $email = null;
 if (input_require($body, "email", $issues)) {
 	if (!is_string($body["email"])) input_wrong_type($issues, "email", $body["email"], "a string (an e-mail address)");
 	else {
-		$email = account_email_normalise($body["email"]);
+		$email = user_account_email_normalise($body["email"]);
 		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $issues[] = input_issue("email", "invalid_email", "'email' is not a valid e-mail address.");
 	}
 }
@@ -35,9 +35,9 @@ foreach (["captcha", "captchaToken"] as $field) {
 }
 input_exit_if_issues($issues);
 
-$attempt = sec_exit_unless_attempt_allowed($db, "recover_password");
-$recovery = account_recover_password($db, $email, $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
-sec_exit_unless_captcha_ok($db, $attempt, $recovery["captcha"], "recover_password");
+$attempt = sec_captcha_exit_unless_attempt_allowed($db, "recover_password");
+$recovery = user_account_recover_password($db, $email, $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
+sec_captcha_exit_unless_ok($db, $attempt, $recovery["captcha"], "recover_password");
 
 // The answer is the same whether or not the account exists, and takes as long, so that nobody
 // can use this to find out who has one. Logged before the sleep: a worker killed meanwhile must not lose it.

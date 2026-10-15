@@ -54,7 +54,7 @@ const PASSWORD_MAX_BYTES = 72;
 // address that has no account is checked against it, so that it takes as long as a wrong password does.
 const AUTH_DUMMY_PASSWORD_HASH = '$2y$12$fFAyg7vWBJagg2QJOymLY.Ndi.VRQtAJhChoNUW7XiAxek8JDKUju';
 
-// The captcha picture (lib/captcha.php). Medium on purpose: the characters are not distorted and there are a few
+// The captcha picture (lib/sec_captcha.php). Medium on purpose: the characters are not distorted and there are a few
 // lines, and the alphabet leaves out the glyphs that look alike (o 0, i l j 1, s 5, z 2, b 6 8, g q 9, u v, c e).
 // What the visitor types is matched without regard to case.
 const CAPTCHA_CHARSET = "adefhkmnprtwxy3467";
@@ -62,7 +62,7 @@ const CAPTCHA_LENGTH = 6;
 const CAPTCHA_WIDTH = 180;
 const CAPTCHA_HEIGHT = 60;
 
-// The captcha is a signed challenge, kept nowhere (lib/captcha.php): a token "<exp>.<mac>" that holds its own expiry.
+// The captcha is a signed challenge, kept nowhere (lib/sec_captcha.php): a token "<exp>.<mac>" that holds its own expiry.
 // CAPTCHA_SECRET (config.php) signs it; one shorter than CAPTCHA_SECRET_MIN_CHARS counts as none and the captcha is closed (503).
 const CAPTCHA_VALID_SECONDS = 300;
 const CAPTCHA_ANSWER_MAX_BYTES = 64;   // a longer answer is no reading of a picture of CAPTCHA_LENGTH characters
@@ -95,7 +95,7 @@ const ACCOUNT_BIRTH_YEAR_MAX_AGE = 100;             // this year, or up to this 
 // The methods that change nothing: all a read-only token may use (api_start()).
 const HTTP_SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 
-// auth_token: what a session or a custom token is (lib/token.php). The widths are those of the columns.
+// auth_token: what a session or a custom token is (lib/sec_token.php). The widths are those of the columns.
 const AUTH_TOKEN_LIMIT_NAME_CHARS = 256;            // auth_token.name varchar(256)
 const AUTH_TOKEN_LIMIT_USER_AGENT_CHARS = 255;      // auth_token.user_agent and user_agent_use varchar(255), cut to fit
 const AUTH_TOKEN_DEFAULT_NAME = "API";              // the name of a token whose client gave none
@@ -181,7 +181,7 @@ const NFP_METHODS_KNOWN = [NFP_METHOD_BILLINGS, NFP_METHOD_FERTILITY_CARE, NFP_M
 
 // user_account.nfp_method packs the method and whether temperature is tracked in one 1-4 int:
 // id => [the method as the NFP format and the JSON API name it, temperature tracked].
-// lib/account.php is the one place that reads this table; js/account.js carries a copy.
+// lib/user_account.php is the one place that reads this table; js/account.js carries a copy.
 const NFP_METHOD_BY_ID = [
 	1 => [NFP_METHOD_BILLINGS, true],
 	2 => [NFP_METHOD_BILLINGS, false],
@@ -643,7 +643,7 @@ const DOC_FC_LINES_PER_PAGE = 8;                // rows of the grid on a page...
 const DOC_FC_LINES_PER_PAGE_TEMPERATURE = 7;    // ... and when the temperature row takes room
 
 // The legend column, top to bottom: row => its label. The baby row has none, and the temperature
-// row only exists for the methods that track it (account_tracks_temperature(), lib/account.php).
+// row only exists for the methods that track it (user_account_tracks_temperature(), lib/user_account.php).
 const DOC_FC_ROW_LABELS = [
 	"stamp" => "TAMPON",
 	"baby" => "",

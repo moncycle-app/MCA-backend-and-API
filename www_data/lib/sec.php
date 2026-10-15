@@ -14,7 +14,6 @@ use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 
 require_once __DIR__ . "/../vendor/autoload.php";
-require_once __DIR__ . "/captcha.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
@@ -48,71 +47,6 @@ function sec_password_issue(string $password, string $field): ?array {
 	return null;
 }
 
-// fast, non-salted hash used to store/look up auth tokens: unlike sec_hash(), it must be
-// deterministic so a token can be matched with a plain `WHERE = :hash` query. Safe here
-// because the token itself already carries 256 chars of entropy (see sec_random_password).
-function sec_hash_token($token) {
-	return hash("sha256", $token);
-}
-
-// the session token cookie of the request, "" when there is none (or when it is a list: a client can
-// send "MONCYCLEAPP_TOKEN[]=x", and PHP reads it as one)
-function sec_cookie_token(): string {
-	$token = $_COOKIE[COOKIE_AUTH_TOKEN] ?? "";
-	return is_string($token) ? $token : "";
-}
-
-// The SameSite attribute of the session cookie (COOKIE_SAMESITE). None is only honoured on a Secure
-// cookie: a browser drops a SameSite=None cookie that is not, so it falls back to Lax.
-function sec_cookie_samesite(): string {
-	if (COOKIE_SAMESITE === "none") return PHP_SECURE_COOKIES ? "None" : "Lax";
-	return COOKIE_SAMESITE === "lax" ? "Lax" : "Strict";
-}
-
-function sec_set_token_cookie(string $token, string $lifetime): void {
-	setcookie(COOKIE_AUTH_TOKEN, $token, [
-		'expires' => strtotime($lifetime),
-		'path' => '/',
-		'secure' => PHP_SECURE_COOKIES,
-		'httponly' => true,
-		'samesite' => sec_cookie_samesite(),
-	]);
-}
-
-function sec_clear_token_cookie(): void {
-	foreach ([COOKIE_AUTH_TOKEN, COOKIE_AUTH_TOKEN_LEGACY] as $name) {
-		setcookie($name, '', [
-			'expires' => -1,
-			'path' => '/',
-			'secure' => PHP_SECURE_COOKIES,
-			'httponly' => true,
-			'samesite' => sec_cookie_samesite(),
-		]);
-	}
-}
-
-// The account of the token the request carries (cookie, or "Authorization: Bearer"), or null. The
-// account and the session it finds are the ones every line of the request's log carries. A token past its
-// expiry date (POST /api/token, "expiresInDays") opens nothing, whether or not the cron has erased it yet.
-function sec_auth_token($db) {
-	$auth_token = $_COOKIE[COOKIE_AUTH_TOKEN_LEGACY] ?? ""; // legacy, to be removed in a few release
-	if (!is_string($auth_token)) $auth_token = "";
-	if (sec_cookie_token() !== "") $auth_token = sec_cookie_token();
-	$head = getallheaders();
-	if (isset($head["Authorization"]) && str_contains($head["Authorization"], "Bearer ")) $auth_token = explode(' ', trim($head["Authorization"]), 2)[1];
-	if (strlen($auth_token) > 0) {
-		$user_account = db_select_user_account_auth_token($db, sec_hash_token($auth_token));
-		if (!is_null($user_account) && !boolval($user_account["expired_auth_token"]) && sec_account_enabled($user_account)) {
-			db_update_auth_token_use($db, $user_account["no_auth_token"], sec_client_ip(), sec_user_agent());
-			log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($user_account["no_auth_token"])]);
-			return $user_account;
-		}
-		$why = is_null($user_account) ? "unknown" : (boolval($user_account["expired_auth_token"]) ? "expired" : "disabled");
-		log_event("auth.token_rejected", ["why" => $why, "uid" => $user_account["no_user_account"] ?? null, "sid" => $user_account["no_auth_token"] ?? null]);
-	}
-	return null;
-}
-
 function sec_exit_if_logged_out($user_account) {
 	if (is_null($user_account)) {
 		log_note(["err" => "unauthorized"]);
@@ -121,18 +55,6 @@ function sec_exit_if_logged_out($user_account) {
 		echo json_encode(["error" => ["code" => "unauthorized", "message" => "Authentication required."]]);
 		exit;
 	}
-}
-
-// Is the token of the request a read-only one? (POST /api/token, "scope".)
-function sec_token_is_read_only(array $user_account): bool {
-	return intval($user_account["scope_auth_token"] ?? AUTH_TOKEN_SCOPE_READ_WRITE) === AUTH_TOKEN_SCOPE_READ_ONLY;
-}
-
-// Ends the request with a 403 when the token is read-only. api_start() calls it for every method that is not safe (HTTP_SAFE_METHODS);
-// an endpoint calls it itself for a GET that changes something (GET /api/totp starts a set-up).
-function sec_exit_if_token_read_only(array $user_account): void {
-	if (!sec_token_is_read_only($user_account)) return;
-	http_error(403, "read_only_token", "This token is read-only.");
 }
 
 // Is the caller logged in as one of the public demo accounts? Its password is written on the sign-in page, so it is
@@ -155,44 +77,6 @@ function sec_redirect_if_logged_out($user_account) {
 		http_response_code(401);
 		exit;
 	}
-}
-
-// The user agent the server received, for the token to keep: made valid UTF-8, stripped of every control and invisible character
-// (a header can be 8 KB, is not always UTF-8 and is the client's own: the account page shows it, and a right-to-left override must
-// not reorder the line around it) and cut to what the column holds. null when the client sent none.
-function sec_user_agent(): ?string {
-	$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
-	if (!is_string($user_agent)) return null;
-	$user_agent = preg_replace('/\p{C}+/u', '', mb_scrub(substr($user_agent, 0, 4 * AUTH_TOKEN_LIMIT_USER_AGENT_CHARS))) ?? '';
-	$user_agent = mb_substr($user_agent, 0, AUTH_TOKEN_LIMIT_USER_AGENT_CHARS);
-	return $user_agent === '' ? null : $user_agent;
-}
-
-// Opens a session: stores a new token for the account and returns it, with what the server saw of the client (its address, its
-// user agent). $options: "name", "scope" (AUTH_TOKEN_SCOPE_*), "expires_in_days" (null: the cron's rule), "cookie" (set the cookie of
-// the token: a browser's session; a custom token made on the account page must not replace the cookie it is made from, so it
-// does not). A cookie session replaces the one the browser held, which nobody holds any more: that row goes, or the list of
-// tokens would fill with sessions nobody can use. The new session is the one the rest of the request's log names. The token's first
-// characters (AUTH_TOKEN_PREFIX_CHARS) are kept in the clear and are unique per account: a token that would repeat one is made again.
-function sec_auth_success($db, $user_account, array $options = []) {
-	$scope = $options["scope"] ?? AUTH_TOKEN_SCOPE_READ_WRITE;
-	$expires_in_days = $options["expires_in_days"] ?? null;
-
-	$no_auth_token = null;
-	for ($try = 0; is_null($no_auth_token); $try++) {
-		if ($try === AUTH_TOKEN_PREFIX_TRIES) throw new \RuntimeException("no free token prefix after $try tries");
-		$auth_token = sec_random_password(256);
-		$prefix = substr($auth_token, 0, AUTH_TOKEN_PREFIX_CHARS);
-		$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $options["name"] ?? AUTH_TOKEN_DEFAULT_NAME, $scope, $expires_in_days, sec_user_agent(), sec_client_ip(), sec_hash_token($auth_token), $prefix);
-	}
-	log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($no_auth_token)]);
-	db_update_user_account_logged_in($db, $user_account["no_user_account"]);
-	if ($options["cookie"] ?? false) {
-		if (sec_cookie_token() !== "") log_context(["rev" => db_delete_auth_token_by_str($db, sec_hash_token(sec_cookie_token())) ?: null]);
-		sec_set_token_cookie($auth_token, is_null($expires_in_days) ? '+5 years' : "+$expires_in_days days");
-	}
-
-	return ["token" => $auth_token, "prefix" => $prefix];
 }
 
 function sec_obfuscate($str) {
@@ -253,7 +137,7 @@ function sec_exit_if_cross_origin(): void {
 // ---------------------------------------------------------------------------
 
 // the string vocabulary (TOTP_STATE_NAMES, constants.php) the JSON API exposes instead of
-// the raw 0-3 DB int -- shared by api/totp.php and lib/account.php so the two never drift apart.
+// the raw 0-3 DB int -- shared by api/totp.php and lib/user_account.php so the two never drift apart.
 function sec_totp_state_name($state) {
 	if (!is_int($state)) return "unknown";
 	return TOTP_STATE_NAMES[$state] ?? "unknown";
@@ -363,197 +247,3 @@ function sec_attempt_release($db, int $attempt): void {
 	if ($attempt > 0) db_delete_login_attempt_ip($db, $attempt);
 }
 
-// The start of an endpoint that a captcha guards (register, recover_password): ends the request with a 503 when the
-// captcha is closed and with a 429 when the address has used its attempts; otherwise reserves one and answers it, for
-// sec_exit_unless_captcha_ok() to keep or give back. $act is the name the refusals are logged under.
-function sec_exit_unless_attempt_allowed($db, string $act): int {
-	if (!captcha_ready()) {
-		log_event("account.refused", ["act" => $act, "err" => "captcha_unavailable"]);
-		http_error(503, "captcha_unavailable", "The captcha is not available.");
-	}
-	$attempt = sec_attempt_reserve($db, sec_client_ip());
-	if (is_null($attempt)) {
-		log_event("account.refused", ["act" => $act, "err" => "rate_limited"]);
-		http_error(429, "rate_limited", "Too many attempts from this network, please try again later.");
-	}
-	return $attempt;
-}
-
-// The end of it, with the verdict of captcha_verify(): a captcha that passes gives its attempt back; any other ends
-// the request with a 403 (`captcha_expired` or `captcha_invalid`) and the attempt stays against the address.
-function sec_exit_unless_captcha_ok($db, int $attempt, string $verdict, string $act): void {
-	if ($verdict === "ok") {
-		sec_attempt_release($db, $attempt);
-		return;
-	}
-	$code = $verdict === "expired" ? "captcha_expired" : "captcha_invalid";
-	log_event("account.refused", ["act" => $act, "err" => $code]);
-	http_error(403, $code, $verdict === "expired" ? "The captcha has expired." : "Error in captcha input.");
-}
-
-// number of recent failed login attempts on this account, ignoring attempts older than
-// LOGIN_ATTEMPTS_DECAY_MINUTES so a stale streak doesn't linger forever. The login settings are
-// in the config file, and each one at 0 turns its feature off: a decay of 0 counts no attempt
-// at all, so neither the captcha nor the lockout can trigger.
-function sec_login_effective_attempts($user_account) {
-	if (LOGIN_ATTEMPTS_DECAY_MINUTES <= 0) return 0;
-	if (!isset($user_account["nb_connection_attempts"]) || empty($user_account["last_failed_attempt"])) return 0;
-
-	$cutoff = new DateTime("-" . LOGIN_ATTEMPTS_DECAY_MINUTES . " minutes");
-	if (new DateTime($user_account["last_failed_attempt"]) < $cutoff) return 0;
-
-	return intval($user_account["nb_connection_attempts"]);
-}
-
-function sec_login_captcha_required($user_account) {
-	return LOGIN_CAPTCHA_THRESHOLD > 0 && sec_login_effective_attempts($user_account) >= LOGIN_CAPTCHA_THRESHOLD;
-}
-
-function sec_login_account_locked($user_account) {
-	return LOGIN_LOCKOUT_THRESHOLD > 0 && sec_login_effective_attempts($user_account) >= LOGIN_LOCKOUT_THRESHOLD;
-}
-
-// The outcome of a login attempt, for the endpoint to answer with:
-//   success: ["status" => 200, "data" => [...]]
-//   refusal: ["status" => 4xx/503, "code" => ..., "message" => ..., "meta" => [...]]
-// Every refusal but a malformed body, a rate-limited IP and a closed captcha is also counted against the IP, and a
-// wrong password or TOTP code against the account (the captcha and lockout thresholds). The IP is counted by a row
-// that sec_attempt_reserve() writes before the checks and the login gives back when it succeeds.
-// An account that must answer a captcha (captchaRequired) is checked with its row locked, from the captcha to the end:
-// the token is tied to the account's counters, which every outcome that tests a password changes, so of the requests
-// that arrive together with one token the first takes it and the others find the counters moved: one password is tried
-// per token. (The answer of an account that is deactivated changes no counter: that token can be tried again, and only
-// ever gets `account_disabled`. And a login that succeeds ends the failures: a request that reads the account after
-// it finds one that asks for no captcha, and signs in on its password alone like any login.)
-// Every outcome is logged: the refusals as `auth.login_failed`, with the account when the address
-// has one and its count of failed attempts, this one included when it was counted against it.
-// $body["email"] (a valid address, normalised: account_email_normalise(), how it is stored) and $body["password"] (a non-empty string) have been
-// checked by the endpoint (api/token.php), and so have the types of "code", "captcha" and "captchaToken".
-// $token_options is what sec_auth_success() takes (name, scope, expires_in_days, cookie), checked by the endpoint (token_parse_options()).
-function sec_login($db, array $body, array $token_options = []): array {
-	$user_account = [];
-
-	$refuse = function (int $status, string $code, string $message, array $meta = [], bool $counted_on_account = false) use (&$user_account) {
-		$known = isset($user_account["no_user_account"]);
-		log_event("auth.login_failed", [
-			"err" => $code,
-			"att" => $known ? sec_login_effective_attempts($user_account) + intval($counted_on_account) : null,
-			"uid" => $known ? $user_account["no_user_account"] : null,
-		]);
-		return ["status" => $status, "code" => $code, "message" => $message, "meta" => $meta];
-	};
-
-	$client_ip = sec_client_ip();
-	$user_account = db_select_user_account_by_email($db, $body["email"]) ?? [];
-	$account_locked = sec_login_account_locked($user_account);
-
-	// surfaced on every outcome below (successes included): it is a hint for the client's *next*
-	// attempt, not tied to whether this one succeeded.
-	$captcha_required = sec_login_captcha_required($user_account);
-	$meta = $captcha_required ? ["captchaRequired" => true] : [];
-
-	// the row this login reserved against the address: 0 until it has (login_disabled is counted without one)
-	$attempt = 0;
-
-	// a refusal counted against the IP (its reserved row stays), and against the account when it is a wrong credential
-	$counted = function (int $status, string $code, string $message, bool $wrong_credential = false) use ($db, $client_ip, $body, $meta, $refuse, &$attempt) {
-		if ($wrong_credential) db_update_login_failure($db, $body["email"]);
-		if ($attempt === 0) db_insert_login_attempt_ip($db, $client_ip);
-		return $refuse($status, $code, $message, $meta, $wrong_credential);
-	};
-
-	if (!LOGIN_ENABLED) return $counted(403, "login_disabled", "Login is disabled.");
-
-	// no key to check the captcha with: the server is at fault, nothing is counted against anyone
-	if ($captcha_required && !captcha_ready()) return $refuse(503, "captcha_unavailable", "The captcha is not available.", $meta);
-
-	// already throttled: nothing is written, or a blocked IP could grow this table forever
-	$attempt = sec_attempt_reserve($db, $client_ip);
-	if (is_null($attempt)) {
-		return $refuse(429, "rate_limited", "Too many attempts from this network, please try again later.", $meta);
-	}
-
-	// the account, the password, the code: what a login is once the captcha (if it is asked) is passed
-	$check_credentials = function () use ($db, $body, $token_options, $meta, $counted, $refuse, &$user_account, &$account_locked, &$attempt) {
-		if (isset($user_account["user_enabled"]) && !sec_account_enabled($user_account)) return $counted(403, "account_disabled", "Account deactivated.");
-
-		// an address with no account is checked against a hash nobody can match, for the time a check takes
-		$password_ok = password_verify($body["password"], $user_account["password"] ?? AUTH_DUMMY_PASSWORD_HASH) && isset($user_account["password"]);
-
-		// hard lockout only kicks in on a WRONG password: the account owner can still log in with the
-		// correct credentials, so this can't be abused to lock a victim out (an account with a TOTP code
-		// is the exception, see below)
-		if (!$password_ok) {
-			return $account_locked
-				? $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true)
-				: $counted(401, "invalid_credentials", "Incorrect password or non-existent account.", true);
-		}
-
-		// An address nobody proved yet: said only to whoever knows the password, so that a sign-in tells nothing about an account it
-		// cannot open. The credentials were right, so it is no failure: nothing is counted, the attempt is given back.
-		if (is_null($user_account["email_verified_at"])) {
-			sec_attempt_release($db, $attempt);
-			return $refuse(403, "email_not_verified", "Verify your email address first: the link was sent to it when the account was created.", $meta);
-		}
-
-		$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
-		$code = $body["code"] ?? "";
-		if (!is_string($code) && !is_int($code)) $code = "";
-		// With the password right, the code is the only thing left to guess: the wrong ones are counted on the
-		// account (below), and past the lockout threshold the code is no longer looked at, the right one included.
-		// The password alone can then keep a TOTP account locked: the price of a code that cannot be guessed.
-		if ($totp_active && $account_locked) {
-			return $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true);
-		}
-		if ($totp_active && !sec_totp_code_valid($user_account, $code)) {
-			// wrong or missing code: one outcome either way
-			$given = strlen((string) $code) > 0 && intval(preg_replace('/\s+/', '', (string) $code)) > 0;
-			return $counted(401, $given ? "totp_invalid" : "totp_required",
-				$given ? "Correct password, but the TOTP code is incorrect." : "Correct password, but a TOTP code is required.", true);
-		}
-
-		// the failures this login ends, read before sec_auth_success() resets them
-		$attempts = sec_login_effective_attempts($user_account);
-		unset($user_account["password"], $user_account["totp_secret"], $user_account["email_token_hash"]);
-		$session = sec_auth_success($db, $user_account, $token_options);
-		sec_attempt_release($db, $attempt);
-		log_event("auth.login_succeeded", [
-			"att" => $attempts,
-			"totp" => $totp_active,
-			"scope" => AUTH_TOKEN_SCOPE_NAMES[$token_options["scope"] ?? AUTH_TOKEN_SCOPE_READ_WRITE],
-			"cookie" => boolval($token_options["cookie"] ?? false),
-		]);
-
-		return ["status" => 201, "data" => array_merge([
-			"prefix" => $session["prefix"],
-			"token" => $session["token"],
-			"userId" => $user_account["no_user_account"],
-			"totpUsed" => $totp_active,
-		], $meta)];
-	};
-
-	if (!$captcha_required) return $check_credentials();
-
-	// A wrong or missing captcha: one refusal, or "expired" for a token that is past its time. It is counted against the
-	// IP only, not the account: the counters are what the token is tied to.
-	$captcha_refused = fn(string $verdict) => $verdict === "expired"
-		? $counted(403, "captcha_expired", "The captcha has expired.")
-		: $counted(403, "captcha_required", "Missing or incorrect captcha.");
-	$captcha_verdict = fn() => captcha_verify($db, "login", $body["email"], $body["captchaToken"] ?? null, $body["captcha"] ?? "", $client_ip);
-
-	// checked first without a lock, so that a request that cannot pass (a wrong answer is the usual one) never holds
-	// the account: only a valid token takes it
-	$verdict = $captcha_verdict();
-	if ($verdict !== "ok") return $captcha_refused($verdict);
-
-	return db_transaction($db, function () use ($db, $captcha_verdict, $captcha_refused, $check_credentials, &$user_account, &$account_locked) {
-		// the row is held until the end of the login, bcrypt included, and read again under the lock: a request that
-		// came with the same token has finished by now, and the counters it moved no longer match
-		$no_user_account = $user_account["no_user_account"];
-		$user_account = db_select_user_account_for_update($db, $no_user_account) ? (db_select_user_account($db, $no_user_account) ?? []) : [];
-		$account_locked = sec_login_account_locked($user_account);
-
-		$verdict = $captcha_verdict();
-		return $verdict === "ok" ? $check_credentials() : $captcha_refused($verdict);
-	});
-}

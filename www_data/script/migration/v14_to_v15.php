@@ -10,6 +10,7 @@
 require_once __DIR__ . "/../../config.php";
 require_once __DIR__ . "/../../lib/db.php";
 require_once __DIR__ . "/../../lib/sec.php";
+require_once __DIR__ . "/../../lib/sec_token.php";
 
 header("Content-Type: text/plain");
 
@@ -374,7 +375,7 @@ try {
         print("> hashing auth_token " . $token_row["no_auth_token"]);
         print(PHP_EOL);
 
-        $statement_hash_token->bindValue(":hashed_token", sec_hash_token($token_row["auth_token_str"]), PDO::PARAM_STR);
+        $statement_hash_token->bindValue(":hashed_token", sec_token_hash($token_row["auth_token_str"]), PDO::PARAM_STR);
         $statement_hash_token->bindValue(":no_auth_token", $token_row["no_auth_token"], PDO::PARAM_INT);
         $statement_hash_token->bindValue(":prefix", substr($token_row["auth_token_str"], 0, AUTH_TOKEN_PREFIX_CHARS), PDO::PARAM_STR);
         try {

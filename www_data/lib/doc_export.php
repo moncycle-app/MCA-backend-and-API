@@ -10,7 +10,7 @@
 // The front door of the period exports (api/export.php, script/cron.php): the days of a period,
 // and the PDF chart that suits an account's method. See lib/doc.php.
 
-require_once __DIR__ . "/account.php";
+require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/doc_bill.php";
@@ -100,7 +100,7 @@ function doc_export_cycle_day(?string $cycle_start, string $date): ?int {
 }
 
 function doc_export_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false): DocPdf {
-	if (account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) {
+	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) {
 		return doc_fc_pdf($days, $nfp_method, $name, $anonymous);
 	}
 	return doc_bill_pdf($days, $nfp_method, $name, $anonymous);

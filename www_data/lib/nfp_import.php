@@ -24,7 +24,7 @@
 ** (data_write_day()), so the packed-code knowledge stays in one place.
 */
 
-require_once __DIR__ . "/account.php";
+require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
@@ -191,7 +191,7 @@ function nfp_import_report(): array {
 ** Nothing here touches the DB.
 */
 function nfp_import_build_plan(object $file, array $user_account, array $warnings = []): array {
-	$account_method = account_method_name(intval($user_account["nfp_method"]));
+	$account_method = user_account_method_name(intval($user_account["nfp_method"]));
 	$report = nfp_import_report();
 	$report["warnings"] = $warnings;
 	$plan = [];

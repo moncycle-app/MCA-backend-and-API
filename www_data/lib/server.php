@@ -13,7 +13,7 @@
 // the build date and the commit are written at build time in lib/build.json (build.sh) and are not in the database; the version the
 // database is at is the row `schema_version` of key_value, set by schema.sql and by each migration. Only API_VERSION is told to a client.
 
-require_once __DIR__ . "/captcha.php";
+require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 
@@ -78,7 +78,7 @@ function server_info(): array {
 		"maintenanceMode" => MAINTENANCE_MODE,
 		"registrationEnabled" => REGISTRATION_ENABLED,
 		"demoEnabled" => DEMO_ENABLED,
-		"captchaAvailable" => captcha_ready(),
+		"captchaAvailable" => sec_captcha_ready(),
 		"newsUrl" => str_starts_with(NEWS_URL, "https://") ? NEWS_URL : null,
 		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
 		"limits" => server_limits(),

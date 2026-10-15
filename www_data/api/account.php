@@ -9,9 +9,10 @@
 
 require_once __DIR__ . "/../config.php";
 require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/account.php";
+require_once __DIR__ . "/../lib/user_account.php";
 require_once __DIR__ . "/../lib/data.php";
 require_once __DIR__ . "/../lib/input.php";
+require_once __DIR__ . "/../lib/sec_token.php";
 
 [$db, $user_account] = api_start();
 
@@ -29,13 +30,13 @@ if ($path === ["deletion"]) {
 	$password = input_secret($body, "password", $issues);
 	input_exit_if_issues($issues);
 
-	if (!account_password_matches($db, $user_account, $password)) {
+	if (!user_account_password_matches($db, $user_account, $password)) {
 		log_event("account.refused", ["act" => "delete", "err" => "invalid_password"]);
 		http_error(401, "invalid_password", "Incorrect password.");
 	}
 
 	data_delete_account($db, $user_account, "user_request");
-	sec_clear_token_cookie();
+	sec_token_clear_cookie();
 
 	http_no_content();
 }
@@ -48,7 +49,7 @@ if ($method === "GET") {
 	input_check_no_body($issues);
 	input_exit_if_issues($issues);
 
-	$account = account_to_json($user_account);
+	$account = user_account_to_json($user_account);
 	// a client that keeps the account sends back the ETag it was given and is told when nothing changed
 	$etag = 'W/"' . md5(json_encode($account)) . '"';
 	header("ETag: $etag");
@@ -64,7 +65,7 @@ if ($method === "POST") {
 	input_query([], $issues);
 	$body = input_body(ACCOUNT_UPDATE_FIELDS, $issues, [], ACCOUNT_READ_ONLY_FIELDS);
 
-	$outcome = account_update($db, $user_account, $body, $issues);
+	$outcome = user_account_update($db, $user_account, $body, $issues);
 	if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);
 
 	http_data($outcome["status"], $outcome["data"], $outcome["meta"]);

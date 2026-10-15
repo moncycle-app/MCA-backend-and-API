@@ -9,8 +9,8 @@
 
 require_once __DIR__ . "/../config.php";
 require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/account.php";
-require_once __DIR__ . "/../lib/captcha.php";
+require_once __DIR__ . "/../lib/user_account.php";
+require_once __DIR__ . "/../lib/sec_captcha.php";
 require_once __DIR__ . "/../lib/input.php";
 
 [$db] = api_start(false);
@@ -30,17 +30,17 @@ $email = null;
 if (input_require($body, "email", $issues)) {
 	if (!is_string($body["email"])) input_wrong_type($issues, "email", $body["email"], "a string (an e-mail address)");
 	else {
-		$email = account_email_normalise($body["email"]);
+		$email = user_account_email_normalise($body["email"]);
 		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $issues[] = input_issue("email", "invalid_email", "'email' is not a valid e-mail address.");
 	}
 }
 input_exit_if_issues($issues);
 
-if (!captcha_ready()) {
+if (!sec_captcha_ready()) {
 	http_error(503, "captcha_unavailable", "The captcha is not available.");
 }
 
-$challenge = captcha_issue($db, $body["purpose"], $email, sec_client_ip());
+$challenge = sec_captcha_issue($db, $body["purpose"], $email, sec_client_ip());
 log_event("auth.captcha_issued");
 
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");

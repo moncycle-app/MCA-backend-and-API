@@ -14,6 +14,7 @@ require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/sec.php";
+require_once __DIR__ . "/sec_token.php";
 require_once __DIR__ . "/server.php";
 
 // What every JSON endpoint begins with, and the only thing the ones that answer in maintenance (GET /api/server_info) do: starts the log of the
@@ -38,10 +39,10 @@ function api_start(bool $login_required = true, bool $read_only_ok = false): arr
 	sec_exit_if_cross_origin();
 	$db = db_open();
 	server_exit_if_schema_mismatch($db);
-	$user_account = sec_auth_token($db);
+	$user_account = sec_token_authenticate($db);
 	if ($login_required) {
 		sec_exit_if_logged_out($user_account);
-		if (!$read_only_ok && !in_array($_SERVER['REQUEST_METHOD'] ?? '', HTTP_SAFE_METHODS, true)) sec_exit_if_token_read_only($user_account);
+		if (!$read_only_ok && !in_array($_SERVER['REQUEST_METHOD'] ?? '', HTTP_SAFE_METHODS, true)) sec_token_exit_if_read_only($user_account);
 	}
 	return [$db, $user_account];
 }

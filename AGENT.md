@@ -74,45 +74,47 @@ Also:
 - **`doc.php`, `doc_export.php`, `doc_csv.php`, `doc_pdf.php`, `doc_bill.php`, `doc_fc.php`** the CSV and PDF exports: the shared display
   rule; the front door (`doc_export_days`, `doc_export_pdf`); the CSV and the raw data dump; `DocPdf` and core-font text; the Billings
   chart; the FertilityCare chart.
-- **`token.php`** the account's tokens: `token_parse_options` (name, scope, expiresInDays, cookie of `POST /api/token`; a 400 before
-  anything is read), `token_list` / `token_to_json` (the address cut to /24 or /48 by `token_ip_network`), `token_revoke`
-  (`DELETE /api/token/{prefix}`, the first `AUTH_TOKEN_PREFIX_CHARS` characters of the token, or `?others=true`: no database id is in the
-  API), `token_exit_if_demo`. `api/token.php` is the only endpoint: POST signs in (it is `sec_login`, and mails the owner through
-  `mail_send_new_login`), GET lists (a bare array), DELETE logs out (no parameter, idempotent) or revokes. **A DELETE never has a body.**
-  `sec_auth_success()` makes the token (name, scope, expiry, cookie only on request, user agent and address kept whole; its first
-  characters are kept in the clear as `auth_token.auth_token_prefix`, unique per account, and the token is made again when the key
-  refuses). `api_start($login_required, $read_only_ok)` refuses a read-only token on a method that is not in `HTTP_SAFE_METHODS`
-  (`POST /api/totp` included: it is a POST).
-- **`account.php`** the account row: the method table (`NFP_METHOD_BY_ID`: id 3 = FertilityCare, 4 = FertilityCare + temperature),
-  `account_check_settings` (the settings that need no password, checked: issues, never silently dropped), `account_to_json`
-  (`GET /api/account`; the cycles are in the sync, the news address in `server_info`), **`account_update()` = the whole of
+- **`user_account.php`** the account row: the method table (`NFP_METHOD_BY_ID`: id 3 = FertilityCare, 4 = FertilityCare + temperature),
+  `user_account_check_settings` (the settings that need no password, checked: issues, never silently dropped), `user_account_to_json`
+  (`GET /api/account`; the cycles are in the sync, the news address in `server_info`), **`user_account_update()` = the whole of
   `POST /api/account`** (every setting is changed there, partial: a method or a temperature flag not sent keeps its value;
   `newPassword`, `notificationEmails` and `loginEmail` want the current password again as `password`, `loginEmail` also the TOTP
   `code`; everything is checked before anything is written; it answers the account in `data` and `fieldsUpdated` /
-  `loggedOutDevices` / `loginEmailLinkSent` in `meta`), `account_notification_emails_parse()` (`user_account.notification_emails` is a
+  `loggedOutDevices` / `loginEmailLinkSent` in `meta`), `user_account_notification_emails_parse()` (`user_account.notification_emails` is a
   list of at most 5 addresses separated by `;`, lower case, no duplicate, 1024 characters; `mail_recipients()` adds the login
-  address), and the two requests that make a link: `account_register()` (a new address gets an unverified account, with the moment it accepted
+  address), and the two requests that make a link: `user_account_register()` (a new address gets an unverified account, with the moment it accepted
   the terms in `terms_accepted_at` (`POST /api/register` refuses a request without `termsAccepted: true`), and a verify link;
   an address that has an account is never touched and gets a reset link; same answer either way; the insert that finds the address
   taken ENDS its transaction and goes round again, because a share lock on the key plus a locking read is a deadlock, measured) and
-  `account_recover_password()` (a link only: the password is not touched).
+  `user_account_recover_password()` (a link only: the password is not touched).
 - **`email_token.php`** the link by mail. ONE slot per account (`user_account.email_token_*`: hash, purpose 1 accountCreation / 2
   resetPassword / 3 changeEmail, expiry, pending address); a new link replaces the old one, whatever it was for.
   `email_token_issue()`, `email_token_use()` (transaction, account locked, purpose and expiry checked, single use),
   `email_token_complete()` (the body of `POST /api/verify_email`; the password is checked before the link is touched; a reset leaves
-  sessions and TOTP alone), `email_token_request_email_change()` (called by `account_update()` for `loginEmail`: a link to the NEW
+  sessions and TOTP alone), `email_token_request_email_change()` (called by `user_account_update()` for `loginEmail`: a link to the NEW
   address; an address another account has gets a mail, same answer). `user_account.email_verified_at` NULL = the account cannot sign in
-  (`sec_login`: `403 email_not_verified`, only after the right password, counted as nothing); the cron erases such accounts after
+  (`sec_token_login`: `403 email_not_verified`, only after the right password, counted as nothing); the cron erases such accounts after
   `ACCOUNT_UNVERIFIED_DELETE_DAYS`. Any raw insert of an account must call `db_update_user_account_email_verified()`.
-- **`sec.php`** tokens and cookies (`sec_cookie_samesite()`: `COOKIE_SAMESITE`), `sec_login()` (returns its outcome, the endpoint
-  answers; an account that must answer a captcha is checked inside `db_transaction()` with its row locked), TOTP, throttling
-  (`sec_attempt_reserve()` / `_release()`: the attempt is written before the check and given back when it does not count;
-  `sec_exit_unless_attempt_allowed()` / `sec_exit_unless_captcha_ok()` are the two ends of register and recover_password), the client
-  address (`sec_client_ip()`: `REMOTE_ADDR`, or `X-Forwarded-For` when the peer is in `TRUSTED_PROXIES`), and the write-origin check
-  (`sec_exit_if_cross_origin()`: `APP_URL`, `WEB_APP_ORIGINS`).
-- **`captcha.php`** the signed captcha, kept nowhere: `captcha_issue` / `captcha_verify` (ok / expired / invalid) / `captcha_sign`
-  (HMAC-SHA256 with `CAPTCHA_SECRET`, over purpose, address, expiry, phrase, `captcha_ip_scope` of the client and `captcha_state` of the
-  account) / `captcha_ready`. Closed without a secret of 32+ characters: 503 `captcha_unavailable`. No cookie, no row, no `db_*` call.
+- **`sec.php`** passwords (`sec_hash()`, `sec_password_issue()`), TOTP, who may sign in (`sec_account_enabled()`,
+  `sec_session_is_demo()`), throttling (`sec_attempt_reserve()` / `_release()`: the attempt is written before the check and given back
+  when it does not count), the client address (`sec_client_ip()`: `REMOTE_ADDR`, or `X-Forwarded-For` when the peer is in
+  `TRUSTED_PROXIES`), and the write-origin check (`sec_exit_if_cross_origin()`: `APP_URL`, `WEB_APP_ORIGINS`).
+- **`sec_token.php`** the account's tokens and `/api/token`. `sec_token_authenticate()` finds the account of the request (cookie or
+  `Authorization: Bearer`); `sec_token_login()` is the sign-in (returns its outcome, the endpoint answers; an account that must answer a
+  captcha is checked inside `db_transaction()` with its row locked); `sec_token_create()` makes the token (name, scope, expiry, cookie only
+  on request, `sec_token_cookie_samesite()`: `COOKIE_SAMESITE`; user agent and address kept whole; its first characters are kept in the
+  clear as `auth_token.auth_token_prefix`, unique per account, and the token is made again when the key refuses).
+  `sec_token_parse_options` reads name, scope, expiresInDays, cookie of `POST /api/token` (a 400 before anything is read);
+  `sec_token_list` / `sec_token_to_json` (the address cut to /24 or /48 by `sec_token_ip_network`), `sec_token_revoke`
+  (`DELETE /api/token/{prefix}`, the first `AUTH_TOKEN_PREFIX_CHARS` characters of the token, or `?others=true`: no database id is in the
+  API), `sec_token_exit_if_demo`. `api/token.php` is the only endpoint: POST signs in (and mails the owner through
+  `mail_send_new_login`), GET lists (a bare array), DELETE logs out (no parameter, idempotent) or revokes. **A DELETE never has a body.**
+  `api_start($login_required, $read_only_ok)` refuses a read-only token on a method that is not in `HTTP_SAFE_METHODS`
+  (`POST /api/totp` included: it is a POST).
+- **`sec_captcha.php`** the signed captcha, kept nowhere: `sec_captcha_issue` / `sec_captcha_verify` (ok / expired / invalid) / `sec_captcha_sign`
+  (HMAC-SHA256 with `CAPTCHA_SECRET`, over purpose, address, expiry, phrase, `sec_captcha_ip_scope` of the client and `sec_captcha_state` of the
+  account) / `sec_captcha_ready`. Closed without a secret of 32+ characters: 503 `captcha_unavailable`. No cookie, no row, no `db_*` call.
+  `sec_captcha_exit_unless_attempt_allowed()` / `sec_captcha_exit_unless_ok()` are the two ends of register and recover_password.
 - **`mail.php`** `mail_send()` and the mails (names and addresses escaped; returns false rather than throwing). The links are
   `APP_URL` + `verify_email#purpose=..&t=..` (the page `verify_email.html` and `js/verify_email.js` post the fragment to
   `POST /api/verify_email`). A mail never holds a password.
@@ -332,7 +334,7 @@ There is no test suite in the repository: a change is checked by running the app
   `php -l` cannot see a missing `require_once`, a renamed function a caller still uses, or a wrong return shape: only running the code
   does.
 - **Behaviour:** call the endpoints with `curl`. Get a token with `POST /api/token` and send it as `Authorization: Bearer <token>`.
-  Test anything behind authentication over HTTP: `sec_auth_token()` needs `getallheaders()`, which the command line does not have.
+  Test anything behind authentication over HTTP: `sec_token_authenticate()` needs `getallheaders()`, which the command line does not have.
   Day JSON uses `comment` (singular); the NFP format uses `comments`.
 - **A refactor must not change behaviour:** record the answers of the endpoints you touched (and the exports) before the change and
   compare them after.

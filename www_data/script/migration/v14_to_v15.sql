@@ -122,7 +122,7 @@ ALTER TABLE `description` CHANGE `last_write_db` `last_write_db` TIMESTAMP NULL 
 ALTER TABLE `user_account` ADD `last_write_db` TIMESTAMP NULL  DEFAULT CURRENT_TIMESTAMP  ON UPDATE CURRENT_TIMESTAMP;
 ALTER TABLE `auth_token` ADD `last_write_db` TIMESTAMP NULL  DEFAULT CURRENT_TIMESTAMP  ON UPDATE CURRENT_TIMESTAMP;
 
--- The captcha is a signed challenge now (lib/captcha.php) and is kept nowhere: the rows that held one (no account, expire 3)
+-- The captcha is a signed challenge now (lib/sec_captcha.php) and is kept nowhere: the rows that held one (no account, expire 3)
 -- go with the column of the answer, and every token belongs to an account.
 DELETE FROM `auth_token` WHERE `no_user_account` IS NULL;
 ALTER TABLE `auth_token`
@@ -152,7 +152,7 @@ ALTER TABLE `user_account`
 ADD `auto_mail_export` tinyint(1) unsigned NOT NULL DEFAULT 1 AFTER `research`,
 ALGORITHM=INSTANT, LOCK=NONE;
 
--- Addresses are stored in lower case: the app lowers what a client types (account_email_normalise) and the DB
+-- Addresses are stored in lower case: the app lowers what a client types (user_account_email_normalise) and the DB
 -- compares exactly (utf8mb4_bin), so a mixed-case account could not log in with its own address otherwise.
 -- Two accounts whose email1 differ only by case would collide on the unique key. v14_to_v15.php keeps one of them
 -- and deletes the others before it runs this file (and says why); if you run this file by hand, settle them first:

@@ -11,7 +11,7 @@
 // What the format is (vocabulary, schema) is lib/nfp_format.php; the day itself is the JSON day of
 // lib/day_format.php, with the few fields the format names differently. The way back is lib/nfp_import.php.
 
-require_once __DIR__ . "/account.php";
+require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/server.php";
@@ -82,7 +82,7 @@ function nfp_export_day(array $day): array {
 // that took (the gaps of the file are no row): the export's log says how much was read.
 function nfp_export_cycles($db, string $start_date, string $end_date, array $user_account, ?int &$rows_read = null): array {
 	$no_user_account = intval($user_account["no_user_account"]);
-	$method = account_method_name(intval($user_account["nfp_method"]));
+	$method = user_account_method_name(intval($user_account["nfp_method"]));
 
 	$cycle_start_date = db_select_cycle($db, $start_date, $no_user_account) ?? $start_date;
 
@@ -154,7 +154,7 @@ function nfp_export_file($db, string $start_date, string $end_date, array $user_
 	}
 
 	$file["userMethodPreferences"] = [
-		"preferredMethod" => account_method_name(intval($user_account["nfp_method"])),
+		"preferredMethod" => user_account_method_name(intval($user_account["nfp_method"])),
 	];
 	$file["cycles"] = nfp_export_cycles($db, $start_date, $end_date, $user_account, $rows_read);
 

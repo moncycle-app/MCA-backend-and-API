@@ -18,16 +18,19 @@ use Gregwar\Captcha\PhraseBuilder;
 
 require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/http.php";
+require_once __DIR__ . "/log.php";
+require_once __DIR__ . "/sec.php";
 
 // Is the captcha open? Without a secret of CAPTCHA_SECRET_MIN_CHARS characters it is closed: nothing is signed with a
 // short or empty key, and what needs a captcha is refused with a 503.
-function captcha_ready(): bool {
+function sec_captcha_ready(): bool {
 	return strlen(CAPTCHA_SECRET) >= CAPTCHA_SECRET_MIN_CHARS;
 }
 
 // The picture and its phrase, from the CAPTCHA_* constants. The library's own defaults (a wave distortion, and
 // an alphabet of both cases with i, l, o, 0, 1...) make a picture that few visitors read: this one is medium.
-function captcha_image(): CaptchaBuilder {
+function sec_captcha_image(): CaptchaBuilder {
 	$captcha = new CaptchaBuilder(null, new PhraseBuilder(CAPTCHA_LENGTH, CAPTCHA_CHARSET));
 	$captcha->setDistortion(false)->setMaxBehindLines(2)->setMaxFrontLines(1)->setMaxAngle(6)->setMaxOffset(3);
 	return $captcha->build(CAPTCHA_WIDTH, CAPTCHA_HEIGHT);
@@ -35,14 +38,14 @@ function captcha_image(): CaptchaBuilder {
 
 // A phrase, or what was typed for it, as it is compared: case and spaces do not count (a phone capitalises the first
 // letter and a space slips in; neither is a mistake in the reading).
-function captcha_normalise_phrase(string $text): string {
+function sec_captcha_normalise_phrase(string $text): string {
 	return strtolower(preg_replace('/\s+/', '', $text));
 }
 
 // The visitor's network, as the token is tied to it: the address cut to CAPTCHA_IP_PREFIX_V4 bits (IPv4) or
 // CAPTCHA_IP_PREFIX_V6 bits (IPv6), written "a.b.c.0/24". An IPv4-mapped IPv6 address ("::ffff:10.0.0.1", what a
 // dual-stack socket gives) is read as the IPv4 one. "" when the address is not one.
-function captcha_ip_scope(string $ip): string {
+function sec_captcha_ip_scope(string $ip): string {
 	$packed = inet_pton($ip);
 	if ($packed === false) return "";
 	if (strlen($packed) === 16 && str_starts_with($packed, str_repeat("\0", 10) . "\xff\xff")) $packed = substr($packed, 12);
@@ -60,7 +63,7 @@ function captcha_ip_scope(string $ip): string {
 //             replaced, or any change of the password, ends the token: one mail per captcha, whether the address has an account or not)
 //   login:    "nb_connection_attempts:last_failed_attempt" as stored (a failed login, or a success, ends the token)
 // "" for an address with no account.
-function captcha_state($db, string $purpose, string $email): string {
+function sec_captcha_state($db, string $purpose, string $email): string {
 	$account = db_select_user_account_by_email($db, $email);
 	if (is_null($account)) return "";
 	if ($purpose === "login") return $account["nb_connection_attempts"] . ":" . $account["last_failed_attempt"];
@@ -69,19 +72,19 @@ function captcha_state($db, string $purpose, string $email): string {
 
 // The MAC (64 hex characters) of a challenge. The phrase is normalised here, so that the one made at issue and the
 // one typed at check agree. A closed captcha signs nothing: the callers answer 503 before they get here.
-function captcha_sign(string $purpose, string $email, int $exp, string $phrase, string $ip_scope, string $state): string {
-	if (!captcha_ready()) throw new RuntimeException("CAPTCHA_SECRET is not set");
-	$data = json_encode([$purpose, $email, $exp, captcha_normalise_phrase($phrase), $ip_scope, $state], JSON_THROW_ON_ERROR);
+function sec_captcha_sign(string $purpose, string $email, int $exp, string $phrase, string $ip_scope, string $state): string {
+	if (!sec_captcha_ready()) throw new RuntimeException("CAPTCHA_SECRET is not set");
+	$data = json_encode([$purpose, $email, $exp, sec_captcha_normalise_phrase($phrase), $ip_scope, $state], JSON_THROW_ON_ERROR);
 	return hash_hmac("sha256", $data, CAPTCHA_SECRET);
 }
 
 // A new challenge for this purpose and this address, from the visitor at $ip:
 // ["image" => "data:image/jpeg;base64,...", "token" => "<exp>.<mac>", "expiresAt" => exp]. Nothing is written.
-function captcha_issue($db, string $purpose, string $email, string $ip): array {
-	$captcha = captcha_image();
+function sec_captcha_issue($db, string $purpose, string $email, string $ip): array {
+	$captcha = sec_captcha_image();
 	$exp = time() + CAPTCHA_VALID_SECONDS;
-	$state = captcha_state($db, $purpose, $email);
-	$mac = captcha_sign($purpose, $email, $exp, $captcha->getPhrase(), captcha_ip_scope($ip), $state);
+	$state = sec_captcha_state($db, $purpose, $email);
+	$mac = sec_captcha_sign($purpose, $email, $exp, $captcha->getPhrase(), sec_captcha_ip_scope($ip), $state);
 	return ["image" => $captcha->inline(), "token" => "$exp.$mac", "expiresAt" => $exp];
 }
 
@@ -90,7 +93,7 @@ function captcha_issue($db, string $purpose, string $email, string $ip): array {
 // altered, cut or already used), so that nothing tells which part was wrong. The token and the answer come from a client:
 // a list, an object or a number where a string is expected is "invalid", never an error. The state is read now,
 // so the caller that needs a token to pass once reads it under the lock of the account.
-function captcha_verify($db, string $purpose, string $email, mixed $token, mixed $answer, string $ip): string {
+function sec_captcha_verify($db, string $purpose, string $email, mixed $token, mixed $answer, string $ip): string {
 	if (!is_string($token) || (!is_string($answer) && !is_int($answer))) return "invalid";
 	$answer = (string) $answer;
 	if ($answer === "" || strlen($answer) > CAPTCHA_ANSWER_MAX_BYTES) return "invalid";
@@ -99,6 +102,35 @@ function captcha_verify($db, string $purpose, string $email, mixed $token, mixed
 	$exp = intval($parts[1]);
 	if ($exp < time()) return "expired";
 
-	$mac = captcha_sign($purpose, $email, $exp, $answer, captcha_ip_scope($ip), captcha_state($db, $purpose, $email));
+	$mac = sec_captcha_sign($purpose, $email, $exp, $answer, sec_captcha_ip_scope($ip), sec_captcha_state($db, $purpose, $email));
 	return hash_equals($mac, $parts[2]) ? "ok" : "invalid";
+}
+
+
+// The start of an endpoint that a captcha guards (register, recover_password): ends the request with a 503 when the
+// captcha is closed and with a 429 when the address has used its attempts; otherwise reserves one and answers it, for
+// sec_captcha_exit_unless_ok() to keep or give back. $act is the name the refusals are logged under.
+function sec_captcha_exit_unless_attempt_allowed($db, string $act): int {
+	if (!sec_captcha_ready()) {
+		log_event("account.refused", ["act" => $act, "err" => "captcha_unavailable"]);
+		http_error(503, "captcha_unavailable", "The captcha is not available.");
+	}
+	$attempt = sec_attempt_reserve($db, sec_client_ip());
+	if (is_null($attempt)) {
+		log_event("account.refused", ["act" => $act, "err" => "rate_limited"]);
+		http_error(429, "rate_limited", "Too many attempts from this network, please try again later.");
+	}
+	return $attempt;
+}
+
+// The end of it, with the verdict of sec_captcha_verify(): a captcha that passes gives its attempt back; any other ends
+// the request with a 403 (`captcha_expired` or `captcha_invalid`) and the attempt stays against the address.
+function sec_captcha_exit_unless_ok($db, int $attempt, string $verdict, string $act): void {
+	if ($verdict === "ok") {
+		sec_attempt_release($db, $attempt);
+		return;
+	}
+	$code = $verdict === "expired" ? "captcha_expired" : "captcha_invalid";
+	log_event("account.refused", ["act" => $act, "err" => $code]);
+	http_error(403, $code, $verdict === "expired" ? "The captcha has expired." : "Error in captcha input.");
 }

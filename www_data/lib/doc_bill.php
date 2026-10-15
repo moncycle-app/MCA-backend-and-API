@@ -24,7 +24,7 @@
 ** (DOC_BILL_*), the text styles (DOC_PDF_STYLES) and the colours are in constants.php.
 */
 
-require_once __DIR__ . "/account.php";
+require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_pdf.php";
@@ -41,7 +41,7 @@ function doc_bill_pdf(array $days, int $nfp_method, string $name, bool $anonymou
 	$pdf->SetMargins(DOC_PDF_MARGIN, DOC_PDF_MARGIN);
 
 	$rows = doc_bill_rows($days);
-	$layout = doc_bill_layout($pdf, $rows, account_tracks_temperature($nfp_method));
+	$layout = doc_bill_layout($pdf, $rows, user_account_tracks_temperature($nfp_method));
 	doc_bill_fit_rows($pdf, $rows, $layout);
 	$pages = doc_bill_paginate($pdf, $rows);
 

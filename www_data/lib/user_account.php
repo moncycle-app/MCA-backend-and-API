@@ -10,7 +10,7 @@
 // The user_account row as the code and the JSON API see it: its method, the account as GET /api/account shows it, and what a
 // POST /api/account body changes.
 
-require_once __DIR__ . "/captcha.php";
+require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/email_token.php";
@@ -26,22 +26,22 @@ require_once __DIR__ . "/sec.php";
 // ---------------------------------------------------------------------------
 
 // The method of the account as the NFP format names it. Anything unknown reads as Billings.
-function account_method_name(int $nfp_method): string {
+function user_account_method_name(int $nfp_method): string {
 	return NFP_METHOD_BY_ID[$nfp_method][0] ?? NFP_METHOD_BILLINGS;
 }
 
-function account_tracks_temperature(int $nfp_method): bool {
+function user_account_tracks_temperature(int $nfp_method): bool {
 	return NFP_METHOD_BY_ID[$nfp_method][1] ?? false;
 }
 
 // The id of a method name (one of NFP_METHODS_NATIVE) and temperature flag, as the API takes them.
-function account_method_id(string $method, bool $temperature_tracking): int {
+function user_account_method_id(string $method, bool $temperature_tracking): int {
 	return array_search([$method, $temperature_tracking], NFP_METHOD_BY_ID, true);
 }
 
 // The id a body's "method" and "temperatureTracking" ask for, both checked (an issue for a wrong one); a missing one is $default_id's:
 // Billings without temperature for a new account, the account's own for a change. Null when a field is wrong.
-function account_method_id_from_json(array $body, array &$issues, int $default_id = 2): ?int {
+function user_account_method_id_from_json(array $body, array &$issues, int $default_id = 2): ?int {
 	[$method, $temperature_tracking] = NFP_METHOD_BY_ID[$default_id];
 	$before = count($issues);
 
@@ -53,7 +53,7 @@ function account_method_id_from_json(array $body, array &$issues, int $default_i
 	$flag = input_bool_field($body, "temperatureTracking", $issues);
 	if (!is_null($flag)) $temperature_tracking = $flag;
 
-	return count($issues) > $before ? null : account_method_id($method, $temperature_tracking);
+	return count($issues) > $before ? null : user_account_method_id($method, $temperature_tracking);
 }
 
 // ---------------------------------------------------------------------------
@@ -63,12 +63,12 @@ function account_method_id_from_json(array $body, array &$issues, int $default_i
 // An email address as it is stored and looked up: trimmed and in lower case, so that Alice@X.test
 // and alice@x.test are one account. "" when it is not a string (a client can send a list or a number).
 // FILTER_VALIDATE_EMAIL refuses non-ASCII, so strtolower never meets a multibyte character.
-function account_email_normalise(mixed $email): string {
+function user_account_email_normalise(mixed $email): string {
 	return is_string($email) ? strtolower(trim($email)) : "";
 }
 
-// Is this the account's password? The row sec_auth_token() reads holds no hash, so it is read again.
-function account_password_matches($db, array $user_account, mixed $password): bool {
+// Is this the account's password? The row sec_token_authenticate() reads holds no hash, so it is read again.
+function user_account_password_matches($db, array $user_account, mixed $password): bool {
 	if (!is_string($password) || $password === "") return false;
 	$full_account = db_select_user_account_by_email($db, $user_account["login_email"]) ?? [];
 	return isset($full_account["password"]) && password_verify($password, $full_account["password"]);
@@ -82,12 +82,12 @@ function account_password_matches($db, array $user_account, mixed $password): bo
 // checked fields: nickname, email, password, birth_year, nfp_method, comment, research. An address that already has an account
 // (proved or not) is left exactly as it is, whatever the request says: its owner gets a link to choose a new password instead, so
 // nothing a stranger types can reach an account, and the answer is the same either way.
-// Answers ["captcha" => the verdict of captcha_verify(), "account" => ["no_user_account", "name", "login_email"] or null, "token" => the
+// Answers ["captcha" => the verdict of sec_captcha_verify(), "account" => ["no_user_account", "name", "login_email"] or null, "token" => the
 // token for the mail or null, "created" => whether a new account was made]. The mail is the caller's, and goes after this returns.
 // The captcha is checked first (a refused one costs no hash), and again under the lock of an account that already exists: of requests
 // that arrive together with one token the first makes the link and the others find the account moved, one mail per captcha.
-function account_register($db, array $new, mixed $captcha_token, mixed $captcha_answer, string $ip): array {
-	$verdict = captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
+function user_account_register($db, array $new, mixed $captcha_token, mixed $captcha_answer, string $ip): array {
+	$verdict = sec_captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
 	if ($verdict !== "ok") return ["captcha" => $verdict, "account" => null, "token" => null, "created" => false];
 
 	// an address that has an account costs the same as one that has not
@@ -98,7 +98,7 @@ function account_register($db, array $new, mixed $captcha_token, mixed $captcha_
 	// MariaDB would kill one (a deadlock, a 500). So that transaction ends there, with nothing written, and the request goes round
 	// once more as a request for an address that has an account, which holds the row by its id.
 	for ($round = 0; $round < 2; $round++) {
-		// read before the transaction begins, like account_recover_password(): a transaction's plain reads show the rows as they were
+		// read before the transaction begins, like user_account_recover_password(): a transaction's plain reads show the rows as they were
 		// at its first one, and the captcha is checked again under the lock, on what the account holds by then
 		$existing = db_select_user_account_by_email($db, $new["email"]);
 
@@ -118,7 +118,7 @@ function account_register($db, array $new, mixed $captcha_token, mixed $captcha_
 			}
 
 			db_select_user_account_for_update($db, $existing["no_user_account"]);
-			$verdict = captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
+			$verdict = sec_captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
 			if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $existing, "token" => null, "created" => false];
 
 			log_context(["uid" => intval($existing["no_user_account"])]);
@@ -136,20 +136,20 @@ function account_register($db, array $new, mixed $captcha_token, mixed $captcha_
 
 // Makes the link that lets the owner of the address at $email choose a new password, if the captcha of the request (purpose
 // "recover") is good. Nothing is changed but the account's slot: the password stays what it is until the link is used. Answers
-// ["captcha" => the verdict of captcha_verify(), "account" => the row or null, "token" => the token for the mail, or null when no
+// ["captcha" => the verdict of sec_captcha_verify(), "account" => the row or null, "token" => the token for the mail, or null when no
 // link was made]. The mail is the caller's, and goes after this returns: the link is committed by then.
 // The captcha is tied to the password and the pending link. The account is held from the check to the new link, and the check is
 // made on what it holds now, so of requests that arrive together with one token the first makes a link and the others no longer
 // match: one mail per token. An address with no account is only checked (the same verdict, and no way to tell from the outside).
-function account_recover_password($db, string $email, mixed $token, mixed $answer, string $ip): array {
+function user_account_recover_password($db, string $email, mixed $token, mixed $answer, string $ip): array {
 	$account = db_select_user_account_by_email($db, $email);
 	if (is_null($account)) {
-		return ["captcha" => captcha_verify($db, "recover", $email, $token, $answer, $ip), "account" => null, "token" => null];
+		return ["captcha" => sec_captcha_verify($db, "recover", $email, $token, $answer, $ip), "account" => null, "token" => null];
 	}
 
 	return db_transaction($db, function () use ($db, $email, $token, $answer, $ip, $account) {
 		db_select_user_account_for_update($db, $account["no_user_account"]);
-		$verdict = captcha_verify($db, "recover", $email, $token, $answer, $ip);
+		$verdict = sec_captcha_verify($db, "recover", $email, $token, $answer, $ip);
 		if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $account, "token" => null];
 
 		return ["captcha" => $verdict, "account" => $account, "token" => email_token_issue($db, intval($account["no_user_account"]), EMAIL_TOKEN_PURPOSE_RESET_PASSWORD)];
@@ -162,7 +162,7 @@ function account_recover_password($db, string $email, mixed $token, mixed $answe
 
 // A birth year a person can give: this year, or up to ACCOUNT_BIRTH_YEAR_MAX_AGE years back. The
 // statistics average it, and user_account.age is a smallint.
-function account_birth_year_valid(int $year): bool {
+function user_account_birth_year_valid(int $year): bool {
 	$this_year = intval(date("Y"));
 	return $year >= $this_year - ACCOUNT_BIRTH_YEAR_MAX_AGE && $year <= $this_year;
 }
@@ -170,12 +170,12 @@ function account_birth_year_valid(int $year): bool {
 // A list of addresses as the column keeps it: lower case, no space, no duplicate, ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR between two. "" is no
 // address (it clears the list). null when the value is no list of valid addresses: not a string, an address that is not one, more than
 // ACCOUNT_NOTIFICATION_EMAILS_MAX of them, or more than the column holds. An empty item ("a@x.org;;b@y.org", a trailing ";") is skipped.
-function account_notification_emails_parse(mixed $value): ?string {
+function user_account_notification_emails_parse(mixed $value): ?string {
 	if (!is_string($value)) return null;
 
 	$list = [];
 	foreach (explode(ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR, $value) as $part) {
-		$email = account_email_normalise($part);
+		$email = user_account_email_normalise($part);
 		if ($email === "") continue;
 		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return null;
 		if (!in_array($email, $list, true)) $list[] = $email;
@@ -188,8 +188,8 @@ function account_notification_emails_parse(mixed $value): ?string {
 
 // The settings of a POST /api/account body that need no password, checked: [the values db_update_user_account_settings() takes, the JSON names of the fields
 // it changes]. A field that is absent leaves the account as it is; a wrong one is an issue. "notificationEmails" is one of the values (passed
-// on as it is stored); whether it changes is account_update()'s to say, since it asks for the password.
-function account_check_settings(array $account, array $body, array &$issues): array {
+// on as it is stored); whether it changes is user_account_update()'s to say, since it asks for the password.
+function user_account_check_settings(array $account, array $body, array &$issues): array {
 	$new = [
 		"name" => $account["name_user_account"], "notification_emails" => $account["notification_emails"], "nfp_method" => $account["nfp_method"],
 		"age" => $account["age"], "sponsor" => $account["sponsor"], "timeline_asc" => $account["timeline_asc"], "research" => $account["research"],
@@ -202,13 +202,13 @@ function account_check_settings(array $account, array $body, array &$issues): ar
 	elseif (!is_null($nickname)) [$new["name"], $changed[]] = [$nickname, "nickname"];
 
 	if (array_key_exists("method", $body) || array_key_exists("temperatureTracking", $body)) {
-		$nfp_method = account_method_id_from_json($body, $issues, intval($account["nfp_method"]));
+		$nfp_method = user_account_method_id_from_json($body, $issues, intval($account["nfp_method"]));
 		if (!is_null($nfp_method)) [$new["nfp_method"], $changed[]] = [$nfp_method, "method"];
 	}
 
 	if (array_key_exists("birthYear", $body)) {
 		if (!is_int($body["birthYear"])) input_wrong_type($issues, "birthYear", $body["birthYear"], "a whole number (a year)");
-		elseif (!account_birth_year_valid($body["birthYear"])) {
+		elseif (!user_account_birth_year_valid($body["birthYear"])) {
 			$issues[] = input_issue("birthYear", "out_of_range", "'birthYear' must be a year from " . (intval(date("Y")) - ACCOUNT_BIRTH_YEAR_MAX_AGE) . " to " . date("Y") . ".");
 		}
 		else [$new["age"], $changed[]] = [$body["birthYear"], "birthYear"];
@@ -227,7 +227,7 @@ function account_check_settings(array $account, array $body, array &$issues): ar
 // POST /api/account: every setting of the account is changed here. $body has gone through input_body(); $issues are the ones it found (the names that
 // are not known), to which this adds its own so that the client is told everything at once. Answers what
 // the endpoint says:
-//   success: ["status" => 200, "data" => the account after the change (account_to_json()), "meta" => ["fieldsUpdated", and when they were asked
+//   success: ["status" => 200, "data" => the account after the change (user_account_to_json()), "meta" => ["fieldsUpdated", and when they were asked
 //            "loggedOutDevices", "loginEmailLinkSent"]]
 //   refusal: ["status" => 4xx, "code" => ..., "message" => ...]
 // Every problem of a value ends the request with the 400 validation_failed first (collected, all at once). Three changes want the password
@@ -237,23 +237,23 @@ function account_check_settings(array $account, array $body, array &$issues): ar
 // two are made at once. The third only asks: a link goes to the NEW address and the change happens when it is used (email_token.php). All of it
 // is checked before anything is written, so a request that is refused changes nothing; the settings and the password are written together,
 // then the mails go, then the link is made.
-function account_update($db, array $user_account, array $body, array $issues = []): array {
+function user_account_update($db, array $user_account, array $body, array $issues = []): array {
 	$refuse = fn(int $status, string $code, string $message) => ["status" => $status, "code" => $code, "message" => $message];
 	$no_user_account = intval($user_account["no_user_account"]);
 
 	// --- what is asked, and whether it can be
-	[$new, $changed] = account_check_settings($user_account, $body, $issues);
+	[$new, $changed] = user_account_check_settings($user_account, $body, $issues);
 
 	$new_notification_emails = null;
 	if (array_key_exists("notificationEmails", $body)) {
 		if (!is_string($body["notificationEmails"])) input_wrong_type($issues, "notificationEmails", $body["notificationEmails"], "a string of addresses separated by '" . ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR . "' (or an empty string)");
 		else {
-			$parsed = account_notification_emails_parse($body["notificationEmails"]);
+			$parsed = user_account_notification_emails_parse($body["notificationEmails"]);
 			if (is_null($parsed)) {
 				$issues[] = input_issue("notificationEmails", "invalid_value", "'notificationEmails' must be at most " . ACCOUNT_NOTIFICATION_EMAILS_MAX . " valid e-mail addresses separated by '" . ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR . "', "
 					. ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS . " characters in all (or an empty string to clear the list).");
 			}
-			elseif ($parsed !== (account_notification_emails_parse($user_account["notification_emails"] ?? "") ?? "")) $new_notification_emails = $parsed;
+			elseif ($parsed !== (user_account_notification_emails_parse($user_account["notification_emails"] ?? "") ?? "")) $new_notification_emails = $parsed;
 		}
 	}
 
@@ -261,7 +261,7 @@ function account_update($db, array $user_account, array $body, array $issues = [
 	if (array_key_exists("loginEmail", $body)) {
 		if (!is_string($body["loginEmail"])) input_wrong_type($issues, "loginEmail", $body["loginEmail"], "a string (an e-mail address)");
 		else {
-			$email = account_email_normalise($body["loginEmail"]);
+			$email = user_account_email_normalise($body["loginEmail"]);
 			if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $issues[] = input_issue("loginEmail", "invalid_email", "'loginEmail' is not a valid e-mail address.");
 			elseif ($email === $user_account["login_email"]) $issues[] = input_issue("loginEmail", "email_unchanged", "'loginEmail' is already the login address of the account.");
 			else $new_login_email = $email;
@@ -349,24 +349,24 @@ function account_update($db, array $user_account, array $body, array $issues = [
 	]);
 	if (!empty($changed)) $after["last_write_client_UTC"] = $last_write_client_UTC;
 
-	return ["status" => 200, "data" => account_to_json($after), "meta" => $meta];
+	return ["status" => 200, "data" => user_account_to_json($after), "meta" => $meta];
 }
 
 // ---------------------------------------------------------------------------
 // GET /api/account
 // ---------------------------------------------------------------------------
 
-// The account as a client starts from it: who the user is and their settings. $user_account is the row sec_auth_token() read. Nothing secret in
+// The account as a client starts from it: who the user is and their settings. $user_account is the row sec_token_authenticate() read. Nothing secret in
 // it. The timeline (cycles, pregnancies) is not here: it is in GET /api/timeline_sync, and the news banner is in GET /api/server_info.
-function account_to_json(array $user_account): array {
+function user_account_to_json(array $user_account): array {
 	$nfp_method = intval($user_account["nfp_method"]);
 
 	return [
 		"userId" => intval($user_account["no_user_account"]),
 		"loginEmail" => $user_account["login_email"],
 		"notificationEmails" => $user_account["notification_emails"],
-		"method" => account_method_name($nfp_method),
-		"temperatureTracking" => account_tracks_temperature($nfp_method),
+		"method" => user_account_method_name($nfp_method),
+		"temperatureTracking" => user_account_tracks_temperature($nfp_method),
 		"birthYear" => $user_account["age"],
 		"nickname" => $user_account["name_user_account"],
 		"inscriptionDate" => http_iso8601($user_account["inscription_date"]),

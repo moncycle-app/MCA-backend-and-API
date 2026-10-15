@@ -15,14 +15,14 @@
 ** union), [temperature,] comment. The layout (DOC_FC_*) is in constants.php.
 */
 
-require_once __DIR__ . "/account.php";
+require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_pdf.php";
 
 function doc_fc_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false): DocPdf {
-	$with_temperature = account_tracks_temperature($nfp_method);
+	$with_temperature = user_account_tracks_temperature($nfp_method);
 	if ($anonymous) $name = doc_get_initials($name);
 
 	$h_start_date = date_human(new DateTime($days[0]["date"]));

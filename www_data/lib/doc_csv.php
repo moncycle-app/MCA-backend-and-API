@@ -15,7 +15,7 @@
 ** fields, RFC 4180 quoting, CRLF line ends, and as many fields on every row as in the header.
 */
 
-require_once __DIR__ . "/account.php";
+require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/doc.php";
@@ -23,9 +23,9 @@ require_once __DIR__ . "/doc.php";
 // Named after the NFP fields, or after the API's day where NFP has none (date, cycleDay,
 // cycleFirstDay).
 function doc_csv_columns(int $nfp_method): array {
-	$temperature = account_tracks_temperature($nfp_method) ? ["temperature", "temperatureTime"] : [];
+	$temperature = user_account_tracks_temperature($nfp_method) ? ["temperature", "temperatureTime"] : [];
 
-	if (account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) {
+	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) {
 		return ["date", "cycleDay", "cycleFirstDay", "mucusNotObserved", "stampColor", "stampBaby",
 			"codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation",
 			"codifiedNumberObservations", "codifiedPainObservations", "codifiedArrow",

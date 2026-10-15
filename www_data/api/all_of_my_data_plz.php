@@ -11,6 +11,7 @@ require_once __DIR__ . "/../config.php";
 require_once __DIR__ . "/../lib/doc_csv.php";
 require_once __DIR__ . "/../lib/log.php";
 require_once __DIR__ . "/../lib/sec.php";
+require_once __DIR__ . "/../lib/sec_token.php";
 require_once __DIR__ . "/../lib/server.php";
 
 log_start(sec_client_ip());
@@ -18,7 +19,7 @@ http_exit_if_maintenance();
 $db = db_open();
 server_exit_if_schema_mismatch($db);
 
-$user_account = sec_auth_token($db);
+$user_account = sec_token_authenticate($db);
 sec_redirect_if_logged_out($user_account);
 $no_user_account = $user_account["no_user_account"];
 
