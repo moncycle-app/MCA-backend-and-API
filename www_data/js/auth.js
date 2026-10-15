@@ -134,9 +134,9 @@ else {
 		// decodes %2B) is read as a space by URLSearchParams, and an address never holds a space: it is a "+".
 		const login_email = (new URLSearchParams(window.location.search)).get("login_email");
 		$("#i_login_email").val(login_email === null ? "" : login_email.trim().replace(/ /g, "+"));
-		$("#but_demo_bill").on("click", function(event) {
+		$("#but_demo_mucus").on("click", function(event) {
 			event.preventDefault();
-			$("#i_login_email").val("demo.bill@moncycle.app");
+			$("#i_login_email").val("demo.mucus.self.obs@moncycle.app");
 			$("#i_password").val("demo");
 			$("#connexion_form").submit();
 		});

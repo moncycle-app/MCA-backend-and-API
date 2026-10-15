@@ -23,7 +23,7 @@ require_once __DIR__ . "/../lib/db.php";
 //      given. "connect" = open + one SELECT 1; "request" = connect + the three reads a typical request makes
 //      (session token, account row, a month of days);
 //   3. what a query costs once the connection is open: the round trip alone (SELECT 1), then the app's own
-//      reads through db_*(), on the demo account (ACCOUNT_DEMO_ID_BILLINGS) or, with --account=ID, on that account
+//      reads through db_*(), on the demo account (ACCOUNT_DEMO_ID_CERVICAL_MUCUS) or, with --account=ID, on that account
 //      or, with --largest, on each of the 10 accounts that hold the most days (a read of all the days of an account
 //      grows with it, and the demo account holds 50). Section 1 always says how the days are spread over the
 //      accounts. Nothing an account holds is printed, nor its id: only its rank and its number of days. The reads
@@ -172,7 +172,7 @@ elseif ($account_option !== null) {
 	}
 	$picked[] = ["account", $account_option];
 }
-else $picked[] = ["demo", ACCOUNT_DEMO_ID_BILLINGS];
+else $picked[] = ["demo", ACCOUNT_DEMO_ID_CERVICAL_MUCUS];
 if (!$picked) {
 	fwrite(STDERR, "--largest: no account holds a day" . PHP_EOL);
 	exit(2);
@@ -294,7 +294,7 @@ foreach ($modes as $mode) {
 	for ($i = -$warmup; $i < $n; $i++) {
 		$t0 = hrtime(true);
 		$st = $mode === $modes[2] ? $once : $c->prepare($prepare_sql);
-		$st->execute(["id" => ACCOUNT_DEMO_ID_BILLINGS]);
+		$st->execute(["id" => ACCOUNT_DEMO_ID_CERVICAL_MUCUS]);
 		$st->fetch();
 		$st->closeCursor();
 		if ($i >= 0) $results[$mode][] = (hrtime(true) - $t0) / 1000;
@@ -372,7 +372,7 @@ $handle = null;
 $handle = db_open(true);
 $id = intval(db_value($handle, "SELECT CONNECTION_ID()"));
 $handle->exec("START TRANSACTION");
-db_select_user_account_for_update($handle, ACCOUNT_DEMO_ID_BILLINGS);
+db_select_user_account_for_update($handle, ACCOUNT_DEMO_ID_CERVICAL_MUCUS);
 $handle = null;   // the request ends here, without COMMIT or ROLLBACK
 $handle = db_open(true);
 $same = intval(db_value($handle, "SELECT CONNECTION_ID()")) === $id;
@@ -381,7 +381,7 @@ try {
 	$locker = db_open(false);
 	$locker->exec("SET SESSION innodb_lock_wait_timeout = 2");
 	$locker->exec("START TRANSACTION");
-	$locker->query("SELECT U.no_user_account FROM user_account AS U WHERE U.no_user_account = " . intval(ACCOUNT_DEMO_ID_BILLINGS) . " FOR UPDATE NOWAIT")->fetchAll();
+	$locker->query("SELECT U.no_user_account FROM user_account AS U WHERE U.no_user_account = " . intval(ACCOUNT_DEMO_ID_CERVICAL_MUCUS) . " FOR UPDATE NOWAIT")->fetchAll();
 	$locker->exec("ROLLBACK");
 	$check["... and its row lock is released"] = [true, "another connection took the row at once"];
 }

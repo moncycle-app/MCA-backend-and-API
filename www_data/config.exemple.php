@@ -43,9 +43,9 @@ define("MAINTENANCE_MODE", false);
 
 define("CSV_SEP", ";");
 
-// Lines of the Billings PDF chart: the grid of its table, the outline of a white stamp. Set to
+// Lines of the cervical mucus PDF chart: the grid of its table, the outline of a white stamp. Set to
 // false for a chart with no line at all. The FertilityCare grid is made of its lines and keeps them.
-define("PDF_BILLINGS_BORDERS", true);
+define("PDF_CERVICAL_MUCUS_BORDERS", true);
 
 define("PHP_SECURE_COOKIES", true);
 

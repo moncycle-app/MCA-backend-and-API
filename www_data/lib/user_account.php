@@ -25,16 +25,16 @@ require_once __DIR__ . "/sec_captcha.php";
 // nfp_method: one 1-4 int in the DB, a method name and a temperature flag everywhere else (NFP_METHOD_BY_ID)
 // ---------------------------------------------------------------------------
 
-// Anything unknown reads as Billings.
+// Anything unknown reads as cervical mucus self-observation.
 function user_account_method_name(int $nfp_method): string {
-	return NFP_METHOD_BY_ID[$nfp_method][0] ?? NFP_METHOD_BILLINGS;
+	return NFP_METHOD_BY_ID[$nfp_method][0] ?? NFP_METHOD_CERVICAL_MUCUS;
 }
 
 function user_account_tracks_temperature(int $nfp_method): bool {
 	return NFP_METHOD_BY_ID[$nfp_method][1] ?? false;
 }
 
-// The id a body's "method" and "temperatureTracking" ask for; one not sent is $default_id's (Billings without temperature for a new
+// The id a body's "method" and "temperatureTracking" ask for; one not sent is $default_id's (cervical mucus self-observation without temperature for a new
 // account, the account's own for a change). Null when a field is wrong (an issue).
 function user_account_method_id_from_json(array $body, array &$issues, int $default_id = 2): ?int {
 	[$method, $temperature_tracking] = NFP_METHOD_BY_ID[$default_id];

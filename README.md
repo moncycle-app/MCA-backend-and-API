@@ -181,7 +181,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | Setting | Default | Description |
 |---|---|---|
 | `CSV_SEP` | `;` | Separator of the CSV exports (with `;` temperatures use a decimal comma, otherwise a point). |
-| `PDF_BILLINGS_BORDERS` | `true` | Draw the lines of the Billings PDF chart; `false` gives a chart with no line at all. |
+| `PDF_CERVICAL_MUCUS_BORDERS` | `true` | Draw the lines of the cervical mucus PDF chart; `false` gives a chart with no line at all. |
 
 **Logs** (see [docs/logs.md](docs/logs.md))
 
@@ -232,7 +232,7 @@ inactive for 4 years and those whose address was never verified after 7 days (`A
 
 ### Demo accounts
 
-Accounts 2 (`demo.bill@moncycle.app`, Billings) and 3 (`demo.fc@moncycle.app`, FertilityCare) are public: the password is `demo`, and
+Accounts 2 (`demo.mucus.self.obs@moncycle.app`, cervical mucus self-observation) and 3 (`demo.fc@moncycle.app`, FertilityCare) are public: the password is `demo`, and
 the sign-in page has a button for each. They are made by [`demo.sql`](www_data/script/db/demo.sql). `DEMO_ENABLED` (off by default) is
 their switch:
 

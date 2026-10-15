@@ -59,7 +59,7 @@ else {
 				$("#but_register").prop("disabled", false);
 				$("#but_register").val("Créer mon compte 🥳");
 			}
-			var method = $('input[name="method"]:checked').val() == "3" ? "fertilityCare" : "billings";
+			var method = $('input[name="method"]:checked').val() == "3" ? "fertilityCare" : "cervicalMucus";
 			var payload = {
 				nickname: $("#i_nickname").val(),
 				email: $("#i_login_email").val(),

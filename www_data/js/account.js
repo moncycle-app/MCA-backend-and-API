@@ -265,10 +265,10 @@ function moncycle_app_escape_html(text) {
 
 // the "nfp_method" 1-4 integer (still used by account.html's radio buttons) conflates the
 // NFP method with whether temperature is also tracked; the API exposes those as two
-// separate fields (method: "billings"|"fertilityCare", temperatureTracking: bool) instead.
-const moncycle_app_nfp_method_table = {1: ["billings", true], 2: ["billings", false], 3: ["fertilityCare", false], 4: ["fertilityCare", true]};
+// separate fields (method: "cervicalMucus"|"fertilityCare", temperatureTracking: bool) instead.
+const moncycle_app_nfp_method_table = {1: ["cervicalMucus", true], 2: ["cervicalMucus", false], 3: ["fertilityCare", false], 4: ["fertilityCare", true]};
 function moncycle_app_nfp_method_to_api(nfp_method) {
-	let m = moncycle_app_nfp_method_table[nfp_method] || ["billings", false];
+	let m = moncycle_app_nfp_method_table[nfp_method] || ["cervicalMucus", false];
 	return {method: m[0], temperatureTracking: m[1]};
 }
 function moncycle_app_nfp_method_from_api(method, temperatureTracking) {
@@ -349,7 +349,7 @@ $(document).ready(function(){
 	}).fail(moncycle_app_redirect_if_unauthenticated);
 
 
-	// TELECHARGEMENT/MODIFICATION/CRATION/SUPPRESSION DES DESCRIPTIONS BILLINGS
+	// TELECHARGEMENT/MODIFICATION/CRATION/SUPPRESSION DES DESCRIPTIONS DE LA GLAIRE CERVICALE
 	// another_than: the description being edited, which is not a duplicate of itself (its saved name can be the one typed
 	// back while the answer to the change that took it away is still on its way)
 	let check_if_desc_exist = function(desc, type, another_than) {

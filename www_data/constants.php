@@ -64,10 +64,10 @@ const CAPTCHA_PURPOSES = ["register", "recover", "login"];
 const ACCOUNT_DEFAULT_LANGUAGE = "FR";    // user_account.language of a new account, until the user can choose
 // The two public demo accounts (script/db/demo.sql): never reminded, warned or erased, left out of the statistics. DEMO_ENABLED (config)
 // decides whether they can sign in and whether script/demo_reset.php puts them back every hour.
-const ACCOUNT_DEMO_ID_BILLINGS = 2;
+const ACCOUNT_DEMO_ID_CERVICAL_MUCUS = 2;
 const ACCOUNT_DEMO_ID_FERTILITYCARE = 3;
-const ACCOUNT_DEMO_IDS = [ACCOUNT_DEMO_ID_BILLINGS, ACCOUNT_DEMO_ID_FERTILITYCARE];
-const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_BILLINGS . ", " . ACCOUNT_DEMO_ID_FERTILITYCARE;   // for NOT IN (...): a constant expression cannot implode()
+const ACCOUNT_DEMO_IDS = [ACCOUNT_DEMO_ID_CERVICAL_MUCUS, ACCOUNT_DEMO_ID_FERTILITYCARE];
+const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_CERVICAL_MUCUS . ", " . ACCOUNT_DEMO_ID_FERTILITYCARE;   // for NOT IN (...): a constant expression cannot implode()
 
 // The widths of the columns of user_account, and the birth years a person can give.
 const ACCOUNT_LIMIT_NICKNAME_CHARS = 255;           // user_account.name varchar(255)
@@ -152,18 +152,18 @@ const DB_SCRIPT_DEMO = __DIR__ . "/script/db/demo.sql";
 // ===========================================================================
 
 // The method as the NFP format and the JSON API name it.
-const NFP_METHOD_BILLINGS = "billings";
+const NFP_METHOD_CERVICAL_MUCUS = "cervicalMucus";
 const NFP_METHOD_FERTILITY_CARE = "fertilityCare";
 const NFP_METHOD_SYMPTOTHERMIC_FR = "symptothermic_fr";
 
 // The methods this app records; a file may also name the other KNOWN ones (what cannot be stored is reported field by field).
-const NFP_METHODS_NATIVE = [NFP_METHOD_BILLINGS, NFP_METHOD_FERTILITY_CARE];
-const NFP_METHODS_KNOWN = [NFP_METHOD_BILLINGS, NFP_METHOD_FERTILITY_CARE, NFP_METHOD_SYMPTOTHERMIC_FR];
+const NFP_METHODS_NATIVE = [NFP_METHOD_CERVICAL_MUCUS, NFP_METHOD_FERTILITY_CARE];
+const NFP_METHODS_KNOWN = [NFP_METHOD_CERVICAL_MUCUS, NFP_METHOD_FERTILITY_CARE, NFP_METHOD_SYMPTOTHERMIC_FR];
 
 // user_account.nfp_method: id => [the method, temperature tracked]. Read by lib/user_account.php only; js/account.js carries a copy.
 const NFP_METHOD_BY_ID = [
-	1 => [NFP_METHOD_BILLINGS, true],
-	2 => [NFP_METHOD_BILLINGS, false],
+	1 => [NFP_METHOD_CERVICAL_MUCUS, true],
+	2 => [NFP_METHOD_CERVICAL_MUCUS, false],
 	3 => [NFP_METHOD_FERTILITY_CARE, false],
 	4 => [NFP_METHOD_FERTILITY_CARE, true],
 ];
@@ -493,28 +493,28 @@ const DOC_MUCUS_FIELDS = [
 
 const DOC_PDF_MARGIN = 10;                                  // mm kept free on every side of the page, in both charts
 const DOC_PREGNANCY_COLOR = [130, 21, 33];                  // r, g, b of the pregnancy "G" and "GROSSESSE" text, in both charts
-const DOC_BILL_TEMPERATURE_COLOR = [135, 67, 176];          // r, g, b of the temperature reading, its curve and its points
+const DOC_MUCUS_TEMPERATURE_COLOR = [135, 67, 176];          // r, g, b of the temperature reading, its curve and its points
 
-// style => [font family, font style, size in pt, [r, g, b]]; "bill.*" for the Billings table, "fc.*" for the FertilityCare grid.
+// style => [font family, font style, size in pt, [r, g, b]]; "mucus.*" for the cervical mucus table, "fc.*" for the FertilityCare grid.
 const DOC_PDF_STYLES = [
-	'bill.title' => ['Helvetica', 'B', 14, [0, 0, 0]],
-	'bill.subtitle' => ['Helvetica', '', 8.5, [110, 110, 110]],
-	'bill.link' => ['Helvetica', 'B', 8, [30, 130, 76]],
-	'bill.head' => ['Helvetica', 'B', 6, [110, 110, 110]],
-	'bill.scale' => ['Helvetica', '', 5.5, [140, 140, 140]],
-	'bill.date' => ['Helvetica', '', 7, [110, 110, 110]],
-	'bill.date.sunday' => ['Helvetica', 'B', 7, [50, 50, 50]],
-	'bill.day_number' => ['Helvetica', '', 8.5, [0, 0, 0]],
-	'bill.stamp' => ['Helvetica', 'B', 8, [0, 0, 0]],
-	'bill.peak' => ['ZapfDingbats', '', 8, [139, 69, 19]],
-	'bill.peak_offset' => ['Helvetica', 'B', 7.5, [139, 69, 19]],
-	'bill.counter' => ['Helvetica', 'B', 7.5, [30, 130, 76]],
-	'bill.union' => ['ZapfDingbats', '', 8, [172, 36, 51]],
-	'bill.text' => ['Helvetica', '', 8, [30, 30, 30]],
-	'bill.comment' => ['Helvetica', 'I', 7.5, [70, 70, 70]],
-	'bill.temperature' => ['Helvetica', '', 8, DOC_BILL_TEMPERATURE_COLOR],
-	'bill.temperature_time' => ['Helvetica', '', 6, [140, 140, 140]],
-	'bill.legend' => ['Helvetica', '', 6.5, [110, 110, 110]],
+	'mucus.title' => ['Helvetica', 'B', 14, [0, 0, 0]],
+	'mucus.subtitle' => ['Helvetica', '', 8.5, [110, 110, 110]],
+	'mucus.link' => ['Helvetica', 'B', 8, [30, 130, 76]],
+	'mucus.head' => ['Helvetica', 'B', 6, [110, 110, 110]],
+	'mucus.scale' => ['Helvetica', '', 5.5, [140, 140, 140]],
+	'mucus.date' => ['Helvetica', '', 7, [110, 110, 110]],
+	'mucus.date.sunday' => ['Helvetica', 'B', 7, [50, 50, 50]],
+	'mucus.day_number' => ['Helvetica', '', 8.5, [0, 0, 0]],
+	'mucus.stamp' => ['Helvetica', 'B', 8, [0, 0, 0]],
+	'mucus.peak' => ['ZapfDingbats', '', 8, [139, 69, 19]],
+	'mucus.peak_offset' => ['Helvetica', 'B', 7.5, [139, 69, 19]],
+	'mucus.counter' => ['Helvetica', 'B', 7.5, [30, 130, 76]],
+	'mucus.union' => ['ZapfDingbats', '', 8, [172, 36, 51]],
+	'mucus.text' => ['Helvetica', '', 8, [30, 30, 30]],
+	'mucus.comment' => ['Helvetica', 'I', 7.5, [70, 70, 70]],
+	'mucus.temperature' => ['Helvetica', '', 8, DOC_MUCUS_TEMPERATURE_COLOR],
+	'mucus.temperature_time' => ['Helvetica', '', 6, [140, 140, 140]],
+	'mucus.legend' => ['Helvetica', '', 6.5, [110, 110, 110]],
 	'fc.header' => ['Courier', '', 10, [0, 0, 0]],
 	'fc.header.name' => ['Courier', 'B', 10, [0, 0, 0]],
 	'fc.header.link' => ['Courier', 'B', 10, [30, 130, 76]],
@@ -528,32 +528,32 @@ const DOC_PDF_STYLES = [
 ];
 
 // ===========================================================================
-// BILLINGS PDF (nfp_method 1 and 2) -- a table, one line per day, A4 portrait. Sizes are in mm.
+// CERVICAL MUCUS PDF (nfp_method 1 and 2) -- a table, one line per day, A4 portrait. Sizes are in mm.
 // ===========================================================================
 
-const DOC_BILL_TABLE_TOP = 24;          // where the table starts, under the page title
-const DOC_BILL_BOTTOM = 14;             // what the page keeps free under the table, for the legend
-const DOC_BILL_HEAD_H = 6;              // height of the column headers band
-const DOC_BILL_LINE_H = 3.6;            // a line of text in a cell
-const DOC_BILL_MIN_ROW_H = 6.5;         // a day's line, whatever it holds
-const DOC_BILL_PAD = (DOC_BILL_MIN_ROW_H - DOC_BILL_LINE_H) / 2;   // above the first line of text
-const DOC_BILL_MAX_LINES = 10;          // a text taking more lines than this is cut short with an ellipsis
-const DOC_BILL_STAMP_SIZE = 5.5;        // side of the stamp square
-const DOC_BILL_TEMPERATURE_W = 17;      // the temperature column: the reading and the time it was taken at
-const DOC_BILL_CURVE_W = 24;            // the curve column
-const DOC_BILL_CURVE_PAD = 2.5;         // kept free at each end of the curve's width
-const DOC_BILL_TEXT_MIN_W = 14;         // a description column is never narrower than this...
-const DOC_BILL_TEXT_MAX_W = 40;         // ... nor wider, as the comment is the one to take the room
-const DOC_BILL_TEXT_TYPICAL = 0.85;     // share of a column's values that must fit it on one line
-const DOC_BILL_COMMENT_WANTED_W = 40;   // the width the description columns give way to keep for the comment
+const DOC_MUCUS_TABLE_TOP = 24;          // where the table starts, under the page title
+const DOC_MUCUS_BOTTOM = 14;             // what the page keeps free under the table, for the legend
+const DOC_MUCUS_HEAD_H = 6;              // height of the column headers band
+const DOC_MUCUS_LINE_H = 3.6;            // a line of text in a cell
+const DOC_MUCUS_MIN_ROW_H = 6.5;         // a day's line, whatever it holds
+const DOC_MUCUS_PAD = (DOC_MUCUS_MIN_ROW_H - DOC_MUCUS_LINE_H) / 2;   // above the first line of text
+const DOC_MUCUS_MAX_LINES = 10;          // a text taking more lines than this is cut short with an ellipsis
+const DOC_MUCUS_STAMP_SIZE = 5.5;        // side of the stamp square
+const DOC_MUCUS_TEMPERATURE_W = 17;      // the temperature column: the reading and the time it was taken at
+const DOC_MUCUS_CURVE_W = 24;            // the curve column
+const DOC_MUCUS_CURVE_PAD = 2.5;         // kept free at each end of the curve's width
+const DOC_MUCUS_TEXT_MIN_W = 14;         // a description column is never narrower than this...
+const DOC_MUCUS_TEXT_MAX_W = 40;         // ... nor wider, as the comment is the one to take the room
+const DOC_MUCUS_TEXT_TYPICAL = 0.85;     // share of a column's values that must fit it on one line
+const DOC_MUCUS_COMMENT_WANTED_W = 40;   // the width the description columns give way to keep for the comment
 
-const DOC_BILL_HEAD_FILL = [240, 240, 240];     // r, g, b of the column headers band
-const DOC_BILL_STRIPE_FILL = [248, 248, 248];   // r, g, b of every other day, when borders are off
-const DOC_BILL_BORDER_COLOR = [210, 210, 210];  // r, g, b of the table's lines and of a white stamp's outline
-const DOC_BILL_BORDER_W = 0.1;                  // thickness of those lines
+const DOC_MUCUS_HEAD_FILL = [240, 240, 240];     // r, g, b of the column headers band
+const DOC_MUCUS_STRIPE_FILL = [248, 248, 248];   // r, g, b of every other day, when borders are off
+const DOC_MUCUS_BORDER_COLOR = [210, 210, 210];  // r, g, b of the table's lines and of a white stamp's outline
+const DOC_MUCUS_BORDER_W = 0.1;                  // thickness of those lines
 
 // The narrow columns, in order: key => [header, width]. The three markers only get a column when a day has one.
-const DOC_BILL_FIXED_COLUMNS = [
+const DOC_MUCUS_FIXED_COLUMNS = [
 	"date" => ["DATE", 13],
 	"day" => ["JOUR", 9],
 	"stamp" => ["TAMPON", 11],
@@ -561,21 +561,21 @@ const DOC_BILL_FIXED_COLUMNS = [
 	"counter" => ["COMPTEUR", 15],
 	"union" => ["UNION", 10],
 ];
-const DOC_BILL_MARKERS = ["peak", "counter", "union"];   // the optional columns of those, also the keys of a day's row
+const DOC_MUCUS_MARKERS = ["peak", "counter", "union"];   // the optional columns of those, also the keys of a day's row
 
 // The text columns, in order: day field => [header, style]. The comment takes what the others leave.
-const DOC_BILL_TEXT_COLUMNS = [
-	"freeMucusSensation" => ["SENSATIONS", 'bill.text'],
-	"freeMucusObservation" => ["OBSERVATIONS", 'bill.text'],
-	"comments" => ["COMMENTAIRE", 'bill.comment'],
+const DOC_MUCUS_TEXT_COLUMNS = [
+	"freeMucusSensation" => ["SENSATIONS", 'mucus.text'],
+	"freeMucusObservation" => ["OBSERVATIONS", 'mucus.text'],
+	"comments" => ["COMMENTAIRE", 'mucus.comment'],
 ];
 
 // The stamps that are not a colour of the app: kind => [fill, glyph, glyph colour].
-const DOC_BILL_SPECIAL_STAMPS = [
+const DOC_MUCUS_SPECIAL_STAMPS = [
 	"unknown" => [[226, 226, 226], "?", [130, 130, 130]],
 	"pregnancy" => [[255, 226, 230], "G", DOC_PREGNANCY_COLOR],
 ];
-const DOC_BILL_STAMP_COLORS = [          // stampColor => r, g, b of the stamp
+const DOC_MUCUS_STAMP_COLORS = [          // stampColor => r, g, b of the stamp
 	"Red" => [172, 36, 51],
 	"Green" => [30, 130, 76],
 	"Yellow" => [251, 202, 11],

@@ -18,7 +18,7 @@
 ** Deliberately NOT here, these are not language:
 **  - CSS class names and DOM id fragments (rouge, vert, jaune, baby, b/h/d/g),
 **    see moncycle_app.stamp_class and moncycle_app.arrow_id;
-**  - FertilityCare / Billings notation codes (VL, H, B, AD, RAP, 10KL, X1...),
+**  - FertilityCare / cervical mucus notation codes (VL, H, B, AD, RAP, 10KL, X1...),
 **    which belong to the method itself.
 ** ======================================================================== */
 const moncycle_app_text = {
@@ -101,7 +101,7 @@ const moncycle_app_text = {
 	// stamp drawn in the recap for a pregnancy day
 	pregnancy_stamp_glyph : "G",
 	union : "❤️",
-	peak_bill : "⛰️",
+	peak_mucus : "⛰️",
 	peak_fc : "PIC",
 	// day counted from the peak, "+3"
 	peak_offset : function (n) {
@@ -345,8 +345,8 @@ moncycle_app = {
 	// display-class variant) conflates the NFP method with whether temperature is tracked;
 	// the API exposes those as two separate fields instead.
 	nfp_method_from_api : function (method, temperatureTracking) {
-		const table = {"billings": [2, 1], "fertilityCare": [3, 4]};
-		let pair = table[method] || table["billings"];
+		const table = {"cervicalMucus": [2, 1], "fertilityCare": [3, 4]};
+		let pair = table[method] || table["cervicalMucus"];
 		return temperatureTracking ? pair[1] : pair[0];
 	},
 
@@ -359,7 +359,7 @@ moncycle_app = {
 			nickname : d.nickname,
 			sponsor : d.sponsor,
 			nfp_method : nfp_method,
-			nfp_method_name : {1:"bill_temp", 2:"bill", 3:"fc", 4:"fc_temp"}[nfp_method],
+			nfp_method_name : {1:"mucus_temp", 2:"mucus", 3:"fc", 4:"fc_temp"}[nfp_method],
 			all_cycles_1st_day : d.allCyclesFirstDay,
 			all_pregnancy_dates : d.allPregnancyDates,
 			timeline_asc : d.timelineAscending,
@@ -785,7 +785,7 @@ moncycle_app = {
 		$(".obs .s").empty();
 		$(".obs .s").show();
 		$(".day .s").removeClass("j_pic");
-		let txt_sommet = moncycle_app_text.peak_bill;
+		let txt_sommet = moncycle_app_text.peak_mucus;
 		if (moncycle_app.constante.nfp_method==3 || moncycle_app.constante.nfp_method==4) txt_sommet = moncycle_app_text.peak_fc;
 		moncycle_app.sommets.forEach(s => {
 			let last = 3;
@@ -871,7 +871,7 @@ moncycle_app = {
 		let c_date = moncycle_app.date.parse(c);
 		let c_fin = new Date(fin);
 		let c_title = $(`<h2 class='title title_${c}' for='${c}'>${moncycle_app_text.cycle_title(c_date, c_fin, nb)}</h2>`);
-		let c_graph = $(`<div class='graph pas_bill pas_fc' id='graph-${c_id}' style='display:none' ><canvas id='canvas-${c_id}'></canvas></div>`);
+		let c_graph = $(`<div class='graph pas_mucus pas_fc' id='graph-${c_id}' style='display:none' ><canvas id='canvas-${c_id}'></canvas></div>`);
 		let c_content = $(`<div class='contenu' id='contenu-${c_id}'></div>`);
 		c_title.click(moncycle_app.cycle_title_click);
 		cycle.append(c_title);
@@ -984,7 +984,7 @@ moncycle_app = {
 			color = "jcpas";
 		}
 		if (car_du_milieu=="" && j.stamp=="") car_du_milieu = moncycle_app_text.to_fill_in_glyph;
-		day_timeline.append(`<span class='s'>${j.is_peak ? moncycle_app_text.peak_bill : ""}</span>`);
+		day_timeline.append(`<span class='s'>${j.is_peak ? moncycle_app_text.peak_mucus : ""}</span>`);
 		if (moncycle_app.constante.nfp_method==1 || moncycle_app.constante.nfp_method==2) day_timeline.append(`<span class='n'></span>`);
 		day_timeline.append(`<span class='g ${color}'>${car_du_milieu}</span>`);
 		if ((moncycle_app.constante.nfp_method==3 || moncycle_app.constante.nfp_method==4) && !j.pregnancy && !j.day_not_observed && j.fc_score){
@@ -1003,7 +1003,7 @@ moncycle_app = {
 		day_timeline.append(`<span class='c'>${car_du_bas}</span>`);
 		return day_timeline;
 	},
-	// The "o" cell of a Billings day: observations as they are, sensations in bold, then the
+	// The "o" cell of a cervical mucus day: observations as they are, sensations in bold, then the
 	// descriptions with no type yet, struck through (css/tableau.css). Built with the DOM, never as
 	// HTML: a name is free text. <b> and <s> and text nodes on purpose, `.day span` styles every span
 	// as a cell and `.day span:empty` hides it, so a day with no description keeps an empty cell.
@@ -1026,7 +1026,7 @@ moncycle_app = {
 		let o_id = "o-" + moncycle_app.date.str(o_date);
 		let o_class = "day";
 		if (moncycle_app.constante.nfp_method==3 || moncycle_app.constante.nfp_method==4) o_class += " o_fc";
-		else o_class += " o_bill";
+		else o_class += " o_mucus";
 		if (j.pregnancy) o_class += " o_gross";
 		let day_timeline = $("<div>", {id: o_id, class: o_class, date : moncycle_app.date.str(o_date)});
 		let d_bold = o_date.getDay()==0 ? "bold" : "";
@@ -1063,7 +1063,7 @@ moncycle_app = {
 					tbd = false;
 				}
 				let html_fc_score = moncycle_app.fc_note2html(j.fc_score || "");
-				day_timeline.append(`<span class='fc pas_bill pas_bill_temp'>${html_fc_score}</span>`);
+				day_timeline.append(`<span class='fc pas_mucus pas_mucus_temp'>${html_fc_score}</span>`);
 				if ((moncycle_app.constante.nfp_method==1 || moncycle_app.constante.nfp_method==4) && j.temperature) {
 					let temp = parseFloat(j.temperature);
 					let color = "#4169e1";
@@ -1072,10 +1072,10 @@ moncycle_app = {
 						let r = parseInt((1-(37.5-temp))*115)+65;
 						color = `rgb(${r}, 105, 225)`;
 					}
-					day_timeline.append(`<span class='t pas_bill pas_fc' style='background-color: ${color}'>${temp}</span>`);
+					day_timeline.append(`<span class='t pas_mucus pas_fc' style='background-color: ${color}'>${temp}</span>`);
 					if (j.time_temp_taken) {
 						let hm = j.time_temp_taken.substring(0,5).split(':');
-						day_timeline.append(`<span class='th bill pas_fc pas_bill' style='color: ${color}'>${moncycle_app_text.temperature_time(hm[0], hm[1])}</span>`);
+						day_timeline.append(`<span class='th mucus pas_fc pas_mucus' style='color: ${color}'>${moncycle_app_text.temperature_time(hm[0], hm[1])}</span>`);
 					}
 					tbd = false;
 				}
@@ -1088,11 +1088,11 @@ moncycle_app = {
 				pos.addClass("j_ar");
 				return day_timeline;
 			}
-			day_timeline.append(`<span class='s'>${j.is_peak ? moncycle_app_text.peak_bill : ""}</span>`);
+			day_timeline.append(`<span class='s'>${j.is_peak ? moncycle_app_text.peak_mucus : ""}</span>`);
 			day_timeline.append(`<span class='n'></span>`);
 			if (!j.day_not_observed) {
 				day_timeline.append(moncycle_app.description_cell(j.description));
-				if (moncycle_app.arrow_id[j.fc_arrow]) day_timeline.append(`<span class='fle pas_bill pas_bill_temp'>${moncycle_app_text.arrow_glyph[j.fc_arrow] || ""}</span>`);
+				if (moncycle_app.arrow_id[j.fc_arrow]) day_timeline.append(`<span class='fle pas_mucus pas_mucus_temp'>${moncycle_app_text.arrow_glyph[j.fc_arrow] || ""}</span>`);
 			}
 			else day_timeline.append(`<span class='p'>${moncycle_app_text.not_observed}</span>`);
 			day_timeline.append(`<span class='u'>${j.union_sex ? moncycle_app_text.union : ""}</span>`);

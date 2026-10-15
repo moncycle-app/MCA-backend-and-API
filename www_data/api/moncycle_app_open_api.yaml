@@ -18,7 +18,7 @@ info:
     `termsAccepted: true`.
 
     Read this page from top to bottom the first time, then use it as a reference. Domain words
-    (peak day, stamp, Billings…) are explained in the **Glossary** at the end.
+    (peak day, stamp, cervical mucus self-observation…) are explained in the **Glossary** at the end.
 
     ---
 
@@ -222,7 +222,7 @@ info:
     curl -s -X POST http://localhost:8003/api/register \
       -H 'Content-Type: application/json' \
       -d '{"nickname":"MB","email":"marie@example.org","password":"a long passphrase","birthYear":1994,
-           "method":"billings","temperatureTracking":false,"captcha":"a7k2fm","captchaToken":"1790000000.9f2c..."}'
+           "method":"cervicalMucus","temperatureTracking":false,"captcha":"a7k2fm","captchaToken":"1790000000.9f2c..."}'
     # -> 202 {"data":{"sent":true}}
     ```
 
@@ -318,7 +318,7 @@ info:
 
     | Method | How a day is recorded | Fields used |
     |---|---|---|
-    | `billings` | free text, chosen by the user | `freeMucusSensation`, `freeMucusObservation` (and `freeOther`, see below) |
+    | `cervicalMucus` | free text, chosen by the user | `freeMucusSensation`, `freeMucusObservation` (and `freeOther`, see below) |
     | `fertilityCare` | short standard codes | the six `codified*` fields |
 
     Common to both: `stampColor`, `stampBaby`, `isPeak`, `cycleFirstDay`, `sexUnion`,
@@ -326,11 +326,11 @@ info:
 
     `temperatureTracking` is a separate boolean. It says whether the user also records basal
     body temperature. So there are four real combinations, for example
-    `billings` + temperature, or `fertilityCare` without temperature.
+    `cervicalMucus` + temperature, or `fertilityCare` without temperature.
 
-    ### Free-text labels are shared objects (Billings)
+    ### Free-text labels are shared objects (cervical mucus)
 
-    In Billings mode, a user writes labels like "dry", "sticky", "clear and stretchy". These
+    With the `cervicalMucus` method, a user writes labels like "dry", "sticky", "clear and stretchy". These
     are **not** free strings stored on the day. Each label is a reusable object called a
     **description**, with its own `id` and a `useCount`.
 
@@ -447,7 +447,7 @@ info:
     | Term | Meaning |
     |---|---|
     | **NFP** | Natural Family Planning. A family of methods based on daily body observations. |
-    | **Billings** | The Billings Ovulation Method. The user describes mucus in their own words. |
+    | **Cervical mucus self-observation** | The method value `cervicalMucus`. The user describes cervical mucus in their own words. |
     | **FertilityCare** | The Creighton Model FertilityCare System. The user records short standard codes such as `10KL` or `6C`. |
     | **Cycle** | The period from one first day of menstruation to the day before the next one. |
     | **Day 1** | The first day of a cycle. In this API, the day flagged `cycleFirstDay: true`. |
@@ -736,9 +736,9 @@ paths:
                   example: 1790000000.9f2c6b1e0d4a8f7c3b5e2a1d9c8b7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b
                 method:
                   type: string
-                  enum: [billings, fertilityCare]
-                  default: billings
-                  description: Tracking method. Defaults to `billings` when omitted. See introduction, section 7.
+                  enum: [cervicalMucus, fertilityCare]
+                  default: cervicalMucus
+                  description: Tracking method. Defaults to `cervicalMucus` when omitted. See introduction, section 7.
                 temperatureTracking:
                   type: boolean
                   default: false
@@ -2002,16 +2002,16 @@ paths:
             schema:
               $ref: '#/components/schemas/Day'
             examples:
-              billings:
-                summary: Billings — first day of a cycle (POST /day/2026-03-10)
+              cervicalMucus:
+                summary: Cervical mucus — first day of a cycle (POST /day/2026-03-10)
                 value:
                   cycleFirstDay: true
                   stampColor: Red
                   freeMucusSensation: [dry]
                   comment: cramps in the morning
                   lastWriteClientUtc: "2026-03-10T07:12:00Z"
-              billingsPeak:
-                summary: Billings — peak day, with temperature (POST /day/2026-03-22)
+              cervicalMucusPeak:
+                summary: Cervical mucus — peak day, with temperature (POST /day/2026-03-22)
                 value:
                   stampColor: White
                   isPeak: true
@@ -2360,14 +2360,14 @@ paths:
 
         | `nfp_method` | Columns |
         |---|---|
-        | 1, 2 (Billings) | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `freeMucusSensation` `freeMucusObservation` [`temperature` `temperatureTime`] `isPeak` `counterStart` `sexUnion` `booleanPregnancyDetected` `comments` |
+        | 1, 2 (cervical mucus) | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `freeMucusSensation` `freeMucusObservation` [`temperature` `temperatureTime`] `isPeak` `counterStart` `sexUnion` `booleanPregnancyDetected` `comments` |
         | 3, 4 (FertilityCare) | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `codifiedBleedingObservation` `codifiedMucusSensation` `codifiedMucusObservation` `codifiedNumberObservations` `codifiedPainObservations` `codifiedArrow` [`temperature` `temperatureTime`] `isPeak` `sexUnion` `booleanPregnancyDetected` `comments` |
 
         - `temperature` and `temperatureTime` only for methods 1 and 4.
         - `comments` holds the day's comment, then the labels with no type yet (descriptions of
           type `undefined`, the `freeOther` of a `Day`), joined with `, ` and added after the
           comment with ` | ` between the two (`cramps | some text, another`). They never replace
-          the comment, and have no column of their own. The PDF charts do the same in their comment column (Billings) or cell
+          the comment, and have no column of their own. The PDF charts do the same in their comment column (cervical mucus) or cell
           (FertilityCare), and so does the NFP file, as one more entry of the day's `comments`.
 
         Values:
@@ -2397,7 +2397,7 @@ paths:
 
         ### What a PDF export contains
 
-        A chart of the period. For Billings, a table with one line per day and a header on every
+        A chart of the period. For cervical mucus self-observation, a table with one line per day and a header on every
         page: date, day of the cycle, stamp, peak, counter and union (only when the period has
         one), sensations, observations, comment (followed by the labels with no type yet, see the
         CSV), and for method 1 the temperature with its curve
@@ -2407,7 +2407,7 @@ paths:
         row and one row per cycle. A day not observed still shows its union, counter, peak,
         temperature, pain codes, arrow and comment. The PDF is always sent as an attachment.
 
-        The server setting `PDF_BILLINGS_BORDERS` (`Off`) draws the Billings table with no line.
+        The server setting `PDF_CERVICAL_MUCUS_BORDERS` (`Off`) draws the cervical mucus table with no line.
 
         ### What an NFP export contains
 
@@ -3000,7 +3000,7 @@ components:
           type: string
           format: email
           description: The login address of the account. Not case-sensitive, spaces around it are ignored.
-          example: demo.bill@moncycle.app
+          example: demo.mucus.self.obs@moncycle.app
         password:
           type: string
           format: password
@@ -3125,7 +3125,7 @@ components:
           example: partner@example.org;mother@example.org
         method:
           type: string
-          enum: [billings, fertilityCare]
+          enum: [cervicalMucus, fertilityCare]
           description: The tracking method. It decides which fields of a day to display.
         temperatureTracking:
           type: boolean
@@ -3192,7 +3192,7 @@ components:
         - **read-only**, computed by the server: `cycleStartDate`, `cycleDay`, `lastWriteDb`;
         - **common** to both methods: the stamp, `isPeak`, `cycleFirstDay`, `sexUnion`,
           `temperature`, `comment`…;
-        - **method-specific**: `freeMucus*` and `freeOther` for Billings, `codified*` for
+        - **method-specific**: `freeMucus*` and `freeOther` for the `cervicalMucus` method, `codified*` for
           FertilityCare.
 
         Sending a field from the other method is not an error, but the app will not display it.
@@ -3280,7 +3280,7 @@ components:
         freeMucusSensation:
           type: array
           description: |-
-            **Billings only.** What the user *feels*, as free-text labels, for example `["dry"]`.
+            **Cervical mucus only.** What the user *feels*, as free-text labels, for example `["dry"]`.
 
             A name that does not exist yet is created for you. A name that already exists under
             `freeMucusObservation` is reused and keeps its original type — names are unique per
@@ -3294,7 +3294,7 @@ components:
           example: [dry, slippery]
         freeMucusObservation:
           type: array
-          description: "**Billings only.** What the user *sees*, as free-text labels. Same rules as `freeMucusSensation`."
+          description: "**Cervical mucus only.** What the user *sees*, as free-text labels. Same rules as `freeMucusSensation`."
           items:
             type: string
             maxLength: 256
@@ -3302,7 +3302,7 @@ components:
         freeOther:
           type: array
           description: |-
-            **Billings only.** Labels with no type yet. Classify them with `POST /description/{id}`.
+            **Cervical mucus only.** Labels with no type yet. Classify them with `POST /description/{id}`.
 
             Always present on read, empty when the day has none. On write it is part of the full
             state of the day like the two other lists: leave it out and these labels are unlinked.
@@ -3553,8 +3553,8 @@ components:
         preferredMethod:
           type: string
           maxLength: 64
-          description: "`billings`, `fertilityCare`, `symptothermic_fr`, or another app's own value."
-          example: billings
+          description: "`cervicalMucus`, `fertilityCare`, `symptothermic_fr`, or another app's own value."
+          example: cervicalMucus
         twoTenthShift:
           type: boolean
           description: Not recorded by this app.
@@ -3576,13 +3576,13 @@ components:
           type: string
           maxLength: 64
           description: |-
-            The method used for this cycle: `billings`, `fertilityCare` or `symptothermic_fr`
+            The method used for this cycle: `cervicalMucus`, `fertilityCare` or `symptothermic_fr`
             (case-insensitive), or an app's own value.
 
-            This app records `billings` and `fertilityCare`. A cycle of any other method still
+            This app records `cervicalMucus` and `fertilityCare`. A cycle of any other method still
             imports — the fields every method shares are kept, and the rest is reported in
             `ignoredFields`.
-          example: billings
+          example: cervicalMucus
         cycleStartDate:
           type: string
           format: date
@@ -3730,7 +3730,7 @@ components:
           type: array
           maxItems: 20
           description: |-
-            **Billings.** Free-text sensation labels. Each becomes a `sensation` description on
+            **Cervical mucus.** Free-text sensation labels. Each becomes a `sensation` description on
             the account, reusing an existing one of the same name. Max **256 characters** each.
           items:
             type: string
@@ -3739,7 +3739,7 @@ components:
         freeMucusObservation:
           type: array
           maxItems: 20
-          description: "**Billings.** Free-text observation labels, as above but typed `observation`."
+          description: "**Cervical mucus.** Free-text observation labels, as above but typed `observation`."
           items:
             type: string
             maxLength: 256
@@ -3936,7 +3936,7 @@ components:
           items:
             type: string
           example:
-            - "[cycles[0]] the cycle uses 'fertilityCare' while this account is set to 'billings'. The data was imported; change the method in the account settings to see it."
+            - "[cycles[0]] the cycle uses 'fertilityCare' while this account is set to 'cervicalMucus'. The data was imported; change the method in the account settings to see it."
         mappedFields:
           type: array
           description: |-
@@ -4180,7 +4180,7 @@ components:
           example: partner@example.org;mother@example.org
         method:
           type: string
-          enum: [billings, fertilityCare]
+          enum: [cervicalMucus, fertilityCare]
           description: Tracking method. Exactly one of the two values. `temperatureTracking` keeps its value when you do not send it.
         temperatureTracking:
           type: boolean

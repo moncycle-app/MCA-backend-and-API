@@ -15,7 +15,7 @@ require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
-require_once __DIR__ . "/doc_bill.php";
+require_once __DIR__ . "/doc_mucus.php";
 require_once __DIR__ . "/doc_fc.php";
 require_once __DIR__ . "/user_account.php";
 
@@ -60,5 +60,5 @@ function doc_export_day(array $day): array {
 
 function doc_export_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false): DocPdf {
 	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $anonymous);
-	return doc_bill_pdf($days, $nfp_method, $name, $anonymous);
+	return doc_mucus_pdf($days, $nfp_method, $name, $anonymous);
 }

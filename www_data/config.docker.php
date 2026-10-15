@@ -55,10 +55,10 @@ define("MAINTENANCE_MODE", env_bool("MAINTENANCE_MODE", false));
 
 define("CSV_SEP", env_string("CSV_SEP", ";"));
 
-// Lines of the Billings PDF chart: the grid of its table, the outline of a white stamp.
-// PDF_BILLINGS_BORDERS=false draws a chart with no line at all. The FertilityCare grid is made of
+// Lines of the cervical mucus PDF chart: the grid of its table, the outline of a white stamp.
+// PDF_CERVICAL_MUCUS_BORDERS=false draws a chart with no line at all. The FertilityCare grid is made of
 // its lines and keeps them.
-define("PDF_BILLINGS_BORDERS", env_bool("PDF_BILLINGS_BORDERS", true));
+define("PDF_CERVICAL_MUCUS_BORDERS", env_bool("PDF_CERVICAL_MUCUS_BORDERS", true));
 
 define("PHP_SECURE_COOKIES", env_bool("PHP_SECURE_COOKIES", true));
 

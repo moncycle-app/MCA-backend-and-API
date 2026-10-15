@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-// The human-readable exports of a period: a CSV, and a chart (one line per day for Billings, a grid for FertilityCare). One reading
+// The human-readable exports of a period: a CSV, and a chart (one line per day for cervical mucus self-observation, a grid for FertilityCare). One reading
 // feeds all three, doc_export_days() (lib/doc_export.php): one entry per calendar day in the JSON day shape with the NFP names, gaps
 // included, nothing hidden. What a file shows of a day is the renderers' business, and the rule they share is here. The NFP export
 // (lib/nfp_export.php) is apart on purpose: a data file widened to whole cycles that writes every stored value.

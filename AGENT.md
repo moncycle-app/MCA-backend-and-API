@@ -19,7 +19,7 @@ log, [docs/logs.md](docs/logs.md). Read the code before relying on any of this: 
 
 ## The project
 
-PHP 8.4 + MariaDB 11.1: a JSON HTTP API for menstrual cycle tracking (natural family planning: Billings, FertilityCare) and the static
+PHP 8.4 + MariaDB 11.1: a JSON HTTP API for menstrual cycle tracking (natural family planning: cervical mucus self-observation, FertilityCare) and the static
 web app that uses it. The source is in `www_data/`, the web server's document root (`/var/www/html/` in the Docker image). There is no
 framework and no build step: PHP files, one script per endpoint, jQuery in the pages.
 
@@ -79,8 +79,8 @@ Also:
 - **`nfp_format.php`, `nfp_export.php`, `nfp_import.php`** the NFP interchange format (vocabulary helpers, the JSON Schema
   `NFP_FILE_SCHEMA`, normalising of older variants), the file out, and the four-stage import (parse, schema, plan, write; the plan is
   built from small steps that add to one report array).
-- **`doc.php`, `doc_export.php`, `doc_csv.php`, `doc_pdf.php`, `doc_bill.php`, `doc_fc.php`** the CSV and PDF exports: the shared display
-  rule; the front door (`doc_export_days`, `doc_export_pdf`); the CSV and the raw data dump; `DocPdf` and core-font text; the Billings
+- **`doc.php`, `doc_export.php`, `doc_csv.php`, `doc_pdf.php`, `doc_mucus.php`, `doc_fc.php`** the CSV and PDF exports: the shared display
+  rule; the front door (`doc_export_days`, `doc_export_pdf`); the CSV and the raw data dump; `DocPdf` and core-font text; the cervical mucus
   chart; the FertilityCare chart.
 - **`user_account.php`** the account row: the method table (`NFP_METHOD_BY_ID`: id 3 = FertilityCare, 4 = FertilityCare + temperature),
   `user_account_check_settings` (the settings that need no password, checked: issues, never silently dropped), `user_account_to_json`
