@@ -26,13 +26,9 @@ input_query([], $issues);
 
 // START
 if ($step === "") {
-	// the body is optional, and has no field
-	if (http_body_present()) input_body([], $issues);
+	if (http_body_present()) input_body([], $issues);   // optional, without any field
 	input_exit_if_issues($issues);
-
-	if ($is_active) {
-		http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
-	}
+	if ($is_active) http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
 
 	$setup = sec_totp_begin($db, $user_account);
 	log_event("account.totp_setup_started");
@@ -43,34 +39,17 @@ $body = input_body(["code"], $issues);
 $code = input_code($body, $issues);
 input_exit_if_issues($issues);
 
-// CONFIRM
-if ($step === "confirm") {
-	if ($is_active) {
-		http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
-	}
-
-	if (!sec_totp_code_valid($user_account, $code)) {
-		log_event("account.refused", ["act" => "totp_enable", "err" => "totp_invalid"]);
-		http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
-	}
-
-	db_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_ACTIVE, $user_account["totp_secret"]);
-	log_event("account.totp_enabled");
-
-	http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_ACTIVE)]);
-}
-
-// DISABLE
-if (!$is_active) {
-	http_error(409, "totp_not_enabled", "Two-factor authentication is not enabled.");
-}
-
+// CONFIRM or DISABLE
+$enable = $step === "confirm";
+if ($enable && $is_active) http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
+if (!$enable && !$is_active) http_error(409, "totp_not_enabled", "Two-factor authentication is not enabled.");
 if (!sec_totp_code_valid($user_account, $code)) {
-	log_event("account.refused", ["act" => "totp_disable", "err" => "totp_invalid"]);
+	log_event("account.refused", ["act" => $enable ? "totp_enable" : "totp_disable", "err" => "totp_invalid"]);
 	http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
 }
 
-db_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_DISABLED, null);
-log_event("account.totp_disabled");
-
-http_data(200, ["totpState" => sec_totp_state_name(TOTP_STATE_DISABLED)]);
+$state = $enable ? TOTP_STATE_ACTIVE : TOTP_STATE_DISABLED;
+db_update_user_account_totp($db, $user_account["no_user_account"], $state, $enable ? $user_account["totp_secret"] : null);
+if ($enable) log_event("account.totp_enabled");
+else log_event("account.totp_disabled");
+http_data(200, ["totpState" => sec_totp_state_name($state)]);

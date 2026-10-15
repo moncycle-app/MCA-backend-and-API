@@ -12,9 +12,7 @@ require_once __DIR__ . "/../lib/api.php";
 require_once __DIR__ . "/../lib/email_token.php";
 require_once __DIR__ . "/../lib/input.php";
 
-// The link of a mail, used: it proves an address, or sets a new password, or changes the primary address. It needs no session (the
-// person may open the mail on another device), and the token is the whole proof. The page of the link posts the token it finds in its
-// fragment (js/verify_email.js).
+// The link of a mail, used (lib/email_token.php). No session: the mail may be opened on another device, and the token is the whole proof.
 [$db] = api_start(false);
 
 if (http_method() !== 'POST') http_exit_method_not_allowed(["POST"]);

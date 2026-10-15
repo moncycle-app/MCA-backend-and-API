@@ -23,7 +23,7 @@ $user_account = sec_token_authenticate($db);
 sec_redirect_if_logged_out($user_account);
 $no_user_account = $user_account["no_user_account"];
 
-// the account, its sessions and its days, as they are stored (secrets masked): read first, so that the log says how many
+// the account, its sessions and its days as stored, secrets masked; read first, for the log
 $account_row = sec_obfuscate_columns(db_select_user_account($db, $no_user_account), ["password", "totp_secret", "email_token_hash"]);
 $session_rows = array_map(fn($row) => sec_obfuscate_columns($row, ["auth_token_str"]), db_select_auth_tokens($db, $no_user_account));
 $day_rows = doc_csv_raw_days($db, $no_user_account);

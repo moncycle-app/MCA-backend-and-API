@@ -15,7 +15,7 @@ require_once __DIR__ . "/../lib/input.php";
 [$db, $user_account] = api_start();
 $no_user_account = $user_account["no_user_account"];
 
-// /day lists days; /day/{date} is one day: read, replaced (written whole), cleared
+// /day reads days; /day/{date} is one day: read, replaced (written whole), cleared
 $path = input_path();
 input_exit_unless_path_fits($path, 1);
 $method = http_method();
@@ -28,7 +28,7 @@ $date = $path === [] ? null : input_path_date($path[0], $issues);
 if ($method === "GET" && $path !== []) {
 	input_exit_unless_none($issues);
 
-	// the row's id when the day was ever written, and how many rows were read (0 or 1: an unwritten date is answered empty)
+	// an unwritten date is answered empty: 0 rows read
 	$day = data_construct_day($db, $date, $no_user_account);
 	log_context(["day" => isset($day["no_day"]) ? intval($day["no_day"]) : null]);
 	log_note(["n" => isset($day["no_day"]) ? 1 : 0]);

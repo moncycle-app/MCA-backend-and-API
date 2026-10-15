@@ -7,19 +7,9 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-/*
-** The internal constants of the app: DB codes, API vocabularies, limits, export layouts. None of
-** them is a deployment setting.
-**
-** Loaded by config.php (Docker and local) and by config.exemple.php, so there is one copy
-** whatever the deployment. What an operator may change (DB, SMTP, toggles, login throttling)
-** is in those files. PHP has no typed global constants: each value is written as the type it
-** has (int, float, bool, string, array), and the settings read from the environment are cast
-** in config.php.
-**
-** The JSON Schema (NFP_FILE_SCHEMA in lib/nfp_format.php) and the SQL fragment
-** (DB_SQL_USER_ACCOUNT_LAST_ACTIVITY in lib/db.php) stay next to the code that runs them.
-*/
+// The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
+// config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db.php) stay next
+// to the code that runs them.
 
 // ===========================================================================
 // ACCOUNT -- two-factor authentication, data retention
@@ -31,7 +21,7 @@ const TOTP_STATE_DISABLED = 1;      // was set up, then turned off by the user
 const TOTP_STATE_INIT = 2;          // secret generated and shown, first code not confirmed yet
 const TOTP_STATE_ACTIVE = 3;        // confirmed: login asks for a code
 
-// state => the string the JSON API speaks instead of the raw 0-3 DB int (sec_totp_state_name()).
+// state => the string the JSON API speaks (sec_totp_state_name()).
 const TOTP_STATE_NAMES = [
 	TOTP_STATE_NEVER_USED => "never_used",
 	TOTP_STATE_DISABLED => "disabled",
@@ -39,8 +29,7 @@ const TOTP_STATE_NAMES = [
 	TOTP_STATE_ACTIVE => "active",
 ];
 
-// The cookie that carries the session token (an Authorization: Bearer header carries the same one),
-// and the name it had before, which is still read for a while.
+// The cookie of the session token (an Authorization: Bearer header carries the same), and the other name it is read and cleared under.
 const COOKIE_AUTH_TOKEN = "MONCYCLEAPP_TOKEN";
 const COOKIE_AUTH_TOKEN_LEGACY = "MONCYCLEAPP_JETTON";
 
@@ -50,43 +39,40 @@ const COOKIE_SAMESITE_VALUES = ["strict", "lax", "none"];
 const PASSWORD_MIN_LENGTH = 10;
 // bcrypt reads 72 bytes and silently drops the rest: a longer password is refused rather than half kept.
 const PASSWORD_MAX_BYTES = 72;
-// The hash of a password nobody knows (random, then forgotten), at the cost password_hash() uses. A login for an
-// address that has no account is checked against it, so that it takes as long as a wrong password does.
+// The hash of a password nobody knows, at the cost of password_hash(): a sign-in for an address with no account is checked against it,
+// so that it takes as long as a wrong password.
 const AUTH_DUMMY_PASSWORD_HASH = '$2y$12$fFAyg7vWBJagg2QJOymLY.Ndi.VRQtAJhChoNUW7XiAxek8JDKUju';
 
-// The captcha picture (lib/sec_captcha.php). Medium on purpose: the characters are not distorted and there are a few
-// lines, and the alphabet leaves out the glyphs that look alike (o 0, i l j 1, s 5, z 2, b 6 8, g q 9, u v, c e).
-// What the visitor types is matched without regard to case.
+// The captcha picture (lib/sec_captcha.php): its alphabet leaves out the glyphs that look alike (o 0, i l j 1, s 5, z 2, b 6 8, g q 9,
+// u v, c e).
 const CAPTCHA_CHARSET = "adefhkmnprtwxy3467";
 const CAPTCHA_LENGTH = 6;
 const CAPTCHA_WIDTH = 180;
 const CAPTCHA_HEIGHT = 60;
 
-// The captcha is a signed challenge, kept nowhere (lib/sec_captcha.php): a token "<exp>.<mac>" that holds its own expiry.
-// CAPTCHA_SECRET (config.php) signs it; one shorter than CAPTCHA_SECRET_MIN_CHARS counts as none and the captcha is closed (503).
+// The token "<exp>.<mac>" holds its own expiry. A CAPTCHA_SECRET (config) shorter than CAPTCHA_SECRET_MIN_CHARS closes the captcha (503).
 const CAPTCHA_VALID_SECONDS = 300;
 const CAPTCHA_ANSWER_MAX_BYTES = 64;   // a longer answer is no reading of a picture of CAPTCHA_LENGTH characters
 const CAPTCHA_SECRET_MIN_CHARS = 32;
-// The token is bound to the visitor's network: the address cut to its first 24 bits (IPv4) or 64 bits (IPv6).
+// The token is bound to the visitor's network: the address cut to these bits.
 const CAPTCHA_IP_PREFIX_V4 = 24;
 const CAPTCHA_IP_PREFIX_V6 = 64;
 // What a captcha is asked for: register, recover_password, and login once the account has failed LOGIN_CAPTCHA_THRESHOLD times.
 const CAPTCHA_PURPOSES = ["register", "recover", "login"];
 
 const ACCOUNT_DEFAULT_LANGUAGE = "FR";    // user_account.language of a new account, until the user can choose
-// The two public demo accounts (script/db/demo.sql): never reminded, never warned, never erased, left out of the statistics (lib/db.php).
-// Whoever is logged in as one of them is not kept out of the sign-up (lib/sec.php, sec_session_is_demo()).
-// DEMO_ENABLED (config.php) decides whether they can sign in (sec_account_enabled()) and whether script/demo_reset.php (hourly) puts them back as demo.sql makes them.
+// The two public demo accounts (script/db/demo.sql): never reminded, warned or erased, left out of the statistics. DEMO_ENABLED (config)
+// decides whether they can sign in and whether script/demo_reset.php puts them back every hour.
 const ACCOUNT_DEMO_ID_BILLINGS = 2;
 const ACCOUNT_DEMO_ID_FERTILITYCARE = 3;
 const ACCOUNT_DEMO_IDS = [ACCOUNT_DEMO_ID_BILLINGS, ACCOUNT_DEMO_ID_FERTILITYCARE];
 const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_BILLINGS . ", " . ACCOUNT_DEMO_ID_FERTILITYCARE;   // for NOT IN (...): a constant expression cannot implode()
 
-// What user_account and auth_token can hold: the widths of their columns, and the birth years a person can give.
+// The widths of the columns of user_account, and the birth years a person can give.
 const ACCOUNT_LIMIT_NICKNAME_CHARS = 255;           // user_account.name varchar(255)
 const ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS = 255;   // user_account.register_comment varchar(255)
-// user_account.notification_emails: the addresses that receive the cycles, the reminders and the warnings with the login address, separated
-// by ";" (the form a client sends and reads, and the form that is stored: lower case, no space, no duplicate).
+// user_account.notification_emails: the addresses that receive the cycles, the reminders and the warnings with the login address, as the
+// client sends and reads them and as they are stored (lower case, no duplicate).
 const ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR = ";";
 const ACCOUNT_NOTIFICATION_EMAILS_MAX = 5;                 // how many
 const ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS = 1024;      // user_account.notification_emails varchar(1024)
@@ -95,16 +81,15 @@ const ACCOUNT_BIRTH_YEAR_MAX_AGE = 100;             // this year, or up to this 
 // The methods that change nothing: all a read-only token may use (api_start()).
 const HTTP_SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 
-// auth_token: what a session or a custom token is (lib/sec_token.php). The widths are those of the columns.
+// auth_token (lib/sec_token.php); the widths are those of the columns.
 const AUTH_TOKEN_LIMIT_NAME_CHARS = 256;            // auth_token.name varchar(256)
 const AUTH_TOKEN_LIMIT_USER_AGENT_CHARS = 255;      // auth_token.user_agent and user_agent_use varchar(255), cut to fit
 const AUTH_TOKEN_DEFAULT_NAME = "API";              // the name of a token whose client gave none
-// The first characters of the token as its client holds it, kept next to its hash (the token itself is kept nowhere). GET /api/token
-// shows them, to tell the tokens of one app apart, and DELETE /api/token names a token by them. They are unique per account (a key
-// of auth_token): a sign-in whose token would repeat one of the account's makes another token, up to this many times.
+// The first characters of the token, kept in the clear next to its hash: GET /api/token shows them and DELETE /api/token names a token by
+// them. Unique per account: a token that would repeat one is made again, up to AUTH_TOKEN_PREFIX_TRIES times.
 const AUTH_TOKEN_PREFIX_CHARS = 5;                  // auth_token.auth_token_prefix varchar(5)
 const AUTH_TOKEN_PREFIX_TRIES = 10;
-// auth_token.scope: what the token may do. A read-only token reads (GET, HEAD, OPTIONS) and may end its own session.
+// auth_token.scope: a read-only token reads (HTTP_SAFE_METHODS) and may end its own session.
 const AUTH_TOKEN_SCOPE_READ_ONLY = 1;
 const AUTH_TOKEN_SCOPE_READ_WRITE = 2;
 // scope => the string the JSON API speaks.
@@ -112,22 +97,20 @@ const AUTH_TOKEN_SCOPE_NAMES = [
 	AUTH_TOKEN_SCOPE_READ_ONLY => "readOnly",
 	AUTH_TOKEN_SCOPE_READ_WRITE => "readWrite",
 ];
-// "expiresInDays" of POST /api/token: a token that has one dies on that day whatever its use (no 40 days idle rule).
+// "expiresInDays" of POST /api/token: such a token dies on that day whatever its use.
 const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
 const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
 // How much of the user agent the "new login" mail quotes.
 const MAIL_USER_AGENT_CHARS = 120;
-// The rule of a token made without "expiresInDays" (the cron, db_purge_auth_token()): it dies after this many days whatever its use,
-// or after this many days without one.
+// A token made without "expiresInDays" dies after this many days, or after this many days unused (db_purge_auth_token()).
 const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
 const AUTH_TOKEN_IDLE_DAYS = 40;
-// The address of a token as GET /api/token shows it: cut to its first 24 bits (IPv4) or 48 bits (IPv6). The database keeps it whole.
+// The address of a token as GET /api/token shows it, cut to these bits; the database keeps it whole.
 const AUTH_TOKEN_IP_PREFIX_V4 = 24;
 const AUTH_TOKEN_IP_PREFIX_V6 = 48;
 
-// user_account.email_token_*: the one link by mail that an account can have pending (lib/email_token.php). It is a slot, not a list: a
-// new link overwrites the one before it. The token is 32 random bytes, base64url; only its SHA-256 is kept, with what the link is for
-// (the purpose), when it dies, and for a change of address the address it will change to.
+// user_account.email_token_*: the one link by mail an account can have pending (lib/email_token.php). The token is random bytes,
+// base64url; only its SHA-256 is kept.
 const EMAIL_TOKEN_BYTES = 32;
 const EMAIL_TOKEN_LIMIT_CHARS = 64;                 // a token a client sends that is longer than this is no token and is not looked up (the real one has 43)
 // user_account.email_token_purpose: what the link does once it is used.
@@ -140,8 +123,7 @@ const EMAIL_TOKEN_PURPOSE_NAMES = [
 	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => "resetPassword",
 	EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL => "changeEmail",
 ];
-// purpose => how long the link lives, in minutes. A reset is short because it hands over the account; a verification is long because
-// the person may read their mail days later.
+// purpose => how long the link lives, in minutes: a reset hands the account over, a verification may be read days later.
 const EMAIL_TOKEN_LIFETIME_MINUTES = [
 	EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION => 3 * 24 * 60,
 	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => 60,
@@ -150,8 +132,7 @@ const EMAIL_TOKEN_LIFETIME_MINUTES = [
 // An account whose address was never verified is erased by the cron after this many days (the address is free again).
 const ACCOUNT_UNVERIFIED_DELETE_DAYS = 7;
 
-// RGPD retention, re-evaluated on every cron run (so no "warning sent" flag exists): an account
-// with no activity (login, or any write tied to it) for this many years is erased...
+// RGPD retention, re-evaluated on every cron run: an account without activity for this many years is erased...
 const ACCOUNT_INACTIVITY_DELETE_YEARS = 4;
 // ... and gets a warning email this many days before that deletion.
 const ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE = 10;
@@ -160,9 +141,9 @@ const ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE = 10;
 // DATABASE SCRIPTS -- the SQL files that make the database (lib/data.php)
 // ===========================================================================
 
-// The schema: loaded once, by script/db_init.php, into a database that has no table.
+// Loaded by script/db_init.php into a database that has no table.
 const DB_SCRIPT_TABLES = __DIR__ . "/script/db/schema.sql";
-// The two demo accounts and their days (dated from today): loaded by script/demo_reset.php every hour when DEMO_ENABLED.
+// The demo accounts and their days, dated from today: loaded by script/demo_reset.php every hour when DEMO_ENABLED.
 const DB_SCRIPT_DEMO = __DIR__ . "/script/db/demo.sql";
 
 // ===========================================================================
@@ -174,14 +155,11 @@ const NFP_METHOD_BILLINGS = "billings";
 const NFP_METHOD_FERTILITY_CARE = "fertilityCare";
 const NFP_METHOD_SYMPTOTHERMIC_FR = "symptothermic_fr";
 
-// The methods this app records natively: a cycle declaring another one still imports, and what
-// cannot be stored is reported field by field. KNOWN adds the ones a file may legitimately name.
+// The methods this app records; a file may also name the other KNOWN ones (what cannot be stored is reported field by field).
 const NFP_METHODS_NATIVE = [NFP_METHOD_BILLINGS, NFP_METHOD_FERTILITY_CARE];
 const NFP_METHODS_KNOWN = [NFP_METHOD_BILLINGS, NFP_METHOD_FERTILITY_CARE, NFP_METHOD_SYMPTOTHERMIC_FR];
 
-// user_account.nfp_method packs the method and whether temperature is tracked in one 1-4 int:
-// id => [the method as the NFP format and the JSON API name it, temperature tracked].
-// lib/user_account.php is the one place that reads this table; js/account.js carries a copy.
+// user_account.nfp_method: id => [the method, temperature tracked]. Read by lib/user_account.php only; js/account.js carries a copy.
 const NFP_METHOD_BY_ID = [
 	1 => [NFP_METHOD_BILLINGS, true],
 	2 => [NFP_METHOD_BILLINGS, false],
@@ -195,12 +173,11 @@ const NFP_METHOD_BY_ID = [
 
 const APP_NAME = "moncycle.app";
 
-// The version of the HTTP contract: an integer, raised only by a change that breaks a client. Adding a field, an optional parameter, an
-// endpoint or an enum value is not one. GET /api/server_info is what a client reads it from, first.
+// The version of the HTTP contract, raised only by a change that breaks a client (not by a field, a parameter, an endpoint or an enum value).
 const API_VERSION = 2;
 
-// The version of the database schema this code is written for: the highest vN of script/migration/vN-1_to_vN.*, the row 'schema_version'
-// of key_value (schema.sql inserts it, each migration sets it). A database that says another number is not served (503 schema_mismatch).
+// The schema this code is written for: the highest vN of script/migration/vN-1_to_vN.*, and the row 'schema_version' of key_value that
+// schema.sql inserts and every migration sets. A database at another number is not served (503 schema_mismatch).
 const SCHEMA_VERSION = 15;
 const SCHEMA_VERSION_KEY = "schema_version";
 
@@ -211,8 +188,7 @@ const ACCOUNT_UPDATE_FIELDS = [
 ];
 const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "totpState"];
 
-// The names a day body may use (POST /api/day/{date}), and the ones of the day the server alone writes: a client that reads a day, changes it and
-// sends it back whole sends them too, and they are dropped (api/day.php).
+// The names a day body may use (POST /api/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
 const DAY_INPUT_FIELDS = [
 	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "booleanPregnancyDetected",
 	"freeMucusSensation", "freeMucusObservation", "freeOther", "temperature", "temperatureTime", "codifiedArrow",
@@ -251,7 +227,7 @@ const INPUT_ISSUE_CODES = [
 // ===========================================================================
 
 // description.type: what a free-text label of a day is.
-const DESCRIPTION_TYPE_UNDEFINED = 0;     // text the v15 migration could not class
+const DESCRIPTION_TYPE_UNDEFINED = 0;     // free text of no known type
 const DESCRIPTION_TYPE_OBSERVATION = 1;   // a mucus observation
 const DESCRIPTION_TYPE_SENSATION = 2;     // a mucus sensation
 
@@ -272,8 +248,7 @@ const EXPORT_TYPES = [EXPORT_TYPE_PDF, EXPORT_TYPE_CSV, EXPORT_TYPE_NFP];
 // PUBLIC STATISTICS -- GET /api/pub_stat (api/pub_stat.php, lib/data.php)
 // ===========================================================================
 
-// The three numbers it answers: JSON name => [the key_value row the cron keeps it in, the digits it is rounded to].
-// Counting them walks day_timeline, which a public endpoint must not do on every visit.
+// JSON name => [the key_value row the cron keeps it in, the digits it is rounded to]: counting walks day_timeline, not for every visit.
 const PUB_STAT_KEYS = [
 	"accounts" => ["pub_stat_nb_user_account", -1],
 	"cycles" => ["pub_stat_nb_cycle", -1],
@@ -284,9 +259,8 @@ const PUB_STAT_KEYS = [
 // SYNC -- GET /api/timeline_sync (api/timeline_sync.php, lib/data.php)
 // ===========================================================================
 
-// How far before the cursor a client sends the sync reads. A row is stamped (last_write_db) when its
-// statement runs but only seen once its transaction commits, so a read made in between would skip it
-// for good. A client replaces what it holds by what it receives, so reading a row twice is harmless.
+// How far before the client's cursor the sync reads: a row is stamped when its statement runs but seen only once its transaction commits,
+// and a read in between would skip it for good. Reading a row twice is harmless.
 const SYNC_OVERLAP_SECONDS = 120;
 
 // What a sync with no "since" reads from: the start of everything, as a client's first sync does.
@@ -303,8 +277,7 @@ const LOG_CATEGORY_VALUES = ["auth", "account", "data", "export", "mail", "syste
 const LOG_FORMAT_VALUES = ["json", "text"];
 const LOG_IP_VALUES = ["full", "truncate", "none"];
 
-// What lib/log.php falls back on when a setting is missing from a hand-made config.php (written
-// before the logs) or holds a value that is not one of the above. Same defaults as the config files.
+// What lib/log.php falls back on when a setting is missing or wrong: the defaults of the config files.
 const LOG_DEFAULTS = [
 	"LOG_LEVEL" => "info",
 	"LOG_CATEGORIES" => [],
@@ -320,9 +293,8 @@ const LOG_REQUEST_ID_PATTERN = '/^[A-Za-z0-9._:-]{1,64}$/D';
 // How a line is encoded: readable text, and a value that cannot be encoded is replaced, never fatal.
 const LOG_JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR;
 
-// A string is clipped to LOG_LIMIT_FIELD_CHARS and a list to LOG_LIMIT_LIST_ITEMS. A line stays under
-// LOG_LIMIT_LINE_BYTES, below PIPE_BUF (4096 on Linux): one write of that size is atomic, so the
-// workers of a prefork server never interleave their lines in a shared stream or file.
+// A line stays under LOG_LIMIT_LINE_BYTES, below PIPE_BUF (4096 on Linux): one write of that size is atomic, so the workers never
+// interleave their lines.
 const LOG_LIMIT_FIELD_CHARS = 200;
 const LOG_LIMIT_LIST_ITEMS = 20;
 const LOG_LIMIT_LINE_BYTES = 4000;
@@ -370,16 +342,13 @@ const LOG_EVENTS = [
 // DAY FORMAT -- the codes day_timeline stores (lib/day_format.php)
 // ===========================================================================
 
-// The stamp is stored as one letter for the colour, then "BB" when the baby is on it. White has no
-// letter: a white stamp is a stamp with the baby and no colour. Colour => letter, in the order the
-// colour is looked for.
+// The stamp: a letter for the colour, then "BB" with the baby; White has no letter (the baby on no colour).
 const DAY_STAMP_COLOR_CODES = ['Red' => 'R', 'Green' => 'G', 'Yellow' => 'Y'];
 
 // The FertilityCare arrow: the glyph day_timeline.fc_arrow holds => the name the JSON API and the NFP format use.
 const DAY_ARROW_GLYPHS = ['Up' => "\u{2191}", 'Down' => "\u{2193}", 'Right' => "\u{2192}"];
 
-// The FertilityCare note codes: day field => its codes, in the order they are written back into
-// day_timeline.fc_score (the five groups, space-separated, in this order).
+// The FertilityCare note codes: day field => its codes, the groups in the order of day_timeline.fc_score.
 const DAY_FORMAT_FC_GROUPS = [
 	'codifiedBleedingObservation' => ['VH', 'H', 'M', 'VL', 'B'], // the 'L' (Lsaignement) *prefix* is handled separately
 	'codifiedMucusSensation' => ['0', '2', '2W', '4', '6', '8', '10', '10DL', '10SL', '10WL'],
@@ -388,13 +357,11 @@ const DAY_FORMAT_FC_GROUPS = [
 	'codifiedPainObservations' => ['AP', 'RAP', 'LAP'],
 ];
 
-// The order the codes are looked for in an fc_score, each taken out of the text once found: a
-// longer code goes first, so "10DL" is not read as "10" and a lone "L", and where two overlap
-// ("X1" and "10" in "X10") the order decides. 'R' belongs to no group: it is taken out and ignored.
+// The order the codes are looked for in an fc_score, each taken out once found: a longer code first ("10DL" is not "10" and "L"), and
+// where two overlap ("X1" and "10" in "X10") the order decides. 'R' belongs to no group: taken out and ignored.
 const DAY_FORMAT_FC_PARSE_ORDER = ['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', 'X2', 'X3', 'AD', 'AP', 'VL', 'VH', '2W', '10', 'H', 'M', 'L', 'B', '0', '2', '4', '6', '8', 'C', 'G', 'K', 'P', 'Y', 'R'];
 
-// How many days one GET /api/day reads: the dates of "dates=a,b,c", or the span of "from" to "to" (both ends counted). Also what keeps
-// the URL of the first form short.
+// How many days one GET /api/day reads ("dates=a,b,c", or "from" to "to" both counted).
 const DAY_LIMIT_QUERY_DAYS = 100;
 
 // What day_timeline and description can hold: the widths of their columns.
@@ -415,9 +382,7 @@ const TIMESTAMP_STORABLE_MAX = "2038-01-19 03:14:07";
 const NFP_SCHEMA_VERSION = "1.0";                  // the schema version the export writes
 const NFP_SUPPORTED_SCHEMA_VERSIONS = ["1.0"];     // the ones the import accepts
 
-// Hard limits refuse a file: the body size, and the DAY_LIMIT_* widths of the columns a value must
-// land in (above). The ones marked "advisory" only raise a warning and the data is imported anyway, because this
-// app's own /export can write more than they allow (years of gap days, hundreds of cycles).
+// A hard limit refuses a file (the body size, the DAY_LIMIT_* widths); an advisory one only warns, as this app's own export can exceed it.
 const NFP_LIMIT_BODY_BYTES = 262144;        // 256K -- matches post_max_size in server_conf, and bounds the work
 const NFP_LIMIT_JSON_DEPTH = 32;            // the format nests 4 deep; 32 is already generous
 const NFP_LIMIT_CYCLES = 120;               // advisory -- ~10 years of cycles in one file
@@ -425,20 +390,18 @@ const NFP_LIMIT_DAYS_PER_CYCLE = 400;       // advisory -- a pregnancy-length cy
 const NFP_LIMIT_DAYS_TOTAL = 4000;          // advisory
 const NFP_LIMIT_DESCRIPTIONS_PER_DAY = 20;  // advisory -- nothing caps the links of a day
 
-// Outside DAY_TEMPERATURE_STORABLE_* a file is refused; outside the narrower band a human body
-// reaches (these two, advisory) it only draws a warning.
+// Outside the band a body reaches (advisory) a temperature only warns; outside DAY_TEMPERATURE_STORABLE_* it refuses the file.
 const NFP_TEMPERATURE_MIN = 30.0;
 const NFP_TEMPERATURE_MAX = 45.0;
 const NFP_DATE_FLOOR = "1900-01-01";        // no day of a file may be older than this
 const NFP_FUTURE_GRACE_DAYS = 1;            // days past today still accepted: a client a timezone ahead of the server is fine
 
-// The closed vocabularies of the spec, enforced as enums (the open ones, _customValuesAllowed, are not).
+// The closed vocabularies of the spec.
 const NFP_STAMP_COLORS = ["Green", "Red", "Yellow", "White"];
 const NFP_SEX_UNIONS = ["Union", "ReservedUnion", "LastReportedUnion"];
 const NFP_ARROWS = ["Up", "Down", "Right"];
 
-// The spec's _incompatibleWith list for mucusNotObserved (a day with nothing recorded cannot hold
-// an observation). "codifiedBloodObservation" in the spec is corrected to "codifiedBleedingObservation".
+// The spec's _incompatibleWith list of mucusNotObserved (its "codifiedBloodObservation" read as "codifiedBleedingObservation").
 const NFP_MUCUS_NOT_OBSERVED_INCOMPATIBLE = [
 	"codifiedMucusObservation",
 	"codifiedMucusSensation",
@@ -451,8 +414,7 @@ const NFP_MUCUS_NOT_OBSERVED_INCOMPATIBLE = [
 	"booleanCervixAperture",
 ];
 
-// The spec's FertilityCare codes the app stores under another spelling, aliased on the way in;
-// a code outside DAY_FORMAT_FC_GROUPS and these is reported as ignored, never written.
+// The spec's FertilityCare codes the app stores under another spelling; any other code outside DAY_FORMAT_FC_GROUPS is never written.
 const NFP_FC_CODE_ALIASES = [
 	"BR" => "B",      // spec writes brown bleeding "Br", the app stores "B"
 	"X1" => "X1",     // spec writes "x1".."x3" lowercase; matching is case-insensitive
@@ -461,8 +423,7 @@ const NFP_FC_CODE_ALIASES = [
 	"C/K" => "CK",    // spec's "between C and K"; the app stores the two codes together
 ];
 
-// The day and cycle fields schema 1.0 defines, split by what this app can do with them. A "not
-// stored" field is reported back to the caller with its reason; a key in neither list is reported as unknown.
+// The day and cycle fields of schema 1.0: a "not stored" one is reported with its reason, a key in neither list as unknown.
 const NFP_DAY_FIELDS_NOT_STORED = [
 	"nonUsualBleeding" => "this app has no spotting flag of its own",
 	"booleanCervixMucus" => "cervix observations are not recorded here",
@@ -519,9 +480,8 @@ const DOC_BABY_IMAGE = __DIR__ . "/img/baby.png";            // drawn on a stamp
 const DOC_CSV_LIST_JOINER = " | ";                           // joins the descriptions of a day in one CSV cell, in both CSV exports
 const DOC_COMMENT_OTHER_JOINER = " | ";                      // between a day's comment and its descriptions with no type yet, which follow it in the CSV and in both PDFs
 
-// The fields a mucusNotObserved day leaves empty in the CSV and in both PDFs, even when old values
-// are stored: the NFP incompatibility list, plus the FertilityCare recurrence count, the stamp and
-// the legacy free text. The NFP export still writes them: it is a data file, not a chart.
+// The fields a mucusNotObserved day leaves empty in the CSV and both PDFs, whatever is stored (lib/doc.php): the NFP incompatibility
+// list, the FertilityCare recurrence count, the stamp and the descriptions of no type. The NFP export writes them all.
 const DOC_MUCUS_FIELDS = [
 	...NFP_MUCUS_NOT_OBSERVED_INCOMPATIBLE,
 	"codifiedNumberObservations",
@@ -534,8 +494,7 @@ const DOC_PDF_MARGIN = 10;                                  // mm kept free on e
 const DOC_PREGNANCY_COLOR = [130, 21, 33];                  // r, g, b of the pregnancy "G" and "GROSSESSE" text, in both charts
 const DOC_BILL_TEMPERATURE_COLOR = [135, 67, 176];          // r, g, b of the temperature reading, its curve and its points
 
-// The text styles the charts draw with: style => [font family, font style, size in pt, [r, g, b]].
-// Names are "bill.*" for the Billings table and "fc.*" for the FertilityCare grid.
+// style => [font family, font style, size in pt, [r, g, b]]; "bill.*" for the Billings table, "fc.*" for the FertilityCare grid.
 const DOC_PDF_STYLES = [
 	'bill.title' => ['Helvetica', 'B', 14, [0, 0, 0]],
 	'bill.subtitle' => ['Helvetica', '', 8.5, [110, 110, 110]],
@@ -592,8 +551,7 @@ const DOC_BILL_STRIPE_FILL = [248, 248, 248];   // r, g, b of every other day, w
 const DOC_BILL_BORDER_COLOR = [210, 210, 210];  // r, g, b of the table's lines and of a white stamp's outline
 const DOC_BILL_BORDER_W = 0.1;                  // thickness of those lines
 
-// The narrow columns, in order: key => [header, width]. The three markers only get a column
-// when a day of the export has one.
+// The narrow columns, in order: key => [header, width]. The three markers only get a column when a day has one.
 const DOC_BILL_FIXED_COLUMNS = [
 	"date" => ["DATE", 13],
 	"day" => ["JOUR", 9],
@@ -637,8 +595,7 @@ const DOC_FC_COLOR_COEF = 1.1;                  // a cell's border is its stamp 
 const DOC_FC_LINES_PER_PAGE = 8;                // rows of the grid on a page...
 const DOC_FC_LINES_PER_PAGE_TEMPERATURE = 7;    // ... and when the temperature row takes room
 
-// The legend column, top to bottom: row => its label. The baby row has none, and the temperature
-// row only exists for the methods that track it (user_account_tracks_temperature(), lib/user_account.php).
+// The legend column, top to bottom: row => label. The temperature row only exists for a method that tracks it.
 const DOC_FC_ROW_LABELS = [
 	"stamp" => "TAMPON",
 	"baby" => "",

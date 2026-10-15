@@ -34,7 +34,7 @@ if (getenv("SMTP_PASSWORD_FILE") && strlen(getenv("SMTP_PASSWORD_FILE"))>0 && is
 }
 else define("SMTP_PASSWORD", env_string("SMTP_PASSWORD"));
 
-// (CREATION_COMPTE and CONNEXION_COMPTE, the French names of these two, are still read)
+// (also read under their French names, CREATION_COMPTE and CONNEXION_COMPTE)
 define("REGISTRATION_ENABLED", env_bool("REGISTRATION_ENABLED", env_bool("CREATION_COMPTE", true)));
 define("LOGIN_ENABLED", env_bool("LOGIN_ENABLED", env_bool("CONNEXION_COMPTE", true)));
 

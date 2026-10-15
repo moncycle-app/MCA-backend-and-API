@@ -39,16 +39,14 @@ $start_date = input_query_date($query, "from", $issues);
 $end_date = input_query_date($query, "to", $issues);
 if (!is_null($start_date) && !is_null($end_date) && $start_date > $end_date) $issues[] = input_issue("query.from", "invalid_range", "'from' must not be after 'to'.");
 
-// 'anonymous' applies to pdf (no name on the chart) and to nfp (no userInformation block in the file), 'inline' to nfp (shown in the
-// browser instead of downloaded); a format they do not apply to accepts them and does nothing with them
+// 'anonymous' applies to pdf and nfp, 'inline' (shown in the browser) to nfp; another format accepts and ignores them
 $anonymous = input_query_bool($query, "anonymous", $issues);
 $inline = input_query_bool($query, "inline", $issues) && $type === EXPORT_TYPE_NFP;
 input_exit_if_issues($issues);
 
 $nfp_method = intval($user_account["nfp_method"]);
 
-// THE DAYS OF THE PERIOD -- csv and pdf read exactly the period asked for; the nfp export reads
-// its own, widened back to the cycle start, so here it only needs to know there is something
+// csv and pdf read exactly the period; the nfp export reads its own, widened back to the cycle start
 if ($type === EXPORT_TYPE_NFP) {
 	$days = [];
 	$has_data = !empty(db_select_day_timeline_dates_frame($db, $start_date, $end_date, $user_account["no_user_account"]));
@@ -62,7 +60,7 @@ if (!$has_data) {
 	http_error(404, "no_data_in_period", "There is no observation between 'from' and 'to'.");
 }
 
-// the NFP file is made before it is logged, for the number of rows it read (it reads back to the start of the cycle)
+// the NFP file is made before the log line, for the rows it read
 $rows_read = null;
 $nfp_json = $type === EXPORT_TYPE_NFP ? nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $inline, $rows_read) : null;
 

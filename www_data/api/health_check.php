@@ -14,7 +14,7 @@ require_once __DIR__ . "/../lib/log.php";
 
 header('Content-Type: application/json');
 
-// in maintenance: 503 and the "maintenance" error, with the database left alone (the migrations run then)
+// in maintenance a 503, the database left alone (the migrations run then)
 http_exit_if_maintenance();
 
 try {
