@@ -114,7 +114,7 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 			Pour activer votre compte, confirmez votre adresse e-mail en ouvrant ce lien:<br />
 			{$link}<br />
 			<br />
-			Ce lien est valable {$days} jours. Sans confirmation, le compte est supprimé.<br />
+			Ce lien est valable {$lifetime}. Sans confirmation, le compte est supprimé au bout de {$days} jours.<br />
 			<br />
 			Une fois connecté, pensez à activer l'authentification multifacteur pour protéger vos données.<br />
 			<br />

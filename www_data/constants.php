@@ -31,9 +31,8 @@ const TOTP_STATE_NAMES = [
 	TOTP_STATE_ACTIVE => "active",
 ];
 
-// The cookie of the session token (an Authorization: Bearer header carries the same), and the other name it is read and cleared under.
+// The cookie of the session token (an Authorization: Bearer header carries the same).
 const COOKIE_AUTH_TOKEN = "MONCYCLEAPP_TOKEN";
-const COOKIE_AUTH_TOKEN_LEGACY = "MONCYCLEAPP_JETTON";
 
 // The values the COOKIE_SAMESITE setting takes (the attribute is these with a capital: Strict, Lax, None).
 const COOKIE_SAMESITE_VALUES = ["strict", "lax", "none"];

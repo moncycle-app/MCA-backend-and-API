@@ -47,15 +47,13 @@ function sec_token_cookie(string $name, string $value, int $expires): void {
 }
 
 function sec_token_clear_cookie(): void {
-	foreach ([COOKIE_AUTH_TOKEN, COOKIE_AUTH_TOKEN_LEGACY] as $name) sec_token_cookie($name, '', -1);
+	sec_token_cookie(COOKIE_AUTH_TOKEN, '', -1);
 }
 
 // The account of the token the request carries, or null; the account and the session then name every line of the request's log. A
 // token past its expiry date opens nothing, whether or not the cron has erased it yet.
 function sec_token_authenticate($db): ?array {
-	$token = $_COOKIE[COOKIE_AUTH_TOKEN_LEGACY] ?? "";
-	if (!is_string($token)) $token = "";
-	if (sec_token_from_cookie() !== "") $token = sec_token_from_cookie();
+	$token = sec_token_from_cookie();
 	$authorization = getallheaders()["Authorization"] ?? null;
 	if (is_string($authorization) && str_contains($authorization, "Bearer ")) $token = explode(' ', trim($authorization), 2)[1] ?? "";
 	if ($token === "") return null;
