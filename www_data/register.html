@@ -59,13 +59,36 @@
 			<input name="nickname" type="text" maxlength="255" id="i_nickname" required placeholder='ex: vos initiales, "AB"' /><br />
 			<span class="label_info">Vos initiales suffisent. Ne saisissez pas votre nom ni votre prénom.</span><br />
 			<br />
-			Méthode à suivre:<br />
-			<input type="radio" name="method" value="2" id="m_glaire" required /><label for="m_glaire"><b>Auto-observation de la glaire cervicale</b> (selon les publications des Docteurs Billings): l'évolution de la glaire cervicale seule</label><br />
-			<input type="radio" name="method" value="3" id="m_fc" /><label for="m_fc"><b>FertilityCare</b>: l'évolution de la glaire cervicale + notation</label><br />
-			<br />
-			<input type="checkbox" name="temp" value="1" id="m_temp" /><label for="m_temp"><b>Température</b>: suivre dans l'application les évolutions de la température corporelle en plus de l'auto-observation de la glaire cervicale ou de FertilityCare.</label><br />
-			<br />
-			<span class="label_info">Si vous suivez une méthode symptothermique (Cyclamen, SensiPlan, ...), vous pouvez cocher "Auto-observation de la glaire cervicale" avec "température". Pour ces méthodes symptothermiques, l'application est incomplète car elle ne propose pas une interprétation des courbes de températures efficace. Vous pourrez modifier ce choix dans la rubrique "mon compte" sans perte de données une fois votre compte créé.</span><br />
+			<fieldset class="choice_group">
+				<legend>Votre méthode</legend>
+				<span class="label_info">Vous pourrez la changer à tout moment dans « Mon compte », sans perte de données.</span>
+				<div class="choice">
+					<input type="radio" name="method" value="cervicalMucus" id="m_cervical_mucus" required />
+					<label for="m_cervical_mucus">
+						<span class="choice_title">Auto-observation de la glaire cervicale</span>
+						<span class="choice_text">Vous notez chaque jour la sensation et l'aspect de la glaire cervicale.</span>
+						<span class="choice_note">Selon les publications des Docteurs Billings</span>
+					</label>
+				</div>
+				<div class="choice">
+					<input type="radio" name="method" value="fertilityCare" id="m_fertility_care" />
+					<label for="m_fertility_care">
+						<span class="choice_title">FertilityCare</span>
+						<span class="choice_text">Vous suivez la glaire cervicale avec la notation codée de FertilityCare.</span>
+					</label>
+				</div>
+			</fieldset>
+			<fieldset class="choice_group">
+				<legend>En option</legend>
+				<div class="choice choice_check">
+					<input type="checkbox" name="temperature_tracking" value="1" id="m_temp" />
+					<label for="m_temp">
+						<span class="choice_title">Suivre aussi ma température</span>
+						<span class="choice_text">Vous saisissez votre température corporelle chaque jour et l'application en trace la courbe, en plus de la méthode choisie.</span>
+					</label>
+				</div>
+				<span class="label_info choice_hint">Vous suivez une méthode symptothermique (M fertilité, Cyclamen, SensiPlan…) ? Choisissez l'auto-observation de la glaire cervicale et ajoutez la température. L'application trace bien la courbe de température, mais elle ne l'interprète pas de façon fiable : elle reste incomplète pour ces méthodes.</span>
+			</fieldset>
 			<br />
 			<label for="i_login_email">E-mail:</label><br />
 			<input name="login_email" id="i_login_email" type="email" maxlength="255" required placeholder="Entrer votre adresse mail." /><br />
@@ -110,4 +133,3 @@
 		</div>
 	</body>
 </html>
-

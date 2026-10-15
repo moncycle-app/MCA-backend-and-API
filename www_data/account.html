@@ -131,12 +131,36 @@
 			<br />
 			<input class="auto_save" value="1" type="checkbox" id="i_timeline_asc" name="timeline_asc"/> <label for="i_timeline_asc">Afficher les date en ordre croissant (aujourd'hui en premier et les dates les plus anciennes en bas).</label><br />
 			<br />
-			Méthode à suivre:<br />
-			<span class="label_info">Modifier ce choix ne génère aucune perte de données.</span><br />
-			<input type="radio" name="nfp_method" value="2" class="auto_save" id="m_2" required /><label for="m_2"><b>Auto-observation de la glaire cervicale</b> (selon les publications des Docteurs Billings): l'évolution de la glaire cervicale seule.</label><br />
-			<input type="radio" name="nfp_method" value="1" class="auto_save" id="m_1"  /><label for="m_1"><b>Auto-observation de la glaire cervicale + température</b> (selon les publications des Docteurs Billings): l'évolution de la glaire cervicale avec suivi des évolutions de la température corporelle.</label><br />
-			<input type="radio" name="nfp_method" value="3" class="auto_save" id="m_3" /><label for="m_3"><b>FertilityCare</b>: l'évolution de la glaire cervicale avec notation FertilityCare</label><br />
-			<input type="radio" name="nfp_method" value="4" class="auto_save" id="m_4" /><label for="m_4"><b>FertilityCare + température</b>: l'évolution de la glaire cervicale avec notation FertilityCare et suivi des évolutions de la température corporelle.</label><br />
+			<fieldset class="choice_group">
+				<legend>Votre méthode</legend>
+				<span class="label_info">Modifier ce choix ne génère aucune perte de données.</span>
+				<div class="choice">
+					<input type="radio" name="method" value="cervicalMucus" class="auto_save" id="m_cervical_mucus" required />
+					<label for="m_cervical_mucus">
+						<span class="choice_title">Auto-observation de la glaire cervicale</span>
+						<span class="choice_text">Vous notez chaque jour la sensation et l'aspect de la glaire cervicale.</span>
+						<span class="choice_note">Selon les publications des Docteurs Billings</span>
+					</label>
+				</div>
+				<div class="choice">
+					<input type="radio" name="method" value="fertilityCare" class="auto_save" id="m_fertility_care" />
+					<label for="m_fertility_care">
+						<span class="choice_title">FertilityCare</span>
+						<span class="choice_text">Vous suivez la glaire cervicale avec la notation codée de FertilityCare.</span>
+					</label>
+				</div>
+			</fieldset>
+			<fieldset class="choice_group">
+				<legend>En option</legend>
+				<div class="choice choice_check">
+					<input type="checkbox" name="temperature_tracking" value="1" class="auto_save" id="m_temp" />
+					<label for="m_temp">
+						<span class="choice_title">Suivre aussi ma température</span>
+						<span class="choice_text">Vous saisissez votre température corporelle chaque jour et l'application en trace la courbe, en plus de la méthode choisie.</span>
+					</label>
+				</div>
+				<span class="label_info choice_hint">Vous suivez une méthode symptothermique (M fertilité, Cyclamen, SensiPlan…) ? Choisissez l'auto-observation de la glaire cervicale et ajoutez la température. L'application trace bien la courbe de température, mais elle ne l'interprète pas de façon fiable : elle reste incomplète pour ces méthodes.</span>
+			</fieldset>
 			<br />
 			<input class="auto_save" value="1" type="checkbox" id="i_research" name="research"/> <label for="i_research">Autoriser des exports de la base de données avec des cycles anonymisés pour la research sur les méthodes naturelles.</label><br />
 			<br />
@@ -232,7 +256,7 @@
 			<form id="form_mdp_change" action="api/v2/account" method="patch">
 			<br />
 			<label for="i_old_pw">Ancien mot de passe:</label><br />
-			<input type="password" id="i_old_pw" name="old_pw" required /><br />  
+			<input type="password" id="i_old_pw" name="old_pw" required /><br />
 			<br />
 			<label for="pw1">Nouveau mot de passe:</label><br />
 			<input type="password" name="pw1" id="i_pw1" required pattern="^(?=.*?[a-z])(?=.*?[0-9]).{10,}$" /><br />

@@ -263,22 +263,6 @@ function moncycle_app_escape_html(text) {
 	return $("<span>").text(text === null || text === undefined ? "" : text).html();
 }
 
-// the "nfp_method" 1-4 integer (still used by account.html's radio buttons) conflates the
-// NFP method with whether temperature is also tracked; the API exposes those as two
-// separate fields (method: "cervicalMucus"|"fertilityCare", temperatureTracking: bool) instead.
-const moncycle_app_nfp_method_table = {1: ["cervicalMucus", true], 2: ["cervicalMucus", false], 3: ["fertilityCare", false], 4: ["fertilityCare", true]};
-function moncycle_app_nfp_method_to_api(nfp_method) {
-	let m = moncycle_app_nfp_method_table[nfp_method] || ["cervicalMucus", false];
-	return {method: m[0], temperatureTracking: m[1]};
-}
-function moncycle_app_nfp_method_from_api(method, temperatureTracking) {
-	for (const k in moncycle_app_nfp_method_table) {
-		let m = moncycle_app_nfp_method_table[k];
-		if (m[0] == method && m[1] == !!temperatureTracking) return parseInt(k);
-	}
-	return 2;
-}
-
 const moncycle_app_desc_type_to_int = {"undefined": 0, "observation": 1, "sensation": 2};
 const moncycle_app_desc_type_from_int = {0: "undefined", 1: "observation", 2: "sensation"};
 // shown before a description's name, so that its type is known without opening it
@@ -329,8 +313,8 @@ $(document).ready(function(){
 		if (moncycle_store.is_demo(moncycle_app_usr.userId)) $("#tokens_section").hide();
 		else tokens_load();
 		$("#i_notification_emails").val(moncycle_app_usr.notificationEmails);
-		let nfp_method = moncycle_app_nfp_method_from_api(moncycle_app_usr.method, moncycle_app_usr.temperatureTracking);
-		$(`#m_${nfp_method}`).attr("checked", "");
+		$('input[name="method"]').each(function() { this.checked = this.value == moncycle_app_usr.method; });
+		$("#m_temp").prop("checked", !!moncycle_app_usr.temperatureTracking);
 		if (moncycle_app_usr.research) $("#i_research").prop('checked', true);
 		if (moncycle_app_usr.timelineAscending) $("#i_timeline_asc").prop('checked', true);
 		$("#i_auto_mail_export").prop('checked', !!moncycle_app_usr.autoMailExport);
@@ -593,8 +577,10 @@ $(document).ready(function(){
 		net_stat.text('⏳');
 		let field_name = $(this).attr('name');
 		let payload = {};
-		if (field_name == "nfp_method") {
-			Object.assign(payload, moncycle_app_nfp_method_to_api(parseInt(this.value)));
+		if (field_name == "method" || field_name == "temperature_tracking") {
+			// the two controls make one setting of the account: each change sends both
+			payload.method = $('input[name="method"]:checked').val();
+			payload.temperatureTracking = $("#m_temp").is(":checked");
 		}
 		else {
 			let val = this.value;

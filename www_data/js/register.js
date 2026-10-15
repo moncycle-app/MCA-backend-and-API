@@ -59,7 +59,6 @@ else {
 				$("#but_register").prop("disabled", false);
 				$("#but_register").val("Créer mon compte 🥳");
 			}
-			var method = $('input[name="method"]:checked').val() == "3" ? "fertilityCare" : "cervicalMucus";
 			var payload = {
 				nickname: $("#i_nickname").val(),
 				email: $("#i_login_email").val(),
@@ -67,7 +66,7 @@ else {
 				birthYear: parseInt($("#i_anaissance").val()),
 				captcha: $("#i_captcha").val(),
 				captchaToken: $("#i_captcha_token").val(),
-				method: method,
+				method: $('input[name="method"]:checked').val(),
 				temperatureTracking: $("#m_temp").is(':checked'),
 				discoveredComment: $("#i_comment").val(),
 				termsAccepted: $("#i_terms").is(':checked'),

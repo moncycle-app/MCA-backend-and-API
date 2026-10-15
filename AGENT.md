@@ -386,7 +386,7 @@ Delete a line when it is fixed.
 - `db.php` breaks the SQL rules above in 7 `SELECT *`, kept on purpose where a whole row is wanted: the raw data export, the account
   and day rows, the two retention queries.
 - The web client repeats server logic in JS: the day codec and the FertilityCare groups in `js/tableau.js`, the method table in
-  `js/account.js` (`NFP_METHOD_BY_ID` is its server twin: change both), and in `js/store.js` the day a body will become
+  `js/tableau.js` (`NFP_METHOD_BY_ID` is its server twin: change both), and in `js/store.js` the day a body will become
   (`day_from_body`, twin of `day_format_from_json` + `_to_json`) and the cycle start / day (`recompute_cycles`, twin of
   `data_sync_days`). They only serve until the server's own answer replaces them.
 - DB names left as they are because renaming needs a migration: the `contry_code` column.
