@@ -173,7 +173,7 @@ const moncycle_app_text = {
 	tokens_prefix_title : "Début du jeton: il permet de distinguer les connexions d'une même application.",
 	tokens_none : "Aucune connexion.",
 
-	/* --- POST /api/account: what the server refuses when the password is asked again (its own words are English); the keys are the
+	/* --- POST /api/v2/account: what the server refuses when the password is asked again (its own words are English); the keys are the
 	   codes of the problems (moncycle_store.error_pick), or "field:code" --- */
 	account_errors : {
 		invalid_password : "mot de passe incorrect",
@@ -257,7 +257,7 @@ function moncycle_app_show_error(target, label, message, prefix = "", suffix = "
 	target.empty().append(document.createTextNode(prefix), $("<b>").text(label), document.createTextNode(" " + message + suffix));
 }
 
-// Report lines from /api/import quote what was in the file -- a sensation name, the app that
+// Report lines from /api/v2/import quote what was in the file -- a sensation name, the app that
 // wrote it -- so they are never dropped into HTML as they come.
 function moncycle_app_escape_html(text) {
 	return $("<span>").text(text === null || text === undefined ? "" : text).html();
@@ -295,7 +295,7 @@ $(document).ready(function(){
 	$("#f_logout").on("submit", function (event) {
 		event.preventDefault();
 		$("#but_logout").prop("disabled", true);
-		$.ajax({type: "DELETE", url: "api/token"}).done(function () {
+		$.ajax({type: "DELETE", url: "api/v2/token"}).done(function () {
 			moncycle_store.clear_storage();
 			window.location.replace("/auth");
 		}).fail(function (jqXHR) {
@@ -305,7 +305,7 @@ $(document).ready(function(){
 	});
 
 	// THE TERMS OF SERVICE: their page is a setting of the server (TERMS_OF_SERVICE_URL, told by server_info). None told: the paragraph that sums them up is not shown
-	$.ajax({type : "GET", url : "api/server_info", dataType : "json"}).done(function(ret) {
+	$.ajax({type : "GET", url : "api/v2/server_info", dataType : "json"}).done(function(ret) {
 		const url = ((ret || {}).data || {}).termsOfServiceUrl;
 		if (!/^https:\/\//i.test(url || "")) return;
 		$("#a_terms").attr("href", url);
@@ -313,7 +313,7 @@ $(document).ready(function(){
 	});
 
 	// TELECHARGEMENT DES DONNES DES UTILISATEUR
-	$.get("api/account", {}).done(function(ret) {
+	$.get("api/v2/account", {}).done(function(ret) {
 		moncycle_app_usr = ret.data;
 		$("#f_info_pref")[0].reset();
 		$("#name").text(moncycle_app_usr.nickname);
@@ -429,7 +429,7 @@ $(document).ready(function(){
 			}
 
 			$("#desc_net_stat").text(moncycle_app_text.desc_comment_deleting);
-			try { await moncycle_store.request("DELETE", "api/description/" + encodeURIComponent(id)); }
+			try { await moncycle_store.request("DELETE", "api/v2/description/" + encodeURIComponent(id)); }
 			catch (jqXHR) {
 				console.error(jqXHR);
 				$("#desc_net_stat").text(moncycle_app_text.desc_comment_delete_failed);
@@ -511,7 +511,7 @@ $(document).ready(function(){
 			$("#desc_net_stat").html('⏳');
 			saved.sent = {name: name, type: type_int};
 			let payload = {name: name, type: moncycle_app_desc_type_from_int[type_int]};
-			$.ajax({type: "POST", url: "api/description/" + encodeURIComponent(id), contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
+			$.ajax({type: "POST", url: "api/v2/description/" + encodeURIComponent(id), contentType: "application/json", data: JSON.stringify(payload)}).done(function(ret){
 				if (edit == desc_last_edit) $("#desc_net_stat").html(' ✅&nbsp;enregistré');
 				// what the page holds of the description follows what was saved (the duplicate check, the delete dialog, the emoji)
 				saved.name = name;
@@ -545,7 +545,7 @@ $(document).ready(function(){
 			if (count>1 && !confirm(`Êtes-vous sûr de vouloir supprimer la description « ${name} » ?\n\nLes jours auxquels ${name} a été associé perdront cette information de manière irréversible. La description « ${name} » est actuellement associé à ${count} dates différentes.`)) return;
 			else if (count>0 && !confirm(`Êtes-vous sûr de vouloir supprimer la description « ${name} » ?\n\nLes jours auxquels ${name} a été associé perdront cette information de manière irréversible. La description « ${name} » est actuellement associé à une date.`)) return;
 			$("#desc_net_stat").html('⏳');
-			$.ajax({type : 'DELETE', "url" : "api/description/" + encodeURIComponent(id)}).done(function(){
+			$.ajax({type : 'DELETE', "url" : "api/v2/description/" + encodeURIComponent(id)}).done(function(){
 				$("#desc_net_stat").html('');
 				$(`#desc_row_${id}`).remove();
 				$("#desc_net_stat").html(' ✅&nbsp;supprimé');
@@ -557,7 +557,7 @@ $(document).ready(function(){
 		});
 
 	};
-	$.get("api/description", {}).done(load_description).fail(moncycle_app_redirect_if_unauthenticated);
+	$.get("api/v2/description", {}).done(load_description).fail(moncycle_app_redirect_if_unauthenticated);
 	$("#f_new_description").on("submit", function(event){
 		event.preventDefault();
 		let name = $("#i_desc_name_new").val();
@@ -567,10 +567,10 @@ $(document).ready(function(){
 			return;
 		}
 		$("#desc_net_stat").html('⏳');
-		$.ajax({type: "POST", url: "api/description", contentType: "application/json", data: JSON.stringify({name: name, type: moncycle_app_desc_type_from_int[type_int]})}).done(function(ret){
+		$.ajax({type: "POST", url: "api/v2/description", contentType: "application/json", data: JSON.stringify({name: name, type: moncycle_app_desc_type_from_int[type_int]})}).done(function(ret){
 			$("#desc_net_stat").html(' ✅&nbsp;enregistré');
 			$("#f_new_description")[0].reset();
-			$.get("api/description", {}).done(load_description).fail(moncycle_app_redirect_if_unauthenticated);
+			$.get("api/v2/description", {}).done(load_description).fail(moncycle_app_redirect_if_unauthenticated);
 			moncycle_app_sync_later();
 		}).fail(function(jqXHR){
 			$("#desc_net_stat").html('');
@@ -580,8 +580,8 @@ $(document).ready(function(){
 
 
 	// AFFICHAGE VERSION
-	$.get("api/server_info", {}).done(function(ret) {
-		$("#tech_info_ver").text((ret.data || {}).apiVersion ?? "?");
+	$.get("api/v2/server_info", {}).done(function(ret) {
+		$("#tech_info_ver").text((ret.data || {}).appVersion ?? "?");
 	}).fail(moncycle_app_redirect_if_unauthenticated);
 
 
@@ -604,7 +604,7 @@ $(document).ready(function(){
 		}
 		$.ajax({
 			type: "POST",
-			url: "../api/account",
+			url: "../api/v2/account",
 			contentType: "application/json",
 			data: JSON.stringify(payload),
 		}).done(function(ret){
@@ -622,10 +622,10 @@ $(document).ready(function(){
 	});
 
 
-	// Everything about the account is changed by POST /api/account: the settings as they are typed, and what hands the account (or its cycles)
+	// Everything about the account is changed by POST /api/v2/account: the settings as they are typed, and what hands the account (or its cycles)
 	// over -- the addresses and the password -- with the current password sent again. A form carries the data, the script sends the form.
 	const account_update = function (payload, done, fail) {
-		$.ajax({type: "POST", url: "../api/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
+		$.ajax({type: "POST", url: "../api/v2/account", contentType: "application/json", data: JSON.stringify(payload)}).done(done).fail(function (jqXHR) {
 			console.error(jqXHR);
 			fail(jqXHR);
 		});
@@ -722,7 +722,7 @@ $(document).ready(function(){
 			if (token.expiresAt) details.push(moncycle_app_text.tokens_expires(token_when(token.expiresAt)));
 			details.forEach(function (line) { row.append($("<div>").addClass("label_info token_detail").text(line)); });
 			if (!token.current && token.prefix) {
-				const form = $("<form>").addClass("f_token_revoke").attr({action: "api/token/" + encodeURIComponent(token.prefix), method: "delete"});
+				const form = $("<form>").addClass("f_token_revoke").attr({action: "api/v2/token/" + encodeURIComponent(token.prefix), method: "delete"});
 				form.append($("<button>").attr("type", "submit").addClass("rouge").text("🗑️ " + moncycle_app_text.tokens_revoke));
 				row.append(form);
 			}
@@ -730,7 +730,7 @@ $(document).ready(function(){
 		});
 	};
 	const tokens_load = function () {
-		return $.get("api/token").done(function (ret) {
+		return $.get("api/v2/token").done(function (ret) {
 			token_render(ret.data);
 		}).fail(function (jqXHR) {
 			moncycle_app_redirect_if_unauthenticated(jqXHR);
@@ -739,7 +739,7 @@ $(document).ready(function(){
 			else moncycle_app_show_error($("#tokens_err"), "❌\u00a0erreur:", moncycle_app_error_message(jqXHR));
 		});
 	};
-	// The form says what to revoke by its address: api/token/{prefix} for one connection, api/token?others=true for all the others.
+	// The form says what to revoke by its address: api/v2/token/{prefix} for one connection, api/v2/token?others=true for all the others.
 	const tokens_revoke = function (form) {
 		$("#tokens_err").empty();
 		const net_stat = $("#tokens_net_stat").removeClass("vert rouge").text("⏳");
@@ -793,7 +793,7 @@ $(document).ready(function(){
 			payload.captchaToken = field("captchaToken").val();
 		}
 		$("#but_token_create").prop("disabled", true).val("🔑 " + moncycle_app_text.token_creating);
-		$.ajax({type: "POST", url: "api/token", contentType: "application/json", data: JSON.stringify(payload)}).done(function (ret) {
+		$.ajax({type: "POST", url: "api/v2/token", contentType: "application/json", data: JSON.stringify(payload)}).done(function (ret) {
 			$("#i_token_new_value").val(ret.data.token);
 			$("#token_copy_ok").text("");
 			$("#token_new_result").show();
@@ -896,7 +896,7 @@ $(document).ready(function(){
 
 	// IMPORT NFP
 	//
-	// One form, two buttons. "Vérifier le fichier" asks api/import for a dry run: it runs every
+	// One form, two buttons. "Vérifier le fichier" asks api/v2/import for a dry run: it runs every
 	// check, reads the account to see which of the file's days are already there, and reports
 	// what the write would do -- without writing. "Importer" does it for real. Both answer the
 	// same report, and on a dry run a refused file answers an error whose details carry the same
@@ -1000,7 +1000,7 @@ $(document).ready(function(){
 			$("#i_import_submit").prop("disabled", false).val(moncycle_app_text.import_but_submit);
 		};
 
-		// api/import reads the file as the request body, so it goes up as it is -- no multipart
+		// api/v2/import reads the file as the request body, so it goes up as it is -- no multipart
 		// form, and processData off so jQuery does not try to encode the string.
 		file.text().then(function (body) {
 			let query = $.param({
@@ -1010,7 +1010,7 @@ $(document).ready(function(){
 			});
 			$.ajax({
 				type: "POST",
-				url: `api/import?${query}`,
+				url: `api/v2/import?${query}`,
 				contentType: "application/json",
 				data: body,
 				processData: false,

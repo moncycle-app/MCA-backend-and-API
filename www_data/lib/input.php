@@ -244,7 +244,7 @@ function input_query_date(array $query, string $name, array &$issues): ?string {
 // The path after the endpoint's name
 // ---------------------------------------------------------------------------
 
-// /api/day/2026-03-10 -> ["2026-03-10"], empty segments dropped.
+// /api/v2/day/2026-03-10 -> ["2026-03-10"], empty segments dropped.
 function input_path(): array {
 	$info = $_SERVER['PATH_INFO'] ?? "";
 	return array_values(array_filter(explode("/", is_string($info) ? $info : ""), fn($segment) => $segment !== ""));

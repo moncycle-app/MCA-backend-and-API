@@ -58,7 +58,7 @@ else {
 			}
 			$.ajax({
 				type: "POST",
-				url: "api/token",
+				url: "api/v2/token",
 				contentType: "application/json",
 				data: JSON.stringify(payload),
 			}).done(function(ret){
@@ -100,7 +100,7 @@ else {
 			var email = $("#r_login_email").val();
 			$.ajax({
 				type: "POST",
-				url: "api/recover_password",
+				url: "api/v2/recover_password",
 				contentType: "application/json",
 				data: JSON.stringify({email: email, captcha: $("#rc_captcha").val(), captchaToken: $("#rc_captcha_token").val()}),
 			}).done(function(ret){

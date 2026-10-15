@@ -54,7 +54,7 @@ never `null`.
 {"ts":"2026-10-05T14:03:22.123Z","lv":"info","ev":"auth.login_succeeded","rid":"9f3a1c0b7d42","uid":21,"sid":118,"ip":"203.0.113.7","att":0,"totp":true,"scope":"readWrite","cookie":true}
 {"ts":"2026-10-05T14:09:01.456Z","lv":"warning","ev":"auth.login_failed","rid":"c41d8a5e90b3","uid":21,"ip":"198.51.100.4","err":"invalid_credentials","att":4}
 {"ts":"2026-10-05T14:10:05.210Z","lv":"info","ev":"data.day_saved","rid":"7be0f2a64c18","uid":21,"sid":118,"ip":"203.0.113.7","day":4412,"dt":"2026-09-20","new":true}
-{"ts":"2026-10-05T14:10:12.001Z","lv":"info","ev":"http.request","rid":"7be1d3095e7a","uid":21,"sid":118,"ip":"203.0.113.7","m":"GET","p":"/api/timeline_sync","st":200,"ms":14,"n":31,"full":true}
+{"ts":"2026-10-05T14:10:12.001Z","lv":"info","ev":"http.request","rid":"7be1d3095e7a","uid":21,"sid":118,"ip":"203.0.113.7","m":"GET","p":"/api/v2/timeline_sync","st":200,"ms":14,"n":31,"full":true}
 ```
 
 With `LOG_FORMAT=text`: `2026-10-05T14:10:05.210Z info data.day_saved rid=7be0f2a64c18 uid=21 sid=118 ip=203.0.113.7 day=4412 dt=2026-09-20 new=true`.
@@ -77,7 +77,7 @@ a row. `uid` and `sid` are the account and the session; as soon as the code know
 (the sessions a request closed) join them, on **every** line of the request: its events, its `http.request` line, and a
 `system.exception` that cuts it short. A refused write names the row too (a `409 stale_write` carries the `day` it was refused for).
 A read says **how many** rows it returned (`n`, `nds`, `ntk`), never which: they are all the account's own (`uid`), and the id of a row
-is given when the request is about one row (`GET /api/day/{date}`). A change that touches many rows as a side effect says how many
+is given when the request is about one row (`GET /api/v2/day/{date}`). A change that touches many rows as a side effect says how many
 (`tch`: days re-stamped by a description change), and an import gives the bounds of what it wrote (`day0`/`day1`, `dsc0`/`dsc1`), not a
 list. None of this costs a query: an id is logged only where the code already holds it (a row it read, the id of an insert, the
 `RETURNING` of a `DELETE`), and a count is a `count()` of what the endpoint built.
@@ -101,15 +101,15 @@ Every key the code can write. The first block is on every line.
 | `err` | The refusal or API error code (`invalid_credentials`, `captcha_invalid`, `unauthorized`...). |
 | `why` | The reason: for `auth.token_rejected` `unknown`, `expired` or `disabled`; for `account.deleted` `user_request`, `inactivity` or `unverified`; for `system.log_sink_failed` `open_basedir`, `permission_denied`, `read_only`, `missing_directory`, `is_directory`, `not_permitted`, `cannot_open` or `write_failed`. |
 | `nfp` | The NFP method id (1 to 4) of a new account. |
-| `act` | What was refused: `register`, `recover_password`, `account` (`POST /api/account`, which asks the password again), `delete`, `verify_email`, `totp_enable`, `totp_disable`. |
+| `act` | What was refused: `register`, `recover_password`, `account` (`POST /api/v2/account`, which asks the password again), `delete`, `verify_email`, `totp_enable`, `totp_disable`. |
 | `purp` | What a link by mail is for: `accountCreation`, `resetPassword` or `changeEmail` (never the token itself). |
-| `out` | Number of other sessions closed by a password change, or tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`. |
+| `out` | Number of other sessions closed by a password change, or tokens revoked by `DELETE /api/v2/token/{prefix}` or `DELETE /api/v2/token?others=true`. |
 | `rev` | Ids (`no_auth_token`) of the sessions the request closed: the ones revoked, the other sessions a password change logged out, the session a sign-in with a cookie replaced. At most 20 are listed, `out` has the count. |
 | `scope` | The scope of the token a sign-in made: `readOnly` or `readWrite`. |
 | `cookie` | The sign-in also set the session cookie (`"cookie": true`). |
 | `fld` | Names of the account settings changed (the names, never the values). |
 | `ndy` | Days erased with an account. |
-| `nds` | Descriptions erased with an account (`account.deleted`), created by an import (`data.import`) or carried by a sync (`http.request` of `GET /api/timeline_sync`). |
+| `nds` | Descriptions erased with an account (`account.deleted`), created by an import (`data.import`) or carried by a sync (`http.request` of `GET /api/v2/timeline_sync`). |
 | `ntk` | Sessions the raw data export held. |
 | `tch` | Days whose stamp changed (the sync reports them) because a description they carry was renamed, retyped or deleted: a day stamped in that very second does not count. |
 | `day` | Day id (`no_day`). On every line of a request about one day, even when the write is refused. |
@@ -144,7 +144,7 @@ Every key the code can write. The first block is on every line.
 | `ipa` | Login attempts (IP) the cron run purged. |
 | `f` | The log file that could not be used. |
 | `m` | HTTP method. |
-| `p` | The endpoint (`/api/day` for `/api/day/2026-09-20`): never the arguments of the URL (a date, a row number, a token prefix), nor the query string. |
+| `p` | The endpoint (`/api/v2/day` for `/api/v2/day/2026-09-20`): never the arguments of the URL (a date, a row number, a token prefix), nor the query string. |
 | `st` | HTTP status. |
 | `n` | Rows a read returned, as stored (days, descriptions, sessions): an unwritten date is not a row. On `export.file`, `export.raw_dump` and the cycle `mail.sent` the day rows the file or the mail was made from (a gap in a chart is not a row). For `system.cron_step`, what the step took care of (accounts mailed or deleted, rows purged, counters reset). |
 | `full` | The read was the whole history. |
@@ -154,14 +154,14 @@ Every key the code can write. The first block is on every line.
 
 | Event | Level | Keys | When |
 |-------|-------|------|------|
-| `auth.login_succeeded` | info | `att`, `totp`, `scope`, `cookie`, `rev` | A sign-in (`POST /api/token`): a token was made, `sid` is its id. `rev` is the session of the cookie it replaced. |
+| `auth.login_succeeded` | info | `att`, `totp`, `scope`, `cookie`, `rev` | A sign-in (`POST /api/v2/token`): a token was made, `sid` is its id. `rev` is the session of the cookie it replaced. |
 | `auth.login_failed` | warning | `err`, `att`, `uid` | A refused login: `missing_credentials`, `login_disabled`, `rate_limited`, `captcha_required`, `captcha_expired`, `captcha_unavailable`, `account_disabled`, `invalid_credentials`, `account_locked`, `email_not_verified`, `totp_required`, `totp_invalid`. `uid` when the address has an account. |
-| `auth.logout` | info | | A logout with a valid token (`DELETE /api/token` with no parameter). |
-| `auth.token_revoked` | info | `out`, `rev` | Tokens revoked by `DELETE /api/token/{prefix}` or `DELETE /api/token?others=true`: `rev` names them. |
+| `auth.logout` | info | | A logout with a valid token (`DELETE /api/v2/token` with no parameter). |
+| `auth.token_revoked` | info | `out`, `rev` | Tokens revoked by `DELETE /api/v2/token/{prefix}` or `DELETE /api/v2/token?others=true`: `rev` names them. |
 | `auth.captcha_issued` | debug | | A captcha challenge was issued (the picture, the answer, the token and its mac are never logged). |
 | `auth.token_rejected` | debug | `why`, `sid` | A token was presented and no active account matched. `uid` and `sid` name the account and the session when the token is known (`expired`, `disabled`). |
 | `account.registered` | info | `nfp` | An account was created (its address not proved yet). |
-| `account.refused` | warning | `act`, `err` | A registration or a password recovery (`act` `register`, `recover_password`) refused (`registration_disabled`, `captcha_invalid`, `captcha_expired`, `captcha_unavailable`, `rate_limited`), a registration for an address that already has an account (`account_exists`: the caller was told nothing), a link by mail refused (`act` `verify_email`: `invalid_token`, `token_expired`, `email_taken`), a wrong password (`invalid_password`) on `POST /api/account` (`act` `account`) or an account deletion (`act` `delete`), a wrong or missing TOTP code (`totp_invalid`, `totp_required`) to change the login address. |
+| `account.refused` | warning | `act`, `err` | A registration or a password recovery (`act` `register`, `recover_password`) refused (`registration_disabled`, `captcha_invalid`, `captcha_expired`, `captcha_unavailable`, `rate_limited`), a registration for an address that already has an account (`account_exists`: the caller was told nothing), a link by mail refused (`act` `verify_email`: `invalid_token`, `token_expired`, `email_taken`), a wrong password (`invalid_password`) on `POST /api/v2/account` (`act` `account`) or an account deletion (`act` `delete`), a wrong or missing TOTP code (`totp_invalid`, `totp_required`) to change the login address. |
 | `account.email_token_issued` | info | `purp` | A link was written in the slot of an account (the mail goes after): to verify the address, choose a password or change the address. |
 | `account.email_verified` | info | | The link that proves an address was used. |
 | `account.email_changed` | info | | The link that changes the login address was used. |
@@ -188,11 +188,11 @@ Every key the code can write. The first block is on every line.
 | `system.cron_step` | info | `step`, `dry`, `n`, `ko` | One line when each step of the daily cron is done, even when it had nothing to do (`n` 0): the lines between `system.cron_started` and `system.cron_ended` say how far a run that died got, and the step after the last one is the one that failed. `ko` is on the three mail steps (`cycle_mails`, `reminders`, `deletion_warnings`); `public_stats` has no `n`. |
 | `system.cron_ended` | info, **error** if it failed | `ok`, `dry`, `ms`, `sent`, `ko`, `del`, `tok`, `ipa`, `msg` | `ok:false` when the run died before its end (uncaught exception, fatal error, timeout), or was refused: `msg` is `maintenance` when `MAINTENANCE_MODE` is on and nothing was done. The counters are what had been done by then, so all 0 for a dry run. A mail that could not be sent is `ko` and a `mail.failed` line, and the run is still `ok:true`. The steps in between are the `system.cron_step` lines. |
 | `system.log_sink_failed` | error | `f`, `why` | The log file could not be opened or written; the lines go to `stdout`. At most once per request. |
-| `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `nds`, `full` | The end of every request that reached the app, with the ids the request named (`uid`, `sid`, `day`, `dsc`, `rev`). A read is this line with a `GET`, the `uid`, the path and `n` (and `nds` for a sync); `full` is true for `GET /api/timeline_sync` from the start. `GET /api/day/{date}` names the `day` when it was ever written, and `n` is 0 or 1. |
+| `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `nds`, `full` | The end of every request that reached the app, with the ids the request named (`uid`, `sid`, `day`, `dsc`, `rev`). A read is this line with a `GET`, the `uid`, the path and `n` (and `nds` for a sync); `full` is true for `GET /api/v2/timeline_sync` from the start. `GET /api/v2/day/{date}` names the `day` when it was ever written, and `n` is 0 or 1. |
 
 `account.refused` and `auth.login_failed` are the only lines whose volume an attacker controls (`rate_limited`): the reverse proxy's rate
 limit ([deployment.md](deployment.md#reverse-proxy)) bounds it. The health check of [docker-compose.exemple.yml](../docker-compose.exemple.yml)
-calls `/api/health_check` every 30 s; it is not logged unless it fails.
+calls `/api/v2/health_check` every 30 s; it is not logged unless it fails.
 
 ## To a file
 

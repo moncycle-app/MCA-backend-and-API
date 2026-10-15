@@ -9,6 +9,12 @@
 
 declare(strict_types=1);
 
+// The version of the app, the one number of the release, the database schema and its migrations. The row 'schema_version' of key_value
+// (schema.sql inserts it, every migration sets it) must say this number or nothing is served (503 schema_mismatch). The newest migration is
+// script/migration/v<APP_VERSION - 1>_to_v<APP_VERSION>.*; GET /api/v2/server_info tells it as appVersion. The version of the API
+// contract is the v2 of the URL (api/v2/), not this number.
+const APP_VERSION = 15;
+
 // The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
 // config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db.php) stay next
 // to the code that runs them.
@@ -86,7 +92,7 @@ const HTTP_SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 const AUTH_TOKEN_LIMIT_NAME_CHARS = 256;            // auth_token.name varchar(256)
 const AUTH_TOKEN_LIMIT_USER_AGENT_CHARS = 255;      // auth_token.user_agent and user_agent_use varchar(255), cut to fit
 const AUTH_TOKEN_DEFAULT_NAME = "API";              // the name of a token whose client gave none
-// The first characters of the token, kept in the clear next to its hash: GET /api/token shows them and DELETE /api/token names a token by
+// The first characters of the token, kept in the clear next to its hash: GET /api/v2/token shows them and DELETE /api/v2/token names a token by
 // them. Unique per account: a token that would repeat one is made again, up to AUTH_TOKEN_PREFIX_TRIES times.
 const AUTH_TOKEN_PREFIX_CHARS = 5;                  // auth_token.auth_token_prefix varchar(5)
 const AUTH_TOKEN_PREFIX_TRIES = 10;
@@ -98,7 +104,7 @@ const AUTH_TOKEN_SCOPE_NAMES = [
 	AUTH_TOKEN_SCOPE_READ_ONLY => "readOnly",
 	AUTH_TOKEN_SCOPE_READ_WRITE => "readWrite",
 ];
-// "expiresInDays" of POST /api/token: such a token dies on that day whatever its use.
+// "expiresInDays" of POST /api/v2/token: such a token dies on that day whatever its use.
 const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
 const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
 // How much of the user agent the "new login" mail quotes.
@@ -106,7 +112,7 @@ const MAIL_USER_AGENT_CHARS = 120;
 // A token made without "expiresInDays" dies after this many days, or after this many days unused (db_purge_auth_token()).
 const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
 const AUTH_TOKEN_IDLE_DAYS = 40;
-// The address of a token as GET /api/token shows it, cut to these bits; the database keeps it whole.
+// The address of a token as GET /api/v2/token shows it, cut to these bits; the database keeps it whole.
 const AUTH_TOKEN_IP_PREFIX_V4 = 24;
 const AUTH_TOKEN_IP_PREFIX_V6 = 48;
 
@@ -118,7 +124,7 @@ const EMAIL_TOKEN_LIMIT_CHARS = 64;                 // a token a client sends th
 const EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION = 1;     // proves the address of a new account: the account becomes usable
 const EMAIL_TOKEN_PURPOSE_RESET_PASSWORD = 2;       // lets whoever reads the mail choose a new password (and proves the address too)
 const EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL = 3;         // proves the new primary address, which then replaces the old one
-// purpose => the string the JSON API (POST /api/verify_email) and the link of the mail speak.
+// purpose => the string the JSON API (POST /api/v2/verify_email) and the link of the mail speak.
 const EMAIL_TOKEN_PURPOSE_NAMES = [
 	EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION => "accountCreation",
 	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => "resetPassword",
@@ -169,27 +175,22 @@ const NFP_METHOD_BY_ID = [
 ];
 
 // ===========================================================================
-// THE SERVER AND ITS CONTRACT -- GET /api/server_info (api/server_info.php, lib/server.php), what a request may say (lib/input.php)
+// THE SERVER AND ITS CONTRACT -- GET /api/v2/server_info (api/v2/server_info.php, lib/server.php), what a request may say (lib/input.php)
 // ===========================================================================
 
 const APP_NAME = "moncycle.app";
 
-// The version of the HTTP contract, raised only by a change that breaks a client (not by a field, a parameter, an endpoint or an enum value).
-const API_VERSION = 2;
-
-// The schema this code is written for: the highest vN of script/migration/vN-1_to_vN.*, and the row 'schema_version' of key_value that
-// schema.sql inserts and every migration sets. A database at another number is not served (503 schema_mismatch).
-const SCHEMA_VERSION = 15;
+// The row of key_value that holds the schema's version, which must be APP_VERSION.
 const SCHEMA_VERSION_KEY = "schema_version";
 
-// The names a POST /api/account body may use, and the ones of GET /api/account that the server alone writes (refused if sent).
+// The names a POST /api/v2/account body may use, and the ones of GET /api/v2/account that the server alone writes (refused if sent).
 const ACCOUNT_UPDATE_FIELDS = [
 	"nickname", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
 	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
 ];
 const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "totpState"];
 
-// The names a day body may use (POST /api/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
+// The names a day body may use (POST /api/v2/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
 const DAY_INPUT_FIELDS = [
 	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "booleanPregnancyDetected",
 	"freeMucusSensation", "freeMucusObservation", "freeOther", "temperature", "temperatureTime", "codifiedArrow",
@@ -232,21 +233,21 @@ const DESCRIPTION_TYPE_UNDEFINED = 0;     // free text of no known type
 const DESCRIPTION_TYPE_OBSERVATION = 1;   // a mucus observation
 const DESCRIPTION_TYPE_SENSATION = 2;     // a mucus sensation
 
-// type => the string the JSON API speaks (api/description.php, api/timeline_sync.php).
+// type => the string the JSON API speaks (api/v2/description.php, api/v2/timeline_sync.php).
 const DESCRIPTION_TYPE_NAMES = [
 	DESCRIPTION_TYPE_UNDEFINED => "undefined",
 	DESCRIPTION_TYPE_OBSERVATION => "observation",
 	DESCRIPTION_TYPE_SENSATION => "sensation",
 ];
 
-// The formats api/export.php can produce, as the {format} of its URL names them.
+// The formats api/v2/export.php can produce, as the {format} of its URL names them.
 const EXPORT_TYPE_PDF = "pdf";
 const EXPORT_TYPE_CSV = "csv";
 const EXPORT_TYPE_NFP = "nfp";
 const EXPORT_TYPES = [EXPORT_TYPE_PDF, EXPORT_TYPE_CSV, EXPORT_TYPE_NFP];
 
 // ===========================================================================
-// PUBLIC STATISTICS -- GET /api/pub_stat (api/pub_stat.php, lib/data.php)
+// PUBLIC STATISTICS -- GET /api/v2/pub_stat (api/v2/pub_stat.php, lib/data.php)
 // ===========================================================================
 
 // JSON name => [the key_value row the cron keeps it in, the digits it is rounded to]: counting walks day_timeline, not for every visit.
@@ -257,7 +258,7 @@ const PUB_STAT_KEYS = [
 ];
 
 // ===========================================================================
-// SYNC -- GET /api/timeline_sync (api/timeline_sync.php, lib/data.php)
+// SYNC -- GET /api/v2/timeline_sync (api/v2/timeline_sync.php, lib/data.php)
 // ===========================================================================
 
 // How far before the client's cursor the sync reads: a row is stamped when its statement runs but seen only once its transaction commits,
@@ -362,7 +363,7 @@ const DAY_FORMAT_FC_GROUPS = [
 // where two overlap ("X1" and "10" in "X10") the order decides. 'R' belongs to no group: taken out and ignored.
 const DAY_FORMAT_FC_PARSE_ORDER = ['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', 'X2', 'X3', 'AD', 'AP', 'VL', 'VH', '2W', '10', 'H', 'M', 'L', 'B', '0', '2', '4', '6', '8', 'C', 'G', 'K', 'P', 'Y', 'R'];
 
-// How many days one GET /api/day reads ("dates=a,b,c", or "from" to "to" both counted).
+// How many days one GET /api/v2/day reads ("dates=a,b,c", or "from" to "to" both counted).
 const DAY_LIMIT_QUERY_DAYS = 100;
 
 // What day_timeline and description can hold: the widths of their columns.

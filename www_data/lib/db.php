@@ -249,7 +249,7 @@ function db_select_auth_tokens($db, $no_user_account): array {
 	return db_rows($db, "SELECT * FROM auth_token WHERE no_user_account = :no_user_account ORDER BY no_auth_token", ["no_user_account" => $no_user_account]);
 }
 
-// GET /api/token, the newest first: everything but the hash, and no token past its expiry date.
+// GET /api/v2/token, the newest first: everything but the hash, and no token past its expiry date.
 function db_select_auth_tokens_listing($db, $no_user_account): array {
 	return db_rows($db,
 		"SELECT J.no_auth_token, J.auth_token_prefix, J.name, J.scope, J.expire, J.date_expire, J.date_creation, J.date_use,

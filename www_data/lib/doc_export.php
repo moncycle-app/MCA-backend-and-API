@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-// The front door of the period exports (api/export.php, script/cron.php): the days of a period, and the chart of a method.
+// The front door of the period exports (api/v2/export.php, script/cron.php): the days of a period, and the chart of a method.
 
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";

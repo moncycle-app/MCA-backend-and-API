@@ -32,8 +32,13 @@ setting it to its own number:
 UPDATE key_value SET value = N WHERE `key` = 'schema_version';
 ```
 
-The code checks it on every request (`SCHEMA_VERSION` in [`constants.php`](../www_data/constants.php)). A database that says another
-number is not served: every endpoint answers `503 schema_mismatch` (`GET /api/server_info` opens no database and does not say it).
+The code checks it on every request against `APP_VERSION` ([`constants.php`](../www_data/constants.php)), the version of the app: the two
+are the same number, so a release that changes no table still ships a migration that sets it. A database that says another number is not
+served: every endpoint answers `503 schema_mismatch` (`GET /api/v2/server_info` opens no database and does not say it; it tells `appVersion`).
+
+A migration script reads this row first and runs only on a database one version behind (`v14_to_v15.php` also on a database with none: v14
+did not have it). On the same version, a newer one or an older one it prints `VERSION MISMATCH`, says why, changes nothing and exits with
+status 1.
 
 ## From v14 to v15
 
@@ -66,6 +71,7 @@ Read those on the copy of step 1, and decide by hand (from the dump) if one is w
   `email_token_expires_at`, `email_token_new_email`). Every existing account is marked as verified.
 - `email1` becomes `login_email` and `email2` becomes `notification_emails` (now 1024 characters wide, a list separated by `;`).
 
-**API clients.** The HTTP contract was reshaped for v15; a client written for v14 has to be updated. Start with the
+**API clients.** The HTTP contract was reshaped for v15 and moved under `/api/v2/` (the old addresses, `/api/day`, `/api/token`... answer 404);
+a client written for v14 has to be updated. Start with the
 introduction of [`moncycle_app_open_api.yaml`](../www_data/api/moncycle_app_open_api.yaml) ("Rules for every response", "Compatibility")
-and `GET /api/server_info`, the first call of every client.
+and `GET /api/v2/server_info`, the first call of every client.

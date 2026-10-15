@@ -412,7 +412,7 @@ $handle = null;
 // the code holds no session state (comment lines are not code: db_open() names what it avoids)
 $patterns = '/\b(GET_LOCK|RELEASE_LOCK|LOCK\s+TABLES|CREATE\s+TEMPORARY|SET\s+(SESSION|GLOBAL|@|autocommit|NAMES|CHARACTER|time_zone|sql_mode|transaction)|autocommit\s*=)/i';
 $found = [];
-foreach (array_merge(glob(__DIR__ . "/../lib/*.php"), glob(__DIR__ . "/../api/*.php"), glob(__DIR__ . "/*.php")) as $file) {
+foreach (array_merge(glob(__DIR__ . "/../lib/*.php"), glob(__DIR__ . "/../api/v2/*.php"), glob(__DIR__ . "/*.php")) as $file) {
 	if (in_array(basename($file), ["db_perf.php", "test.php"], true)) continue;
 	if (preg_match_all($patterns, preg_replace("~^\\s*(//|\\*|/\\*).*$~m", "", file_get_contents($file)), $matches)) $found[] = basename($file) . ": " . implode(", ", array_unique($matches[0]));
 }

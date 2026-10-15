@@ -13,7 +13,7 @@ declare(strict_types=1);
 // (user_account.email_token_*): a new link replaces the one before, whatever it was for, so whoever can ask for a reset can cancel a
 // pending link (accepted). Only the SHA-256 of the token is kept; a link is single use, has a lifetime (EMAIL_TOKEN_LIFETIME_MINUTES) and
 // is checked against its purpose. It points at a page of the app with the token in the fragment (never sent to a server, a log or a
-// Referer), and the page posts it to POST /api/verify_email: a mail scanner that fetches the link uses nothing up.
+// Referer), and the page posts it to POST /api/v2/verify_email: a mail scanner that fetches the link uses nothing up.
 
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/input.php";
@@ -54,7 +54,7 @@ function email_token_use($db, mixed $token, int $purpose, callable $apply): arra
 	});
 }
 
-// POST /api/verify_email: token, purpose, and newPassword for "resetPassword". Answers ["status" => 200, "data" => ["purpose", "loginEmail"
+// POST /api/v2/verify_email: token, purpose, and newPassword for "resetPassword". Answers ["status" => 200, "data" => ["purpose", "loginEmail"
 // to sign in with from now on]] or ["status" => 4xx, "code", "message"]. The password is checked before the link is touched, so a refused
 // one does not use it up; a reset leaves the sessions and TOTP alone. The mails go once the work is committed.
 function email_token_complete($db, array $body, array $issues = []): array {

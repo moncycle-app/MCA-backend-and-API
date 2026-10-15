@@ -14,7 +14,7 @@ declare(strict_types=1);
 //     php -S 127.0.0.1:8000 -t www_data server_conf/php-server-router.php
 //
 // It does the two things the Apache of the image does that the built-in server does not: MultiViews (the pages and the
-// API are asked for without their extension: /auth is auth.html, /api/day/2026-03-10 is api/day.php with the rest of the
+// API are asked for without their extension: /auth is auth.html, /api/v2/day/2026-03-10 is api/v2/day.php with the rest of the
 // address as PATH_INFO) and the list of files that are not public (zz-moncycleapp.conf). It is a way to look at the app,
 // not a production server: one process, no limit on the size of a body, none of the security headers.
 
@@ -34,10 +34,10 @@ if (
 	return true;
 }
 
-// /api/NAME and /api/NAME/anything: the script api/NAME.php, with the rest of the address as PATH_INFO.
-if (preg_match('#^/api/([a-z_]+)(/.*)?$#', $path, $found) && is_file("$root/api/$found[1].php")) {
-	$script = "$root/api/$found[1].php";
-	$_SERVER["SCRIPT_NAME"] = "/api/$found[1].php";
+// /api/v2/NAME and /api/v2/NAME/anything: the script api/v2/NAME.php, with the rest of the address as PATH_INFO.
+if (preg_match('#^/api/v2/([a-z_]+)(/.*)?$#', $path, $found) && is_file("$root/api/v2/$found[1].php")) {
+	$script = "$root/api/v2/$found[1].php";
+	$_SERVER["SCRIPT_NAME"] = "/api/v2/$found[1].php";
 	$_SERVER["SCRIPT_FILENAME"] = $script;
 	$_SERVER["PATH_INFO"] = $found[2] ?? "";
 	$_SERVER["PHP_SELF"] = $_SERVER["SCRIPT_NAME"] . $_SERVER["PATH_INFO"];

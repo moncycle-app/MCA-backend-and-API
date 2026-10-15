@@ -64,7 +64,7 @@ function log_start(string $client_ip = ""): void {
 	}
 }
 
-// "/api/day" for /api/day/2026-03-10 and /api/day?dates=...: the arguments of the URL and the query string are content, never logged.
+// "/api/v2/day" for /api/v2/day/2026-03-10 and /api/v2/day?dates=...: the arguments of the URL and the query string are content, never logged.
 function log_endpoint(): ?string {
 	$script = $_SERVER["SCRIPT_NAME"] ?? "";
 	if (is_string($script) && $script !== "") return preg_replace('/\.php\z/', '', $script);

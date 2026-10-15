@@ -144,15 +144,15 @@ info:
 
     ### Compatibility: what can change, and what cannot
 
-    The API is versioned by `apiVersion`, an integer you read from `GET /server_info` — the first call of every client.
-    There is no version in the address.
+    The version of the API is in the address: this page describes **v2**, served under `/api/v2/` (every path below is
+    relative to it). `GET /server_info` tells the version of the *server* (`appVersion`, the release of the app), which says
+    nothing about the contract.
 
-    - **These are not breaking changes and never change `apiVersion`**: a new field in an answer, a new optional field in a
+    - **These are not breaking changes and stay in v2**: a new field in an answer, a new optional field in a
       request, a new endpoint, a new value of an enum, a new `code`. **A client must ignore the fields and the enum values it
       does not know**, and treat a `code` it does not know like any other error of the same status.
-    - **A breaking change** (a field renamed or removed, a meaning changed, a required field added) raises `apiVersion`.
-      A client that finds a greater `apiVersion` than the one it was written for must stop and ask the user to update.
-    - `GET /server_info`, its URL and the fields it has, never break.
+    - **A breaking change** (a field renamed or removed, a meaning changed, a required field added) is published under a new
+      version in the address (`/api/v3/`). A client written for v2 asks `/api/v2/` and nothing else.
 
     ## 3. Authentication
 
@@ -198,13 +198,12 @@ info:
 
     ## 4. First run, step by step
 
-    **Start with `GET /server_info`**, a public call: it tells you which `apiVersion` this server speaks (stop if it is
-    greater than yours), whether it is in maintenance (`maintenanceMode`), whether `registrationEnabled`, and the `limits`
-    to check forms with.
+    **Start with `GET /server_info`**, a public call: it tells you the `appVersion` of the server, whether it is in
+    maintenance (`maintenanceMode`), whether `registrationEnabled`, and the `limits` to check forms with.
 
     ```bash
-    curl -s http://localhost:8003/api/server_info
-    # -> 200 {"data":{"app":"moncycle.app","apiVersion":2,"maintenanceMode":false,"registrationEnabled":true,"limits":{...},...}}
+    curl -s http://localhost:8003/api/v2/server_info
+    # -> 200 {"data":{"app":"moncycle.app","appVersion":15,"maintenanceMode":false,"registrationEnabled":true,"limits":{...},...}}
     ```
 
     Creating an account needs a captcha, which the server keeps nowhere: `POST /captcha` gives a picture
@@ -212,14 +211,14 @@ info:
 
     ```bash
     # 1. Ask for a challenge for this address: a picture (a data URI) and a token.
-    curl -s -X POST http://localhost:8003/api/captcha \
+    curl -s -X POST http://localhost:8003/api/v2/captcha \
       -H 'Content-Type: application/json' \
       -d '{"purpose":"register","email":"marie@example.org"}'
     # -> 200 {"data":{"image":"data:image/jpeg;base64,...","token":"1790000000.9f2c...","expiresAt":1790000000}}
     # ... a human reads the picture, for example "a7k2fm"
 
     # 2. Create the account, with the password the user chose, the answer and the token.
-    curl -s -X POST http://localhost:8003/api/register \
+    curl -s -X POST http://localhost:8003/api/v2/register \
       -H 'Content-Type: application/json' \
       -d '{"nickname":"MB","email":"marie@example.org","password":"a long passphrase","birthYear":1994,
            "method":"cervicalMucus","temperatureTracking":false,"captcha":"a7k2fm","captchaToken":"1790000000.9f2c..."}'
@@ -234,7 +233,7 @@ info:
     Then log in and keep the token:
 
     ```bash
-    curl -s -X POST http://localhost:8003/api/token \
+    curl -s -X POST http://localhost:8003/api/v2/token \
       -H 'Content-Type: application/json' \
       -d '{"email":"marie@example.org","password":"a long passphrase","name":"my script"}'
     # -> 201 {"data":{"prefix":"abcde","token":"abc...256 chars...","userId":42,"totpUsed":false,"name":"my script","scope":"readWrite",...}}
@@ -247,21 +246,21 @@ info:
     AUTH="Authorization: Bearer $TOKEN"
 
     # Who am I, and what are my settings? Call this at startup, and when the app comes back to the foreground.
-    curl -s -H "$AUTH" http://localhost:8003/api/account
+    curl -s -H "$AUTH" http://localhost:8003/api/v2/account
 
     # The whole timeline the first time (the days, the labels, the cycles); then only what changed (section 8).
-    curl -s -H "$AUTH" http://localhost:8003/api/timeline_sync
+    curl -s -H "$AUTH" http://localhost:8003/api/v2/timeline_sync
 
     # Write today. Day 1 of a new cycle, red stamp, one free-text sensation. The date is in the address.
     curl -s -H "$AUTH" -H 'Content-Type: application/json' \
-      -X POST http://localhost:8003/api/day/2026-03-10 \
+      -X POST http://localhost:8003/api/v2/day/2026-03-10 \
       -d '{"cycleFirstDay":true,"stampColor":"Red",
            "freeMucusSensation":["dry"],"comment":"cramps in the morning"}'
     # -> 201 (day created) with the full day as the server now stores it
 
     # Read one week back (at most 100 days per call)
     curl -s -H "$AUTH" \
-      'http://localhost:8003/api/day?from=2026-03-04&to=2026-03-10'
+      'http://localhost:8003/api/v2/day?from=2026-03-04&to=2026-03-10'
     ```
 
     ### The most important write rule: POST /day/{date} replaces the whole day
@@ -467,11 +466,11 @@ externalDocs:
   url: https://www.moncycle.app
 
 servers:
-  - url: .
+  - url: ./v2
     description: The server this documentation page is served from (relative paths).
-  - url: https://tableau.moncycle.app/api
+  - url: https://tableau.moncycle.app/api/v2
     description: Production.
-  - url: http://localhost:8003/api
+  - url: http://localhost:8003/api/v2
     description: Local development (docker).
 
 # Every endpoint needs a token, unless it declares `security: []`.
@@ -522,17 +521,14 @@ paths:
       operationId: getServerInfo
       summary: What this server is — the first call of every client
       description: |-
-        Public, no token. **Call it first**, before anything else: it says which API this server speaks
-        (`apiVersion`), whether the operator put it in maintenance, which optional features it has (new accounts, the
+        Public, no token. **Call it first**, before anything else: it says which version of the app the server runs
+        (`appVersion`), whether the operator put it in maintenance, which optional features it has (new accounts, the
         demo accounts, the captcha, the news banner), the address of the terms of service, and the numbers a client needs to check a form before sending it.
         It is made from the settings of the server alone: the database is not opened, so it answers in maintenance too.
 
         ### The contract of this call
 
-        `GET /server_info` is the one URL that **never changes**. Its fields may grow (see the introduction,
-        "Compatibility"), they are never renamed or removed. A client written for `apiVersion` 2 that finds a
-        greater number here **must stop and ask the user to update the app**: the rest of the API may not be
-        what it was written for.
+        Like the rest of v2, its fields may grow (see the introduction, "Compatibility"); they are never renamed or removed.
 
         ### `maintenanceMode`
 
@@ -543,8 +539,11 @@ paths:
 
         ### The version
 
-        `apiVersion` — an integer, the version of **this contract**. It rises only when something a client relies on
-        breaks. It is the only version the server tells: not the release, not the build, not the schema of the database.
+        `appVersion` — an integer, the version of the **app** the server runs. It is also the version of the database
+        schema: the server serves nothing from a database at another number. It rises with each release, so a client that
+        finds a different number than last time knows the server was updated (the web app then drops its local copy
+        and reloads). It says nothing of the contract, which is the `v2` of the address. It is the only version the
+        server tells: not the build, not the commit.
 
         ### `limits`
 
@@ -2030,7 +2029,7 @@ paths:
           description: The day was new. `Location` is its address.
           headers:
             Location:
-              description: "`/api/day/{date}`."
+              description: "`/api/v2/day/{date}`."
               schema:
                 type: string
           content:
@@ -2179,7 +2178,7 @@ paths:
           description: Created. `Location` is its address.
           headers:
             Location:
-              description: "`/api/description/{id}`."
+              description: "`/api/v2/description/{id}`."
               schema:
                 type: string
           content:
@@ -4013,10 +4012,10 @@ components:
         app:
           type: string
           example: moncycle.app
-        apiVersion:
+        appVersion:
           type: integer
-          description: The version of this contract. A client that finds a number greater than the one it was written for must stop and ask the user to update.
-          example: 2
+          description: The version of the app the server runs, also the version of its database schema. It rises with each release; the version of the contract is the `v2` of the address.
+          example: 15
         maintenanceMode:
           type: boolean
           description: Is the server in maintenance? Every other endpoint then answers `503 maintenance`.

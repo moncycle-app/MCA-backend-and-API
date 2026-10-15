@@ -53,7 +53,7 @@ function http_respond(int $status, array $body): never {
 	exit;
 }
 
-// $meta: what the answer says about itself that is not the resource (POST /api/account: what changed). Only sent when it holds something.
+// $meta: what the answer says about itself that is not the resource (POST /api/v2/account: what changed). Only sent when it holds something.
 function http_data(int $status, array $data, array $meta = []): never {
 	http_respond($status, empty($meta) ? ["data" => $data] : ["data" => $data, "meta" => $meta]);
 }
@@ -80,9 +80,9 @@ function http_exit_not_found(string $message = "This URL does not exist."): neve
 	http_error(404, "not_found", $message);
 }
 
-// The Location of a 201, from the root of the API ("description/12" -> "/api/description/12").
+// The Location of a 201, from the root of the API ("description/12" -> "/api/v2/description/12").
 function http_location(string $path): void {
-	header("Location: " . rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? "/api/x"), "/") . "/" . ltrim($path, "/"));
+	header("Location: " . rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? "/api/v2/x"), "/") . "/" . ltrim($path, "/"));
 }
 
 // The app stores UTC as "YYYY-MM-DD HH:MM:SS"; the API shows it as RFC 3339.

@@ -13,17 +13,17 @@
 **
 **  - it holds what the API says, in the API's own JSON (the Day, Description and Account objects of
 **    api/moncycle_app_open_api.yaml), one key per thing: data_day_YYYY-MM-DD, data_descriptions,
-**    data_account (GET /api/account, with the lists of cycles and pregnancies that GET /api/timeline_sync
-**    brings, and the news address that GET /api/server_info gives: the page draws from this one object);
+**    data_account (GET /api/v2/account, with the lists of cycles and pregnancies that GET /api/v2/timeline_sync
+**    brings, and the news address that GET /api/v2/server_info gives: the page draws from this one object);
 **  - a change of a day is applied to the copy first, then sent. Until the server has taken it, it
 **    waits in a queue (data_pending, in localStorage too, so closing the page loses nothing) and the
 **    page is told whenever it could not be sent. A description made here waits the same way
 **    (data_pending_descriptions) and is shown with the others meanwhile;
-**  - GET /api/timeline_sync brings what was changed elsewhere, and the cursor it gives is kept
-**    (data_last_sync); GET /api/account is read before it (its ETag is kept, data_account_etag: an account
+**  - GET /api/v2/timeline_sync brings what was changed elsewhere, and the cursor it gives is kept
+**    (data_last_sync); GET /api/v2/account is read before it (its ETag is kept, data_account_etag: an account
 **    that did not change costs a 304);
 **  - when the session ends, all of localStorage goes. When the app is updated (`moncycle_store.schema` or the
-**    apiVersion of GET /api/server_info changes), the copy goes and is downloaded again; the unsent changes stay.
+**    appVersion of GET /api/v2/server_info changes), the copy goes and is downloaded again; the unsent changes stay.
 **
 ** This file holds no text for the user and draws nothing: a page listens to the events (see on()).
 ** ======================================================================== */
@@ -42,11 +42,11 @@ const moncycle_store = {
 	// the copy, in memory (the same as in localStorage)
 	days : {},          // date -> Day: only the days that hold something, a cleared day is not kept
 	descriptions : [],  // [Description]
-	account : null,     // Account (GET /api/account) + allCyclesFirstDay, allPregnancyDates (GET /api/timeline_sync) + newsUrl (GET /api/server_info)
-	account_etag : null,    // the ETag GET /api/account gave for the account kept
-	news_url : null,    // newsUrl of GET /api/server_info
+	account : null,     // Account (GET /api/v2/account) + allCyclesFirstDay, allPregnancyDates (GET /api/v2/timeline_sync) + newsUrl (GET /api/v2/server_info)
+	account_etag : null,    // the ETag GET /api/v2/account gave for the account kept
+	news_url : null,    // newsUrl of GET /api/v2/server_info
 	last_sync : null,   // the syncTimestamp of the last merged answer
-	pending : {},       // date -> {op: "put", body: the POST /api/day/{date} body} | {op: "delete", lastWriteClientUtc}
+	pending : {},       // date -> {op: "put", body: the POST /api/v2/day/{date} body} | {op: "delete", lastWriteClientUtc}
 	pending_descriptions : [],  // [{name, type: "observation" | "sensation", lastWriteClientUtc}]: made here, not yet created by the server
 	stale : [],         // dates of days whose copy is wrong (a write of them was refused): to download again
 
@@ -163,7 +163,7 @@ const moncycle_store = {
 		window.location.replace("/auth");
 	},
 	// 401 "unauthorized" is a session that is over. Another 401 is an answer of an endpoint to a
-	// wrong password or code (POST /api/account with a password, POST /api/account/deletion): the session is fine.
+	// wrong password or code (POST /api/v2/account with a password, POST /api/v2/account/deletion): the session is fine.
 	is_unauthorized : function (jqXHR) {
 		if (jqXHR.status != 401) return false;
 		let code = ((jqXHR.responseJSON || {}).error || {}).code;
@@ -282,7 +282,7 @@ const moncycle_store = {
 		return issue.code || error.code;
 	},
 
-	// Saves a file the API makes (GET /api/export/{format}) under the name the server gives it. Resolves once the browser has the file.
+	// Saves a file the API makes (GET /api/v2/export/{format}) under the name the server gives it. Resolves once the browser has the file.
 	// Rejects with {status, code, message, issues}: the API's error in its envelope (status 0: no answer). A 401 ends the session.
 	download : async function (url) {
 		let response;
@@ -392,7 +392,7 @@ const moncycle_store = {
 		return moved;
 	},
 
-	// The day the server will hold once it has taken a POST /api/day/{date} body, as far as the page can tell.
+	// The day the server will hold once it has taken a POST /api/v2/day/{date} body, as far as the page can tell.
 	// The server's own answer replaces it as soon as there is one.
 	day_from_body : function (body, previous) {
 		let baby = !!body.stampBaby;
@@ -423,14 +423,14 @@ const moncycle_store = {
 	/* -----------------------------------------------------------------------
 	** WRITING: the copy first, then the server
 	** ====================================================================== */
-	// A POST /api/day/{date} body (the full state of the day). Returns the dates whose day changed in the copy.
+	// A POST /api/v2/day/{date} body (the full state of the day). Returns the dates whose day changed in the copy.
 	queue_day : function (body) {
 		let date = body.date;
 		moncycle_store.days[date] = moncycle_store.day_from_body(body, moncycle_store.days[date]);
 		moncycle_store.set_day(moncycle_store.days[date]);
 		return moncycle_store.queued(date, {op : "put", body : body});
 	},
-	// DELETE /api/day/{date}: the day is cleared, with its descriptions
+	// DELETE /api/v2/day/{date}: the day is cleared, with its descriptions
 	queue_delete : function (date, last_write_client_utc) {
 		moncycle_store.set_day(moncycle_store.blank_day(date));
 		return moncycle_store.queued(date, {op : "delete", lastWriteClientUtc : last_write_client_utc || null});
@@ -472,7 +472,7 @@ const moncycle_store = {
 	// the longest comment the day form takes (index.html, maxlength of #from_com); the server's own limit is 256
 	comment_max_chars : 255,
 
-	// The POST /api/day/{date} body that makes the server hold a day of the copy as it is, so that a write can change one
+	// The POST /api/v2/day/{date} body that makes the server hold a day of the copy as it is, so that a write can change one
 	// field of it: a day is posted whole. Where it stands in its cycle is left out, the server works it out.
 	body_of_day : function (day, last_write_client_utc) {
 		let body = {};
@@ -569,14 +569,14 @@ const moncycle_store = {
 		}
 	},
 	send : function (date, entry) {
-		let url = "api/day/" + encodeURIComponent(date);
+		let url = "api/v2/day/" + encodeURIComponent(date);
 		if (entry.op == "delete") {
 			return moncycle_store.request("DELETE", url + (entry.lastWriteClientUtc ? "?lastWriteClientUtc=" + encodeURIComponent(entry.lastWriteClientUtc) : ""));
 		}
 		return moncycle_store.request("POST", url, entry.body);
 	},
 	send_description : function (entry) {
-		return moncycle_store.request("POST", "api/description", {name : entry.name, type : entry.type, lastWriteClientUtc : entry.lastWriteClientUtc});
+		return moncycle_store.request("POST", "api/v2/description", {name : entry.name, type : entry.type, lastWriteClientUtc : entry.lastWriteClientUtc});
 	},
 	// The server took a write. Unless the user wrote that day again meanwhile (then the queue holds a
 	// newer entry, and the copy is newer than this answer), the copy gets the day as the server holds it.
@@ -630,7 +630,7 @@ const moncycle_store = {
 		moncycle_store.emit_status();
 	},
 	reload_descriptions : async function () {
-		let answer = await moncycle_store.request("GET", "api/description");
+		let answer = await moncycle_store.request("GET", "api/v2/description");
 		moncycle_store.descriptions = answer.data || [];
 		moncycle_store.write(moncycle_store.keys.descriptions, moncycle_store.descriptions);
 	},
@@ -648,12 +648,12 @@ const moncycle_store = {
 		moncycle_store.emit("failed", {date : date, message : message, issues : error.issues});
 		moncycle_store.emit_status();
 	},
-	// Downloads again the days whose copy is wrong (GET /api/day/{date}); one written here again meanwhile is newer.
+	// Downloads again the days whose copy is wrong (GET /api/v2/day/{date}); one written here again meanwhile is newer.
 	reload_stale : async function () {
 		while (moncycle_store.stale.length) {
 			let date = moncycle_store.stale[0];
 			if (!moncycle_store.pending[date]) {
-				let answer = await moncycle_store.request("GET", "api/day/" + encodeURIComponent(date));
+				let answer = await moncycle_store.request("GET", "api/v2/day/" + encodeURIComponent(date));
 				let before = JSON.stringify(moncycle_store.days[date]);
 				moncycle_store.set_day(answer.data || moncycle_store.blank_day(date));
 				let followed = moncycle_store.follow_day(date);
@@ -707,11 +707,11 @@ const moncycle_store = {
 	// is loaded again, so that the new code reads a new copy. The first time there is nothing to compare.
 	check_version : function () {
 		if (moncycle_store.checked_version) return Promise.resolve();
-		return moncycle_store.request("GET", "api/server_info").then(function (ret) {
+		return moncycle_store.request("GET", "api/v2/server_info").then(function (ret) {
 			moncycle_store.checked_version = true;
 			let info = ret.data || {};
 			moncycle_store.set_news_url(info.newsUrl || null);
-			let stamp = [moncycle_store.schema, info.apiVersion].join("/");
+			let stamp = [moncycle_store.schema, info.appVersion].join("/");
 			let known = localStorage.getItem(moncycle_store.keys.version);
 			if (known === stamp) return;
 			if (known !== null) moncycle_store.wipe_data(true);
@@ -733,14 +733,14 @@ const moncycle_store = {
 		}
 	},
 
-	// The account (GET /api/account) before the timeline: the settings, and the ETag that makes the next time a 304 when nothing changed.
+	// The account (GET /api/v2/account) before the timeline: the settings, and the ETag that makes the next time a 304 when nothing changed.
 	// The copy keeps the lists the timeline brings (merge) and the address of the news.
 	pull_account : function () {
 		return new Promise(function (resolve, reject) {
 			let known = moncycle_store.account && moncycle_store.account_etag;
 			$.ajax({
 				type : "GET",
-				url : "api/account",
+				url : "api/v2/account",
 				dataType : "json",
 				headers : known ? {"If-None-Match" : moncycle_store.account_etag} : {},
 				timeout : moncycle_store.request_timeout,
@@ -768,7 +768,7 @@ const moncycle_store = {
 		moncycle_store.created = [];
 		// the first sync has no cursor: the server then reads from the start
 		let query = moncycle_store.last_sync ? "?since=" + encodeURIComponent(moncycle_store.last_sync) : "";
-		let ret = await moncycle_store.request("GET", "api/timeline_sync" + query);
+		let ret = await moncycle_store.request("GET", "api/v2/timeline_sync" + query);
 		let changes = moncycle_store.merge(ret.data);
 		moncycle_store.error = null;
 		moncycle_store.last_pull = Date.now();
@@ -778,7 +778,7 @@ const moncycle_store = {
 		return changes;
 	},
 
-	// Puts an answer of GET /api/timeline_sync in the copy, by replacing: an answer merged twice, or a day received
+	// Puts an answer of GET /api/v2/timeline_sync in the copy, by replacing: an answer merged twice, or a day received
 	// again, changes nothing. A day written here since the request left, or still waiting to be sent, is
 	// kept as it is: it is newer than the answer, and about to reach the server.
 	merge : function (data) {

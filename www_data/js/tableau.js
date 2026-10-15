@@ -302,7 +302,7 @@ moncycle_app = {
 		return {no_description: d.id, name: d.name, type: moncycle_app.desc_type_to_int[d.type] || 0, use_count: d.useCount};
 	},
 
-	// full Day object (GET/POST /api/day/{date}, or one entry of GET /api/day
+	// full Day object (GET/POST /api/v2/day/{date}, or one entry of GET /api/v2/day
 	// result) -> the legacy flat shape day_timeline2timeline/day_timeline2recap/open_menu
 	// expect. Description names are matched against the already-loaded picklist
 	// (moncycle_app.description) to recover the numeric ids open_menu checks against.
@@ -350,7 +350,7 @@ moncycle_app = {
 		return temperatureTracking ? pair[1] : pair[0];
 	},
 
-	// GET /api/account's response (with the lists of the timeline, see js/store.js) -> the legacy flat shape moncycle_app.constante has
+	// GET /api/v2/account's response (with the lists of the timeline, see js/store.js) -> the legacy flat shape moncycle_app.constante has
 	// always had.
 	constante_from_api : function (d) {
 		let nfp_method = moncycle_app.nfp_method_from_api(d.method, d.temperatureTracking);
@@ -371,7 +371,7 @@ moncycle_app = {
 	// cycle_1st_day, day_not_observed, pregnancy, comment, description[], last_write_client_UTC
 	// -- everything else in that form, the individual fc_* checkboxes, is client-side scratch
 	// state for building fc_score and was never read server-side either way) -> the JSON body
-	// POST /api/day expects.
+	// POST /api/v2/day expects.
 	day_to_api : function (fields) {
 		let get = (n) => fields.filter(f => f.name == n).map(f => f.value);
 		let get1 = (n) => { let v = get(n); return v.length ? v[0] : undefined; };
@@ -825,9 +825,9 @@ moncycle_app = {
 		let id_buts = c_date_str.replace("-", "_").replace("-", "_");
 		let c_action = $(`<div class='cycle_options c_options_${c_date_str}' style='display:none'></div>`);
 		// the address carries the format, the period and the option; a click fetches the file and saves it (download_export)
-		c_action.append(`<a id='nfp_but_${id_buts}_${discri}' href='api/export/nfp?from=${c_date_str}&to=${c_date_fin_str}&anonymous=false'><button>${moncycle_app_text.but_export_nfp}</button></a> `);
-		c_action.append(`<a href='api/export/csv?from=${c_date_str}&to=${c_date_fin_str}'><button>${moncycle_app_text.but_export_csv}</button></a> `);
-		c_action.append(`<a id='pdf_but_${id_buts}_${discri}' href='api/export/pdf?from=${c_date_str}&to=${c_date_fin_str}&anonymous=false'><button>${moncycle_app_text.but_export_pdf}</button></a> `);
+		c_action.append(`<a id='nfp_but_${id_buts}_${discri}' href='api/v2/export/nfp?from=${c_date_str}&to=${c_date_fin_str}&anonymous=false'><button>${moncycle_app_text.but_export_nfp}</button></a> `);
+		c_action.append(`<a href='api/v2/export/csv?from=${c_date_str}&to=${c_date_fin_str}'><button>${moncycle_app_text.but_export_csv}</button></a> `);
+		c_action.append(`<a id='pdf_but_${id_buts}_${discri}' href='api/v2/export/pdf?from=${c_date_str}&to=${c_date_fin_str}&anonymous=false'><button>${moncycle_app_text.but_export_pdf}</button></a> `);
 		// the checkbox applies to every export that can carry the user's identity: the PDF
 		// (name on the chart) and the NFP file (userInformation block). The CSV never does.
 		let anonymous_checkbox = $(`<input type='checkbox' value='1' id='anonymous_${id_buts}_${discri}' name="privacy" />`);

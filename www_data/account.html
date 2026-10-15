@@ -37,7 +37,7 @@
 		<center>
 			<h1>mon<span class="gradiant_logo">cycle</span>.app</h1>
 			<div id="name">Mon compte</div>
-			<a href="/"><button type="button" class="nav_button">👈 Revenir aux cycles</button></a> <form id="f_logout" action="api/token" method="delete"><button type="submit" id="but_logout" class="nav_button rouge">🔑 Déconnexion</button></form>
+			<a href="/"><button type="button" class="nav_button">👈 Revenir aux cycles</button></a> <form id="f_logout" action="api/v2/token" method="delete"><button type="submit" id="but_logout" class="nav_button rouge">🔑 Déconnexion</button></form>
 			<p id="warning_demo" style="font-weight:bold; display:none">&#x1F6A8; Vous visualisez actuellement le compte de démonstration.<br /><br /><a style="color:#fbca0b" href='/register'><button type='button'>&#x1F680; créer votre compte</button></a></p>
 		</center>
 
@@ -50,7 +50,7 @@
 				<p>Touchez une description pour la modifier : son type et les boutons apparaissent dessous. Le bouton 💬 déplace la description dans le commentaire de chacune de ces dates, puis la supprime (action définitive). Le bouton ❌ la supprime sans rien copier.</p>
 				<div id="desc_froms_container"><center>⏳</center></div>
 				<p>Créez une description:</p>
-				<form method="post" action="api/description" id="f_new_description">
+				<form method="post" action="api/v2/description" id="f_new_description">
 					<input id="i_desc_name_new" type="text" name="name" maxlength="256" />
 					<select id="i_desc_type_new" name="type">
 						<option value="2">🧠 Sensations</option>
@@ -71,7 +71,7 @@
 				</ul>
 				</p>
 			<br >
-			<form method="get" action="api/export" id="f_export_complexe">
+			<form method="get" action="api/v2/export" id="f_export_complexe">
 			Exporter du <input id="i_start_date" name="from" type="date" /> au <input id="i_end_date" name="to" type="date" />.<br /><br />
 			Exporter au format <select id="i_file_format" style="width: auto" name="format">
 				<option value="nfp">NFP</option>
@@ -89,7 +89,7 @@
 			</span>
 			<br /><br /><br />
 			Comme demandé par la RGPD, vous avez aussi la possibilité d’exporter l’ensemble des données liées à votre compte. Cet export sera au format CSV.</p>
-			<a href="api/all_of_my_data_plz"><input type="button" value="📦 Exporter l'ensemble des données brutes de mon compte" /></a>
+			<a href="api/v2/all_of_my_data_plz"><input type="button" value="📦 Exporter l'ensemble des données brutes de mon compte" /></a>
 			<br /><br /><br /><br />
 
 
@@ -100,7 +100,7 @@
 				application, ou l’export d’une autre application compatible. Les cycles du fichier
 				s’ajoutent à ceux que vous avez déjà.
 			</p>
-			<form method="post" action="api/import" id="f_import">
+			<form method="post" action="api/v2/import" id="f_import">
 				<input type="file" id="i_import_file" name="file" accept=".nfp,.json,application/json" /><br /><br />
 				<input type="checkbox" id="i_import_override" name="override" value="1" /> <label for="i_import_override"><b>Écraser les jours déjà renseignés.</b></label><br />
 				<span class="label_info">
@@ -124,7 +124,7 @@
 
 
 			<h2>Modifier mes informations & préférences<span class="net_stat" id="net_stat"></span></h2>
-			<form action="api/account" method="patch" id="f_info_pref"><br />
+			<form action="api/v2/account" method="patch" id="f_info_pref"><br />
 			<label for="i_nickname">Pseudo:</label><br />
 			<input class="auto_save" type="text" id="i_nickname" required name="nickname" value="" maxlength="255" /><br />
 			<span class="label_info">Vos initiales suffisent. Ne saisissez pas votre nom ni votre prénom.</span><br />
@@ -156,12 +156,12 @@
 					Ainsi, pour accéder à votre tableau il vous sera demandé de saisir votre mot de passe et un code temporaire disponnible dans une applications sur votre téléphone.
 					Ce système permet de renforcer la sécurité de vos données personnelles en cas de fuite ou de vol de votre mot de passe ou d'un mot de passe trop faible (entre autres).
 				</p>
-				<form id="f_totp_start" action="api/totp" method="post">
+				<form id="f_totp_start" action="api/v2/totp" method="post">
 					<input type="submit" id="i_activate_otp" value="🔐 activer l'authentification multifacteur" />
 				</form>
 			</div>
 			<div id="totp_miseenpalce" style="display: none;">
-				<form id="f_totp_validation" action="api/totp/confirm" method="post">
+				<form id="f_totp_validation" action="api/v2/totp/confirm" method="post">
 					<p>Configurez votre application d'authentification multifacteur. Vous n'avez pas encore d'application de ce type? téléchargez <a target="_blank" href="https://freeotp.github.io/">FreeOTP</a>.</p>
 					<p><span class="totp_activation_option">option 1: </span>si vous êtes sur votre téléphone, cliquez sur le boutton ci-dessous pour une configuration automatique.</p>
 					<a id="totp_auto_conf"><button type="button">🤖 CONFIGURER</button></a>
@@ -176,7 +176,7 @@
 			</div>
 			<div id="totp_state" style="display: none;">
 				<p class="vert">✅ 🔐 Authentification multifacteur active.</p>
-				<form id="f_totp_desac" action="api/totp/disable" method="post">
+				<form id="f_totp_desac" action="api/v2/totp/disable" method="post">
 					<p>Pour désactiver l'authentification multifacteur, entrez le code temporaire dans votre application:</p>
 					<input type="number" name="tmp_code" placeholder="code TOTP" class="input_user_account_totp" />
 					<input type="submit" value="Désactiver" />
@@ -188,7 +188,7 @@
 
 
 			<h2>Adresses qui reçoivent mes cycles <span class="net_stat" id="notification_emails_ok"></span></h2>
-			<form id="form_notification_emails" action="api/account" method="patch">
+			<form id="form_notification_emails" action="api/v2/account" method="patch">
 			<br />
 			<span class="label_info">Vos cycles sont envoyés à l'adresse de connexion et à celles de cette liste. Plusieurs adresses possibles, séparées par « ; » (5 au plus). Pour la changer, confirmez avec votre mot de passe: un mail prévient votre adresse de connexion.</span><br />
 			<br />
@@ -206,7 +206,7 @@
 
 
 			<h2>Changer mon adresse de connexion <span class="net_stat" id="login_email_ok"></span></h2>
-			<form id="form_login_email" action="api/account" method="patch">
+			<form id="form_login_email" action="api/v2/account" method="patch">
 			<br />
 			<label for="i_login_email">Adresse de connexion actuelle:</label><br />
 			<input id="i_login_email" type="email" readonly name="login_email" value="" /><br />
@@ -229,7 +229,7 @@
 
 
 			<h2>Changer mon mot de passe <span class="net_stat" id="mdp_change_ok"></span></h2>
-			<form id="form_mdp_change" action="api/account" method="patch">
+			<form id="form_mdp_change" action="api/v2/account" method="patch">
 			<br />
 			<label for="i_old_pw">Ancien mot de passe:</label><br />
 			<input type="password" id="i_old_pw" name="old_pw" required /><br />  
@@ -259,7 +259,7 @@
 			</p>
 			<div id="tokens_container"><center>⏳</center></div>
 			<span class="rouge" id="tokens_err"></span>
-			<form id="f_tokens_revoke_all" action="api/token?others=true" method="delete">
+			<form id="f_tokens_revoke_all" action="api/v2/token?others=true" method="delete">
 				<button type="submit" class="rouge" id="but_tokens_revoke_all">🗑️ Déconnecter tous mes autres appareils</button>
 			</form>
 			<br /><br /><br />
@@ -270,7 +270,7 @@
 				<code>Authorization: Bearer</code>. Il est affiché <b>une seule fois</b>, à la création. Choisissez « lecture seule » pour un script qui ne fait
 				que lire vos données. Pour créer un jeton, confirmez avec votre mot de passe.
 			</p>
-			<form id="f_token_create" action="api/token" method="post">
+			<form id="f_token_create" action="api/v2/token" method="post">
 				<input type="hidden" name="email" id="i_token_new_email" value="" />
 				<input type="hidden" name="cookie" value="false" />
 				<div class="field">
@@ -349,7 +349,7 @@
 			<h2 class="rouge">Zone de danger</h2>
 			<p class="rouge">En supprimant définitivement votre compte, toutes vos données seront effacées et irrécupérables. Cette action est irréversible mais vous avez la possibilité de télécharger toutes vos données avant la suppression.</p>
 			<br />
-			<form method="post" action="api/account/deletion" id="f_suppr_user_account">
+			<form method="post" action="api/v2/account/deletion" id="f_suppr_user_account">
 				<label class="rouge" for="pw_before_deletion">Entrez votre mot de passe pour supprimer votre compte:</label><br />
 				<input class="rouge" name="pw_before_deletion" name="pw_before_deletion" type="password" placeholder="mot de passe" /><br />
 				<br />
@@ -361,7 +361,7 @@
 					Numéro de compte : <span id="tech_info_no"></span><br />
 					Identifiant : <span id="tech_info_id"></span><br />
 					Date d'inscription : <span id="tech_info_insc"></span><br />
-					Version de l'API : <span id="tech_info_ver"></span>
+					Version de l'application : <span id="tech_info_ver"></span>
 				</p>
 			</center>
 			</div>

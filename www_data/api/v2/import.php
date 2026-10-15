@@ -13,10 +13,10 @@ declare(strict_types=1);
 // answers what the write would do (the days the account already has, the new labels) to decide on ?override (replace those days, or by
 // default leave them), and a refused dry run answers everything the checks found: a diagnosis is the point of asking for one.
 
-require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/input.php";
-require_once __DIR__ . "/../lib/nfp_import.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/api.php";
+require_once __DIR__ . "/../../lib/input.php";
+require_once __DIR__ . "/../../lib/nfp_import.php";
 
 [$db, $user_account] = api_start();
 

@@ -1,5 +1,5 @@
 -- v14 -> v15. Every migration, from this one on, ends by setting the version of the schema in key_value (see the end of this file); the code
--- checks it at every request (SCHEMA_VERSION, constants.php) and serves nothing from a database that says another number.
+-- checks it at every request against APP_VERSION (constants.php) and serves nothing from a database that says another number.
 
 CREATE TABLE `description` (
   `no_description` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
@@ -110,7 +110,7 @@ CHANGE `cle` `key` varchar(255) COLLATE 'utf8mb4_bin' NOT NULL FIRST,
 CHANGE `valeur` `value` bigint(20) unsigned NULL AFTER `key`,
 RENAME TO `key_value`;
 
--- the visit counters of /api/pub_stat, with English names
+-- the visit counters of /api/v2/pub_stat, with English names
 UPDATE `key_value` SET `key` = 'pub_visit_monthly' WHERE `key` = 'pub_visite_mensuel';
 UPDATE `key_value` SET `key` = 'pub_visit_weekly' WHERE `key` = 'pub_visite_hebdo';
 UPDATE `key_value` SET `key` = 'pub_visit_daily' WHERE `key` = 'pub_visite_jour';
@@ -160,12 +160,12 @@ ALGORITHM=INSTANT, LOCK=NONE;
 --   SELECT LOWER(email1) AS email, COUNT(*) AS accounts FROM compte GROUP BY email HAVING COUNT(*) > 1;
 UPDATE `user_account` SET `email1` = LOWER(`email1`), `email2` = LOWER(`email2`);
 
--- key_value had no primary key (the visit counters and the numbers of /api/pub_stat are rows of it)
+-- key_value had no primary key (the visit counters and the numbers of /api/v2/pub_stat are rows of it)
 ALTER TABLE `key_value` ADD PRIMARY KEY (`key`), ALGORITHM=INPLACE, LOCK=NONE;
 
 -- A token is a session (the browser's) or a custom token: it has a name of its own, a scope (1 read only, 2 read and write),
 -- an expiry date (NULL: the 40 days unused / 1 year rule of the cron), and what the server saw of its client when it was made
--- and at its last use (the address is kept whole; GET /api/token shows it cut). Until now the name held "AUTH | <user agent>":
+-- and at its last use (the address is kept whole; GET /api/v2/token shows it cut). Until now the name held "AUTH | <user agent>":
 -- the user agent moves to its own column, and the name becomes a plain "Session". The country code was never known (always 'FR'): left empty.
 ALTER TABLE `auth_token`
 ADD `scope` tinyint(1) unsigned NOT NULL DEFAULT 2 AFTER `name`,
@@ -180,7 +180,7 @@ SET `user_agent` = NULLIF(TRIM(SUBSTRING(`name`, LOCATE(' | ', `name`) + 3)), ''
 WHERE LOCATE(' | ', `name`) > 0;
 UPDATE `auth_token` SET `contry_code` = NULL;
 
--- The first 5 characters of the token as its client holds it (GET /api/token shows them, DELETE /api/token names a token by them),
+-- The first 5 characters of the token as its client holds it (GET /api/v2/token shows them, DELETE /api/v2/token names a token by them),
 -- unique per account. A NULL is allowed by the key: v14_to_v15.php fills them while it hashes the tokens, the only moment the
 -- plain tokens are still here.
 ALTER TABLE `auth_token`
@@ -203,7 +203,7 @@ ADD UNIQUE `email_token_hash` (`email_token_hash`),
 ALGORITHM=INPLACE, LOCK=NONE;
 UPDATE `user_account` SET `email_verified_at` = `inscription_date`;
 
--- The terms of service are accepted when the account is made (POST /api/register, `termsAccepted`): terms_accepted_at is the moment, the
+-- The terms of service are accepted when the account is made (POST /api/v2/register, `termsAccepted`): terms_accepted_at is the moment, the
 -- trace of a consent that has to be shown (the terms, section 7.2). NULL for every account that exists, which accepted nothing on record,
 -- and for the two demo accounts.
 ALTER TABLE `user_account`
@@ -219,7 +219,7 @@ CHANGE `email2` `notification_emails` varchar(1024) COLLATE 'utf8mb4_bin' NULL D
 RENAME INDEX `email1` TO `login_email`,
 ALGORITHM=INPLACE, LOCK=NONE;
 
--- The version of the schema, which the code checks at every request (SCHEMA_VERSION, constants.php; GET /api/server_info shows it): a database
--- that says another number is not served (503 schema_mismatch). From v15 on, every migration ends by setting it to its own number:
+-- The version of the schema, which the code checks at every request (APP_VERSION, constants.php): a database that says another
+-- number is not served (503 schema_mismatch). From v15 on, every migration ends by setting it to its own number:
 -- UPDATE `key_value` SET `value` = N WHERE `key` = 'schema_version';
 INSERT INTO `key_value` (`key`, `value`) VALUES ('schema_version', 15) ON DUPLICATE KEY UPDATE `value` = 15;

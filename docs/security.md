@@ -17,7 +17,7 @@ other origins) see [deployment.md](deployment.md); for what the app writes in it
 The only credential is a **token**: a random 256-character string, stored by the server as its SHA-256. The web app keeps it in an
 `HttpOnly` cookie; a script or a mobile app sends it as `Authorization: Bearer <token>`.
 
-`POST /api/token` is the sign-in. It always takes the credentials (password, TOTP code, and a captcha once the account asks for
+`POST /api/v2/token` is the sign-in. It always takes the credentials (password, TOTP code, and a captcha once the account asks for
 one), so a stolen session cannot make itself another token without the password. It also takes:
 
 | Field | Meaning |
@@ -30,13 +30,13 @@ one), so a stolen session cannot make itself another token without the password.
 The token is always in the answer, the web app's included, so a script injected into the page could read it: the
 `script-src 'self'` policy (see [Stored text and scripts](#stored-text-and-scripts)) is what stands in the way.
 
-`GET /api/token` lists the account's tokens: the `prefix` (the first 5 characters, kept in the clear and unique per account; the
+`GET /api/v2/token` lists the account's tokens: the `prefix` (the first 5 characters, kept in the clear and unique per account; the
 other 251 characters are known only as a SHA-256), name, scope, creation, last use (written at most every 5 minutes), expiry, and
 the user agent and network of the address (`a.b.c.0`, or the first 48 bits of an IPv6 address) at creation and last use.
 
-- `DELETE /api/token` (no body) ends the caller's own session, whatever state its token is in, and clears the cookie.
-- `DELETE /api/token/{prefix}` revokes the token that starts with these 5 characters (looked up in the caller's account only: no
-  database id is in the API). `DELETE /api/token?others=true` revokes all the others.
+- `DELETE /api/v2/token` (no body) ends the caller's own session, whatever state its token is in, and clears the cookie.
+- `DELETE /api/v2/token/{prefix}` revokes the token that starts with these 5 characters (looked up in the caller's account only: no
+  database id is in the API). `DELETE /api/v2/token?others=true` revokes all the others.
 - The two demo accounts (a shared account whose password is public) can neither list nor revoke other tokens.
 
 **Every sign-in is announced by mail** to the account's address (the demo accounts excepted): token name, `prefix`, scope,
@@ -49,12 +49,12 @@ privacy policy. They go with the token when it is revoked, expires, or the accou
 ## Sign-up, passwords and links by e-mail
 
 The password is chosen at sign-up (10 to 72 bytes: bcrypt reads 72 and drops the rest, so a longer one is refused). A new account
-cannot sign in until its address is proved: `POST /api/token` answers `403 email_not_verified`, but only to someone who gave the
+cannot sign in until its address is proved: `POST /api/v2/token` answers `403 email_not_verified`, but only to someone who gave the
 right password (a wrong one, or an unknown address, gets the usual `401 invalid_credentials`, so a sign-in tells nothing about an
 account it cannot open), and that refusal counts as no failed attempt.
 
 **One kind of link** proves the address, chooses a password again and changes the login address. It is mailed to the address and
-used at `POST /api/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
+used at `POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
 (`newPassword` goes with `resetPassword` only).
 
 - The link is a page of the app with the purpose and the token in its **fragment** (`APP_URL` + `verify_email#purpose=...&t=...`).
@@ -68,18 +68,18 @@ used at `POST /api/verify_email` with `{"purpose": "accountCreation" | "resetPas
   the address as well. What keeps it from being a flood is the captcha, which is tied to the pending link and so is good for one
   mail, and the throttling per IP address.
 
-`POST /api/register` answers the same `202 {"sent": ...}` whether the address is new or already has an account (verified or not).
+`POST /api/v2/register` answers the same `202 {"sent": ...}` whether the address is new or already has an account (verified or not).
 It never touches an existing account, whatever the request says; it mails the owner a link to choose a new password instead of the
 one to verify. Everything the request can get wrong (a field, the password) is said before the address is looked up, and the
 bcrypt hash is made either way.
 
-`POST /api/recover_password` only mails a reset link: **the password stays what it is until the link is used**, so asking for one
+`POST /api/v2/recover_password` only mails a reset link: **the password stays what it is until the link is used**, so asking for one
 locks nobody out. Using a reset link sets the password, proves the address and empties the slot. It does not close the sessions
 that are open nor touch the TOTP: a mail tells the owner that the password changed, and they can close the other sessions from the
-account page. `POST /api/recover_password` sleeps 1 to 5 s on purpose (so that its timing does not tell whether the address has an
+account page. `POST /api/v2/recover_password` sleeps 1 to 5 s on purpose (so that its timing does not tell whether the address has an
 account) and holds a worker meanwhile: rate-limit it at the edge.
 
-**Account settings.** `POST /api/account` changes every setting. Three of them hand the account or its cycles over, and want the
+**Account settings.** `POST /api/v2/account` changes every setting. Three of them hand the account or its cycles over, and want the
 current password again as `password`:
 
 - `newPassword` is set at once (`logoutOtherDevices` closes the other sessions). It ends a reset link that is waiting and leaves a
@@ -109,11 +109,11 @@ Failed logins are counted per account and decay after `LOGIN_ATTEMPTS_DECAY_MINU
 **Two-factor authentication.** Once the password is known, the one-time code is all that is left to guess, so a wrong TOTP code
 after a right password counts like a wrong password. Past the lockout threshold an account with a TOTP code refuses even the right
 password and code until the failures decay. Whoever knows the password can therefore keep such an account locked while they keep
-trying. A wrong password or TOTP code sent from an open session (`POST /api/account`, `DELETE /api/totp`) is not counted.
+trying. A wrong password or TOTP code sent from an open session (`POST /api/v2/account`, `DELETE /api/v2/totp`) is not counted.
 
 ## The captcha
 
-`POST /api/captcha` gives a picture and a token `<exp>.<mac>`. **The server keeps nothing:** no row, no column, no cookie. The mac
+`POST /api/v2/captcha` gives a picture and a token `<exp>.<mac>`. **The server keeps nothing:** no row, no column, no cookie. The mac
 is an HMAC-SHA256, keyed with `CAPTCHA_SECRET`, of:
 
 - the purpose (`register`, `recover` or `login`), the address, the expiry (5 minutes) and the answer;
@@ -166,8 +166,8 @@ iframe with `sandbox` (no script, no same origin; links open in a new tab) and `
 - An account with no activity for `ACCOUNT_INACTIVITY_DELETE_YEARS` (4) years is deleted by the daily cron, after a warning by mail.
   An account whose address was never proved is deleted after `ACCOUNT_UNVERIFIED_DELETE_DAYS` (7) days. Both are in
   [`constants.php`](../www_data/constants.php).
-- `POST /api/account/deletion` deletes an account at its owner's request; every other table follows by database cascade.
-- `GET /api/all_of_my_data_plz` gives the owner a CSV dump of everything stored about them (passwords, TOTP secrets and tokens are
+- `POST /api/v2/account/deletion` deletes an account at its owner's request; every other table follows by database cascade.
+- `GET /api/v2/all_of_my_data_plz` gives the owner a CSV dump of everything stored about them (passwords, TOTP secrets and tokens are
   masked).
 - The log says what happened, to which account and to which row, never the content ([logs.md](logs.md)). It holds IP addresses and
   account ids: keep it only as long as you need it.

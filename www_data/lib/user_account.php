@@ -9,7 +9,7 @@
 
 declare(strict_types=1);
 
-// The account: its method, the sign-up and the password recovery, GET and POST /api/account.
+// The account: its method, the sign-up and the password recovery, GET and POST /api/v2/account.
 
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
@@ -92,7 +92,7 @@ function user_account_notification_emails_parse(mixed $value): ?string {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/register, POST /api/recover_password
+// POST /api/v2/register, POST /api/v2/recover_password
 // ---------------------------------------------------------------------------
 
 // A new address gets an account that cannot be used until the address is proved, and the link that proves it. An address that has an
@@ -161,10 +161,10 @@ function user_account_recover_password($db, string $email, mixed $token, mixed $
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/account, POST /api/account
+// GET /api/v2/account, POST /api/v2/account
 // ---------------------------------------------------------------------------
 
-// The settings of a POST /api/account body that need no password: [the values db_update_user_account_settings() takes, the JSON names
+// The settings of a POST /api/v2/account body that need no password: [the values db_update_user_account_settings() takes, the JSON names
 // of those that change]. A field absent keeps its value.
 function user_account_check_settings(array $account, array $body, array &$issues): array {
 	$new = [
@@ -196,7 +196,7 @@ function user_account_check_settings(array $account, array $body, array &$issues
 	return [$new, $changed];
 }
 
-// The whole of POST /api/account, partial. $issues are the ones the endpoint found (unknown names); every problem of a value is added, and
+// The whole of POST /api/v2/account, partial. $issues are the ones the endpoint found (unknown names); every problem of a value is added, and
 // one 400 tells them all. Three changes want the current password ("password"), because a session must not be able to hand the account
 // or its cycles to someone else: "newPassword" (with "logoutOtherDevices" to close the other sessions), "notificationEmails" and
 // "loginEmail" (which also wants the TOTP "code" when the account has one). The first two are made at once; the third sends a link to the
@@ -306,7 +306,7 @@ function user_account_update($db, array $user_account, array $body, array $issue
 }
 
 // The account as a client starts from it ($user_account: the row of sec_token_authenticate()). Nothing secret. The cycles are in the
-// sync, the news banner in GET /api/server_info.
+// sync, the news banner in GET /api/v2/server_info.
 function user_account_to_json(array $user_account): array {
 	$nfp_method = intval($user_account["nfp_method"]);
 	return [

@@ -10,7 +10,7 @@
 // The address holds the purpose and the token in its fragment ("#purpose=resetPassword&t=..."): a fragment is never sent to a server,
 // written in a log or given as a Referer, and a mail scanner that only fetches the link does not run this script, so it uses nothing
 // up. The fragment is read once and then taken off the address; the form below carries the purpose and the token (hidden fields) and
-// is what is sent to POST /api/verify_email.
+// is what is sent to POST /api/v2/verify_email.
 
 $(document).ready(function(){
 	const pages = {
@@ -67,7 +67,7 @@ $(document).ready(function(){
 		if (page.password) payload.newPassword = $("#i_new_password").val();
 		$.ajax({
 			type: "POST",
-			url: "api/verify_email",
+			url: "api/v2/verify_email",
 			contentType: "application/json",
 			data: JSON.stringify(payload),
 		}).done(function(ret) {

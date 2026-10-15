@@ -221,7 +221,7 @@ function data_delete_description($db, int $no_user_account, int $no_description)
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/timeline_sync
+// GET /api/v2/timeline_sync
 // ---------------------------------------------------------------------------
 
 // The ranges a set of written days changes: a day's cycleStartDate and cycleDay come from the first day of its cycle, which the write may
@@ -281,7 +281,7 @@ function data_sync($db, array $user_account, string $from_timestamp): array {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/pub_stat: counting walks day_timeline, so the cron counts once a day and stores
+// GET /api/v2/pub_stat: counting walks day_timeline, so the cron counts once a day and stores
 // ---------------------------------------------------------------------------
 
 function data_public_stats_count($db): array {

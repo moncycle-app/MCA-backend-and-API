@@ -9,12 +9,12 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/doc_csv.php";
-require_once __DIR__ . "/../lib/log.php";
-require_once __DIR__ . "/../lib/sec.php";
-require_once __DIR__ . "/../lib/sec_token.php";
-require_once __DIR__ . "/../lib/server.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/doc_csv.php";
+require_once __DIR__ . "/../../lib/log.php";
+require_once __DIR__ . "/../../lib/sec.php";
+require_once __DIR__ . "/../../lib/sec_token.php";
+require_once __DIR__ . "/../../lib/server.php";
 
 log_start(sec_client_ip());
 http_exit_if_maintenance();

@@ -13,7 +13,7 @@ declare(strict_types=1);
 // transport), nfp_import_schema_errors() (structure and types), nfp_import_build_plan() (meaning and consistency -> the days to write),
 // nfp_import_write_plan() (the only one that writes, in one transaction). Nothing is written before the three checks have passed: a
 // file is imported whole or not at all. A day of the file is read into the JSON day of lib/day_format.php and stored by data_write_day(),
-// like a day posted to /api/day.
+// like a day posted to /api/v2/day.
 
 require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/data.php";
@@ -645,7 +645,7 @@ function nfp_import_narrowed_note(string $date, string $name, int $recorded_type
 }
 
 // The plan in one transaction: a failure anywhere leaves the account untouched. A date that has a day is skipped, or with $override
-// replaced whole, descriptions included (a POST /api/day does the same, through data_write_day()). $written_days receives the [no_day,
+// replaced whole, descriptions included (a POST /api/v2/day does the same, through data_write_day()). $written_days receives the [no_day,
 // date] of each day written and $created_descriptions the id of each description made, for the log.
 function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $override, string $last_write_client_UTC, ?array &$written_days = null, ?array &$created_descriptions = null): array {
 	$written_days = [];

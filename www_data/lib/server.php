@@ -9,43 +9,28 @@
 
 declare(strict_types=1);
 
-// What the server says of itself (GET /api/server_info), and the check that the database is at the schema of this code. The contract
-// (API_VERSION) and the schema (SCHEMA_VERSION) are constants, the release in lib/build.json (build.sh), the database's schema the row
-// `schema_version` of key_value. Only API_VERSION is told to a client.
+// What the server says of itself (GET /api/v2/server_info), and the check that the database is at the version of this code. The version of
+// the app (APP_VERSION) is also the schema's: the row `schema_version` of key_value must say it. The contract's version is the v2 of the URL.
 
 require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 
-// ["version", "build", "commit"]; null for the placeholders of a development tree.
-function server_build(): array {
-	$file = json_decode((string) @file_get_contents(__DIR__ . "/build.json"), true);
-	$file = is_array($file) ? $file : [];
-	$version = $file["version"] ?? null;
-	$build = $file["build"] ?? null;
-	$commit = $file["commit"] ?? null;
-	return [
-		"version" => is_string($version) && $version !== "" ? $version : "unknown",
-		"build" => is_string($build) && preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $build) ? $build : null,
-		"commit" => is_string($commit) && preg_match('/\A[0-9a-f]{7,40}\z/', $commit) ? $commit : null,
-	];
-}
-
-// A 503 when the database is not at SCHEMA_VERSION, after the maintenance exit (the migrations run in maintenance).
+// A 503 when the database is not at APP_VERSION, after the maintenance exit (the migrations run in maintenance).
 function server_exit_if_schema_mismatch($db): void {
 	$value = db_select_key_value($db, SCHEMA_VERSION_KEY);
 	$version = $value === false || is_null($value) ? null : intval($value);
-	if ($version === SCHEMA_VERSION) return;
+	if ($version === APP_VERSION) return;
 	header('Content-Type: application/json');
-	http_error(503, "schema_mismatch", "The database is not at the version this server needs (it has " . ($version ?? "none") . ", the server needs " . SCHEMA_VERSION . "). Run the migrations, then start the server again.");
+	http_error(503, "schema_mismatch", "The database is not at the version this server needs (it has " . ($version ?? "none") . ", the server needs " . APP_VERSION . "). Run the migrations, then start the server again.");
 }
 
-// What a client needs before it signs in, from the settings alone: no database, so it answers in maintenance too. Neither the release
-// nor the schema is told.
+// What a client needs before it signs in, from the settings alone: no database, so it answers in maintenance too. The version told is the
+// app's (it changes with every release, so a client can tell the server was updated); it promises nothing about the contract.
 function server_info(): array {
 	return [
 		"app" => APP_NAME,
-		"apiVersion" => API_VERSION,
+		"appVersion" => APP_VERSION,
 		"maintenanceMode" => MAINTENANCE_MODE,
 		"registrationEnabled" => REGISTRATION_ENABLED,
 		"demoEnabled" => DEMO_ENABLED,

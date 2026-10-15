@@ -136,7 +136,7 @@ function day_format_filled(array $day, string $field): bool {
 }
 
 // ---------------------------------------------------------------------------
-// A day sent by a client (POST /api/day/{date})
+// A day sent by a client (POST /api/v2/day/{date})
 // ---------------------------------------------------------------------------
 
 // The day checked against what can be stored and cleaned for day_format_from_json(), its problems added to $issues. A day is its full

@@ -47,7 +47,7 @@
 		<div class="contennu" id="timeline">
 			<h2>Connexion à votre compte</h2>
 			<span class="rouge" id="message_err"></span>
-			<form method="post" action="api/token" id="connexion_form"><br />
+			<form method="post" action="api/v2/token" id="connexion_form"><br />
 				<!-- what the server is told about this sign-in: the name of the session (js/auth.js writes the domain in it) and that the browser keeps it in a cookie -->
 				<input type="hidden" name="name" id="i_token_name" value="WEB-APP" />
 				<input type="hidden" name="cookie" id="i_token_cookie" value="true" />
@@ -75,7 +75,7 @@
 			<br /><br />
 			<h2>Mot de passe perdu</h2>
 			<span id="password_reseted_msg" class="vert"></span>
-			<form method="post" action="api/recover_password" id="reset_form"><br />
+			<form method="post" action="api/v2/recover_password" id="reset_form"><br />
 				<label for="r_login_email">E-mail:</label><br />
 				<input name="login_email" id="r_login_email" type="email" required placeholder="adresse mail de connexion"  value="" /><br />
 				<br />

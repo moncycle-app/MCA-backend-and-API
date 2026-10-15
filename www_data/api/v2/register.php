@@ -9,13 +9,13 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/day_format.php";
-require_once __DIR__ . "/../lib/input.php";
-require_once __DIR__ . "/../lib/mail.php";
-require_once __DIR__ . "/../lib/sec_captcha.php";
-require_once __DIR__ . "/../lib/user_account.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/api.php";
+require_once __DIR__ . "/../../lib/day_format.php";
+require_once __DIR__ . "/../../lib/input.php";
+require_once __DIR__ . "/../../lib/mail.php";
+require_once __DIR__ . "/../../lib/sec_captcha.php";
+require_once __DIR__ . "/../../lib/user_account.php";
 
 [$db, $user_account] = api_start(false);
 
@@ -45,7 +45,7 @@ $discovered_comment = day_format_body_text($body, "discoveredComment", ACCOUNT_L
 $nfp_method = user_account_method_id_from_json($body, $issues);
 $research = input_bool_field($body, "okForResearch", $issues);
 if (input_bool_field($body, "termsAccepted", $issues) === false) {
-	$issues[] = input_issue("termsAccepted", "terms_not_accepted", "'termsAccepted' must be true: an account is not created unless its owner accepts the terms of service (their address is 'termsOfServiceUrl' in GET /api/server_info).");
+	$issues[] = input_issue("termsAccepted", "terms_not_accepted", "'termsAccepted' must be true: an account is not created unless its owner accepts the terms of service (their address is 'termsOfServiceUrl' in GET /api/v2/server_info).");
 }
 input_check_strings($body, ["captcha", "captchaToken"], $issues);
 input_exit_if_issues($issues);

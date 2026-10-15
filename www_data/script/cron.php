@@ -171,7 +171,7 @@ else {
 	log_cron_step("login_attempts", $deleted);
 }
 
-// THE PUBLIC NUMBERS OF /api/pub_stat: counted here, once a day, and not on every visit
+// THE PUBLIC NUMBERS OF /api/v2/pub_stat: counted here, once a day, and not on every visit
 
 if (!$dry_run) data_public_stats_store($db);
 echo ($dry_run ? "[dry run] public stats would be stored" : "public stats stored") . PHP_EOL;

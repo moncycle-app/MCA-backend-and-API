@@ -123,6 +123,7 @@ CREATE TABLE `key_value` (
   PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
+-- 'schema_version' must be APP_VERSION (constants.php): the code serves nothing from a database that says another number.
 INSERT INTO `key_value` (`key`, `value`) VALUES
 ('pub_visit_monthly',	0),
 ('pub_visit_weekly',	0),

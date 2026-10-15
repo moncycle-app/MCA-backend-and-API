@@ -9,10 +9,10 @@
 
 declare(strict_types=1);
 
-// The account's tokens, and /api/token: the sign-in that makes one, the request that carries one (cookie or Bearer), the list and the
+// The account's tokens, and /api/v2/token: the sign-in that makes one, the request that carries one (cookie or Bearer), the list and the
 // revocation. A browser session and a script's token are the same row; only the name tells them apart. The token itself is kept nowhere:
 // its SHA-256, and its first AUTH_TOKEN_PREFIX_CHARS characters in the clear (unique per account), which name it in the list and in
-// DELETE /api/token/{prefix}.
+// DELETE /api/v2/token/{prefix}.
 
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
@@ -106,7 +106,7 @@ function sec_token_create($db, array $user_account, array $options): array {
 }
 
 // ---------------------------------------------------------------------------
-// The sign-in: POST /api/token
+// The sign-in: POST /api/v2/token
 // ---------------------------------------------------------------------------
 
 // The options of a new token from the body: [name, scope, expires_in_days, cookie]; a wrong field is an issue. expires_in_days null is
@@ -250,7 +250,7 @@ function sec_token_login($db, array $body, array $token_options): array {
 }
 
 // ---------------------------------------------------------------------------
-// The list and the revocation: GET and DELETE /api/token
+// The list and the revocation: GET and DELETE /api/v2/token
 // ---------------------------------------------------------------------------
 
 // The address as the list shows it: cut to AUTH_TOKEN_IP_PREFIX_V4 / _V6 bits. The database keeps it whole.

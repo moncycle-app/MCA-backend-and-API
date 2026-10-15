@@ -9,10 +9,10 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/input.php";
-require_once __DIR__ . "/../lib/sec_captcha.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/api.php";
+require_once __DIR__ . "/../../lib/input.php";
+require_once __DIR__ . "/../../lib/sec_captcha.php";
 
 [$db] = api_start(false);
 

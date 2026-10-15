@@ -9,12 +9,12 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/doc_csv.php";
-require_once __DIR__ . "/../lib/doc_export.php";
-require_once __DIR__ . "/../lib/input.php";
-require_once __DIR__ . "/../lib/nfp_export.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/api.php";
+require_once __DIR__ . "/../../lib/doc_csv.php";
+require_once __DIR__ . "/../../lib/doc_export.php";
+require_once __DIR__ . "/../../lib/input.php";
+require_once __DIR__ . "/../../lib/nfp_export.php";
 
 // GET /export/{format}: a file. Its failures are the JSON envelope like every other endpoint's.
 [$db, $user_account] = api_start();

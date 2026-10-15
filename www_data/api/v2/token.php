@@ -9,11 +9,11 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/api.php";
-require_once __DIR__ . "/../lib/input.php";
-require_once __DIR__ . "/../lib/mail.php";
-require_once __DIR__ . "/../lib/sec_token.php";
+require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/api.php";
+require_once __DIR__ . "/../../lib/input.php";
+require_once __DIR__ . "/../../lib/mail.php";
+require_once __DIR__ . "/../../lib/sec_token.php";
 
 [$db, $user_account] = api_start(false, true);
 

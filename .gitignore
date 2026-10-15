@@ -2,7 +2,7 @@ docker-compose.yml
 www_data/config.php
 www_data/info.php
 www_data/test.php
-www_data/api/test.php
+www_data/api/v2/test.php
 www_data/vendor/*
 htpasswd
 sessions

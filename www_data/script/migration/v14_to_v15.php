@@ -31,6 +31,45 @@ print(PHP_EOL);
 $db = db_open();
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
+// WHICH DATABASE THIS IS, before anything is read or changed. This script goes from v14 to v15 and needs the code of v15: the database must
+// be at APP_VERSION - 1 or have no version at all. A v14 database has none: the schema_version row comes with v15, and in v14 the table
+// that will hold it is still called cle_valeur, so there is no key_value to ask. Any other number is refused with the reason, so that a
+// migration is never run twice, nor on a database a newer release made.
+$to_version = 15;
+
+$has_key_value = (int) $db->query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'key_value'")->fetchColumn() === 1;
+$database_version = null;
+if ($has_key_value) {
+    $value = db_select_key_value($db, SCHEMA_VERSION_KEY);
+    $database_version = $value === false || is_null($value) ? null : intval($value);
+}
+
+print("code: version " . APP_VERSION . ", database: " . ($database_version === null ? "no version (before v15)" : "version " . $database_version));
+print(PHP_EOL);
+
+$mismatch = null;
+if (APP_VERSION !== $to_version) {
+    $mismatch = "this script migrates to version $to_version, but the code is at version " . APP_VERSION . " (APP_VERSION, constants.php): run it with the code of version $to_version";
+}
+elseif ($database_version === APP_VERSION) {
+    $mismatch = "the database is already at version $database_version, the version of this code: there is nothing to migrate, and a migration is never run twice";
+}
+elseif ($database_version !== null && $database_version > APP_VERSION) {
+    $mismatch = "the database is at version $database_version, newer than this code (version " . APP_VERSION . "): a newer release made it, update the code, a migration never goes back";
+}
+elseif ($database_version !== null && $database_version !== APP_VERSION - 1) {
+    $mismatch = "the database is at version $database_version, and this script migrates from version " . (APP_VERSION - 1) . ": run the earlier migrations first, one version at a time (docs/upgrading.md)";
+}
+
+if ($mismatch !== null) {
+    print("VERSION MISMATCH: " . $mismatch . ".");
+    print(PHP_EOL);
+    print("Nothing was changed.");
+    print(PHP_EOL);
+    if (PHP_SAPI !== "cli") http_response_code(409);
+    exit(1);
+}
+
 // NOTE: MariaDB commits at every ALTER TABLE / CREATE TABLE / RENAME, so the transaction below protects the
 // data steps only, not the schema ones. A run that stops half way leaves a half migrated database: restore the
 // dump taken before (docs/upgrading.md), do not run the script again on it. The accounts merged or deleted
@@ -360,7 +399,7 @@ try {
     // script is safe: a row already hashed has strlen 64 (sha256 hex), not 256
     // (sec_token_random() output), so it gets skipped on a second pass.
     // This is also the only moment the plain token is here to take its first characters from (auth_token_prefix, unique per
-    // account: GET /api/token shows it, DELETE /api/token names a token by it).
+    // account: GET /api/v2/token shows it, DELETE /api/v2/token names a token by it).
     $statement_select_tokens = $db->prepare("SELECT no_auth_token, auth_token_str FROM `auth_token`");
     $statement_hash_token = $db->prepare("UPDATE `auth_token` SET `auth_token_str` = :hashed_token, `auth_token_prefix` = :prefix WHERE `no_auth_token` = :no_auth_token");
 

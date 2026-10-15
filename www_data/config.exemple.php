@@ -69,7 +69,7 @@ define("TRUSTED_PROXIES", []);
 define("NEWS_URL", "https://www.moncycle.app/actu.html");
 
 // The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
-// GET /api/server_info tells it to every client. Empty: no page to show or link (the box stays required).
+// GET /api/v2/server_info tells it to every client. Empty: no page to show or link (the box stays required).
 define("TERMS_OF_SERVICE_URL", "https://www.moncycle.app/ToS/term_of_service_fr.html");
 
 // Login brute-force defense. A value of 0 turns the feature it sets off.

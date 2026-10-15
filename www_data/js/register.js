@@ -25,7 +25,7 @@ else {
 		$("#i_anaissance").append(bands.join(""));
 		// the terms of service are a page of the server's choice (TERMS_OF_SERVICE_URL, told by server_info): shown here in a frame, and in a tab of
 		// their own from the link below it. None told: no frame and no link, the box stays.
-		$.ajax({type : "GET", url : "api/server_info", dataType : "json"}).done(function(ret) {
+		$.ajax({type : "GET", url : "api/v2/server_info", dataType : "json"}).done(function(ret) {
 			const url = ((ret || {}).data || {}).termsOfServiceUrl;
 			if (!/^https:\/\//i.test(url || "")) return;
 			$("#f_terms").attr("src", url).prop("hidden", false);
@@ -72,7 +72,7 @@ else {
 				discoveredComment: $("#i_comment").val(),
 				termsAccepted: $("#i_terms").is(':checked'),
 			};
-			$.ajax({type : 'POST', "url" : "api/register", contentType: "application/json", "data" : JSON.stringify(payload)}).done(function(ret){
+			$.ajax({type : 'POST', "url" : "api/v2/register", contentType: "application/json", "data" : JSON.stringify(payload)}).done(function(ret){
 				console.log(ret);
 				// the answer is the same for a new address and for one that has an account: the page says only what is sure
 				$("#success_email").text($("#i_login_email").val());

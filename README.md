@@ -20,7 +20,7 @@ Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-prof
 
 | Path | What |
 |---|---|
-| `www_data/` | The whole app, and the web server's document root: the web app (static pages and scripts, no build step), the HTTP API (`api/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`). |
+| `www_data/` | The whole app, and the web server's document root: the web app (static pages and scripts, no build step), the HTTP API (`api/v2/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`). |
 | `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description. |
 | `server_conf/` | What the Docker image runs on: Apache and PHP settings, the entrypoint, the crontabs. Also a router to run the app on PHP's built-in server. |
 | `docs/` | Security, deployment, upgrading and the log reference. |
@@ -42,7 +42,7 @@ daily cron by itself, and serves plain HTTP on port 80.
 2. **Copy [`docker-compose.exemple.yml`](docker-compose.exemple.yml)** and set `APP_URL` (with a trailing `/`), the `DB_*` and
    `SMTP_*` variables and the two secret files (`db_password`, `smtp_password`). The SMTP server is required: sign-up and password
    links travel by mail. Every setting is in [Settings](#settings).
-3. **Start it:** `docker compose up -d`, then `curl -fsS http://127.0.0.1:8080/api/health_check` must answer
+3. **Start it:** `docker compose up -d`, then `curl -fsS http://127.0.0.1:8080/api/v2/health_check` must answer
    `{"data":{"status":"oookkk"}}`.
 4. **Put a reverse proxy in front.** The container serves plain HTTP on `127.0.0.1:8080`: add TLS, and set `TRUSTED_PROXIES` to the
    proxy's address, or every visitor looks like the same address to the login throttling. See [docs/deployment.md](docs/deployment.md).
@@ -137,7 +137,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | `DEMO_ENABLED` | `false` | The two public demo accounts. See [Demo accounts](#demo-accounts). |
 | `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
 | `NEWS_URL` | `https://www.moncycle.app/actu.html` | The https page shown as the news banner, in a sandboxed iframe: the page keeps its own design. **Empty: no banner.** |
-| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | The https page of your terms of service. The sign-up page shows it in an iframe above the box to tick (`termsAccepted`, required by `POST /api/register`), the account page links to it, and `GET /api/server_info` tells it (`termsOfServiceUrl`). Empty: no page to show or link, and the box stays. The OpenAPI file (`info.termsOfService`) carries the official instance's address: change it there too if your terms are elsewhere. A page that sends `X-Frame-Options` or a `frame-ancestors` policy that excludes your instance cannot be shown. |
+| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | The https page of your terms of service. The sign-up page shows it in an iframe above the box to tick (`termsAccepted`, required by `POST /api/v2/register`), the account page links to it, and `GET /api/v2/server_info` tells it (`termsOfServiceUrl`). Empty: no page to show or link, and the box stays. The OpenAPI file (`info.termsOfService`) carries the official instance's address: change it there too if your terms are elsewhere. A page that sends `X-Frame-Options` or a `frame-ancestors` policy that excludes your instance cannot be shown. |
 | `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
 
 **Database and mail**
@@ -209,7 +209,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 
 ### Cron
 
-`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers `/api/pub_stat` answers,
+`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers `/api/v2/pub_stat` answers,
 sends the cycle mails, the reminders to accounts that went quiet and the deletion warnings, and **deletes** the accounts that have been
 inactive for 4 years and those whose address was never verified after 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`,
 `ACCOUNT_UNVERIFIED_DELETE_DAYS` in [`constants.php`](www_data/constants.php)).
@@ -253,7 +253,7 @@ full hour.
 `MAINTENANCE_MODE=true` (restart the container to change it) puts the back end in maintenance:
 
 - **The API.** Every endpoint answers `503` with `{"error": {"code": "maintenance", ...}}` before it opens the database: nothing can
-  be read or written, whoever is signed in, and the downloads included. The one exception is `GET /api/server_info`, which answers
+  be read or written, whoever is signed in, and the downloads included. The one exception is `GET /api/v2/server_info`, which answers
   `200` with `"maintenanceMode": true` so that a client can tell its user. The static pages stay up. **A container healthcheck must
   accept the 503 of `health_check` as alive**, or a server in maintenance is restarted as dead: the one in
   [`docker-compose.exemple.yml`](docker-compose.exemple.yml) does.
@@ -289,17 +289,17 @@ spec is the contract:** a change to an endpoint and its YAML go in the same comm
 
 In four lines:
 
-0. `GET /api/server_info` (public) first: the `apiVersion` the server speaks, whether it is in maintenance (`maintenanceMode`), and the limits to
-   check a form with.
-1. `POST /api/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
+0. `GET /api/v2/server_info` (public) first: the `appVersion` of the server, whether it is in maintenance (`maintenanceMode`), and the limits to
+   check a form with. The version of the API is the `v2` of the address.
+1. `POST /api/v2/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
    token is shown once.
 2. Send it on every other call as `Authorization: Bearer <token>`.
 3. Answers are `{"data": ...}` or `{"error": {"code": "...", "message": "..."}}`. **Bodies must be `Content-Type: application/json`.**
 
 ```sh
-TOKEN=$(curl -s -H 'Content-Type: application/json' -d '{"email":"you@example.org","password":"..."}' https://YOUR.HOST/api/token | jq -r .data.token)
-curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/account
-curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST -d '{"stampColor":"Red"}' https://YOUR.HOST/api/day/2026-09-20
+TOKEN=$(curl -s -H 'Content-Type: application/json' -d '{"email":"you@example.org","password":"..."}' https://YOUR.HOST/api/v2/token | jq -r .data.token)
+curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/v2/account
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST -d '{"stampColor":"Red"}' https://YOUR.HOST/api/v2/day/2026-09-20
 ```
 
 ## Development

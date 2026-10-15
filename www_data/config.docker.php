@@ -82,7 +82,7 @@ define("TRUSTED_PROXIES", env_ip_ranges("TRUSTED_PROXIES"));
 define("NEWS_URL", getenv("NEWS_URL") === false ? "https://www.moncycle.app/actu.html" : trim(getenv("NEWS_URL")));
 
 // The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
-// GET /api/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
+// GET /api/v2/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
 // required). The Docker image also reads it for the CSP (frame-src, server_conf/docker-entrypoint.sh).
 define("TERMS_OF_SERVICE_URL", getenv("TERMS_OF_SERVICE_URL") === false ? "https://www.moncycle.app/ToS/term_of_service_fr.html" : trim(getenv("TERMS_OF_SERVICE_URL")));
 

@@ -16,7 +16,6 @@ require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db.php";
-require_once __DIR__ . "/server.php";
 require_once __DIR__ . "/user_account.php";
 
 // One JSON day as an NFP day, with only what the format defines and nothing empty ([] is a day with nothing, "{}" in the file). Every
@@ -92,10 +91,10 @@ function nfp_export_cycles($db, string $start_date, string $end_date, array $use
 }
 
 // The whole file. $anonymous leaves out what identifies the account (to share with a practitioner); the data is the same.
-function nfp_export_file($db, string $start_date, string $end_date, array $user_account, bool $anonymous, string $app_version, ?int &$rows_read = null): array {
+function nfp_export_file($db, string $start_date, string $end_date, array $user_account, bool $anonymous, ?int &$rows_read = null): array {
 	$file = [
 		"schemaVersion" => NFP_SCHEMA_VERSION,
-		"fileInformation" => ["sourceApp" => "moncycle.app", "sourceAppVersion" => $app_version, "fileCreationTimestamp" => date('c')],
+		"fileInformation" => ["sourceApp" => "moncycle.app", "sourceAppVersion" => (string) APP_VERSION, "fileCreationTimestamp" => date('c')],
 	];
 	if (!$anonymous) {
 		// no birthDate: the account holds a birth year, and the format wants a full date
@@ -111,7 +110,7 @@ function nfp_export_file($db, string $start_date, string $end_date, array $user_
 
 // The file as text: accents and the timestamp readable, a round 37.0 kept a number; $pretty to read it in the browser.
 function nfp_export_json($db, string $start_date, string $end_date, array $user_account, bool $anonymous, bool $pretty = false, ?int &$rows_read = null): string {
-	$file = nfp_export_file($db, $start_date, $end_date, $user_account, $anonymous, server_build()["version"], $rows_read);
+	$file = nfp_export_file($db, $start_date, $end_date, $user_account, $anonymous, $rows_read);
 	$flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION;
 	return json_encode($file, $pretty ? ($flags | JSON_PRETTY_PRINT) : $flags);
 }
