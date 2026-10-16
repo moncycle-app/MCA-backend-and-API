@@ -740,14 +740,39 @@ h2 {
 	transition: background-color .15s ease, border-color .15s ease, color .15s ease;
 }
 
+/* a checked keyword takes the colour of the stamp chosen above (no stamp: the "white" one, near black, or near white in dark mode) */
+#form_data {
+	--chip_bg: #141414;
+	--chip_border: #000;
+	--chip_fg: white;
+}
+
+#form_data:has(#go_rouge:checked) {
+	--chip_bg: #ac2433;
+	--chip_border: #821521;
+	--chip_fg: white;
+}
+
+#form_data:has(#go_vert:checked) {
+	--chip_bg: #1e824c;
+	--chip_border: #16683c;
+	--chip_fg: white;
+}
+
+#form_data:has(#go_jaune:checked) {
+	--chip_bg: #fbca0b;
+	--chip_border: #e3b607;
+	--chip_fg: white;
+}
+
 .desc_chip input[type=checkbox]:checked + label {
-	background-color: #1e824c;
-	border-color: #16683c;
-	color: white;
+	background-color: var(--chip_bg);
+	border-color: var(--chip_border);
+	color: var(--chip_fg);
 }
 
 .desc_chip input[type=checkbox]:focus-visible + label {
-	outline: 2px solid #1e824c;
+	outline: 2px solid var(--chip_bg);
 	outline-offset: 1px;
 }
 
@@ -897,6 +922,12 @@ h2 {
 	.desc_chip label {
 		background-color: #191919;
 		border-color: #191919;
+	}
+
+	#form_data {
+		--chip_bg: #ececec;
+		--chip_border: #fff;
+		--chip_fg: #141414;
 	}
 
 	.desc_add_toggle {
