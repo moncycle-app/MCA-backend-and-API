@@ -530,16 +530,21 @@ function settings_fill_suivi(account) {
 	settings_fill_birth_years(form.find("[name=age]"), account.birthYear);
 }
 
-// The years are asked in blocks of five: "entre 1985 et 1989", stored as 1985.
+// The years are asked in blocks of five: "entre 1985 et 1989", saved as 1985. The stored year can be any year (1992): it selects the block
+// it falls in, and a block outside the usual range is added rather than lost.
 function settings_fill_birth_years(select, birth_year) {
 	const this_year = (new Date()).getFullYear();
+	const blocks = [];
+	for (let year = (this_year - this_year % 5) - 75; year < this_year - 5; year += 5) blocks.push(year);
+	const own_block = birth_year ? birth_year - birth_year % 5 : null;
+	if (own_block !== null && !blocks.includes(own_block)) blocks.push(own_block);
+	blocks.sort(function (a, b) { return a - b; });
+
 	select.empty();
-	let found = false;
-	for (let year = (this_year - this_year % 5) - 75; year < this_year - 5; year += 5) {
-		found = found || year == birth_year;
-		select.append(new Option(`entre ${year} et ${year + 4}`, year, false, year == birth_year));
-	}
-	if (!found) select.prepend(new Option("Choisir…", "", true, true)).find("option:first").prop("disabled", true);
+	if (own_block === null) select.append(new Option("Choisir…", "", true, true)).find("option:first").prop("disabled", true);
+	blocks.forEach(function (year) {
+		select.append(new Option(`entre ${year} et ${year + 4}`, year, false, year == own_block));
+	});
 }
 
 

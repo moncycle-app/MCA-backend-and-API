@@ -45,10 +45,10 @@
 
 		<div class="contennu settings">
 			<p class="form_msg" id="page_msg" role="status"></p>
+			<br />
 
 			<!-- ===== The menu: one entry per panel below. A panel opens with the address #name (settings#securite). ===== -->
 			<nav id="menu">
-			    <br />
 				<h2>Réglages</h2>
 				<a class="menu_item" id="menu_suivi" href="#suivi">
 					<span class="menu_icon">🌿</span>
@@ -79,7 +79,7 @@
 					<span class="menu_text"><b>À propos et contact</b><small>L'application, vos conditions, nous écrire</small></span>
 				</a>
 				<a class="menu_item menu_danger" id="menu_suppression" href="#suppression">
-					<span class="menu_icon">⚠️</span>
+					<span class="menu_icon">🗑️</span>
 					<span class="menu_text"><b>Supprimer mon compte</b><small>Effacer définitivement toutes vos données</small></span>
 				</a>
 			</nav>
@@ -523,7 +523,7 @@
 			<!-- ===== Supprimer mon compte ===== -->
 			<section class="panel" id="panel_suppression" hidden>
 				<a class="back" href="#">‹ Réglages</a>
-				<h2 class="rouge">⚠️ Supprimer mon compte</h2>
+				<h2 class="rouge">🗑️ Supprimer mon compte</h2>
 				<p class="rouge">En supprimant définitivement votre compte, toutes vos données seront effacées et irrécupérables. Cette action est irréversible, mais vous pouvez d'abord télécharger toutes vos données depuis « Mes données ».</p>
 				<form method="post" action="api/v2/account/deletion" id="f_suppr_user_account">
 					<div class="field">
