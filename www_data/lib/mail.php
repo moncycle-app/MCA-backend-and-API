@@ -311,7 +311,7 @@ function mail_cycle_words(): array {
 		"pdf" => "Le graphique de votre cycle, à partager avec votre moniteur ou votre instructrice.",
 		"csv" => "Vos observations jour par jour, à ouvrir dans LibreOffice ou Microsoft Excel pour une analyse plus détaillée.",
 		"nfp" => "Le fichier NFP contient toutes les données de ce cycle dans un format d’échange : conservez-le comme sauvegarde, vous pourrez le réimporter dans moncycle.app depuis « Mon compte », section « Importer mes données ». Il est également compatible avec d’autres applications si vous souhaitez migrer vos données.",
-		"opt_out" => "Cet envoi est automatique. Vous pouvez le désactiver à tout moment : ouvrez « Mon compte », section « Exporter mes données », puis décochez « Recevoir automatiquement chaque cycle par e-mail ».",
+		"opt_out" => "Cet envoi est automatique. Vous pouvez le désactiver à tout moment : ouvrez « Réglages », section « Cycles par e-mail », puis décochez « Recevoir chaque cycle par e-mail ».",
 	];
 }
 
@@ -334,7 +334,7 @@ function mail_cycle_file(string $format, string $color, string $tint, string $ab
 
 function mail_cycle_html(string $name, string $first_day, string $last_day, int $nb_days): string {
 	$name = htmlspecialchars($name);
-	$account_url = APP_URL . "account";
+	$settings_url = APP_URL . "settings#notifications";
 	$words = mail_cycle_words();
 	$files = mail_cycle_file("PDF", "#b03a2e", "#fbeceb", mail_cycle_typography($words["pdf"]))
 		. mail_cycle_file("CSV", "#1e824c", "#e6f4ec", mail_cycle_typography($words["csv"]))
@@ -389,7 +389,7 @@ function mail_cycle_html(string $name, string $first_day, string $last_day, int 
 						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f6f7f6" style="background:#f6f7f6;border-radius:12px;">
 							<tr><td style="padding:16px 20px;font-size:13px;line-height:20px;color:#4b574f;">
 								{$opt_out}
-								<div style="padding-top:12px;"><a href="{$account_url}" style="display:inline-block;padding:9px 16px;border-radius:8px;background:#1e824c;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;">Gérer cet envoi</a></div>
+								<div style="padding-top:12px;"><a href="{$settings_url}" style="display:inline-block;padding:9px 16px;border-radius:8px;background:#1e824c;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;">Gérer cet envoi</a></div>
 							</td></tr>
 						</table>
 					</td></tr>
@@ -409,14 +409,14 @@ function mail_cycle_html(string $name, string $first_day, string $last_day, int 
 }
 
 function mail_cycle_text(string $name, string $first_day, string $last_day, int $nb_days): string {
-	$account_url = APP_URL . "account";
+	$settings_url = APP_URL . "settings#notifications";
 	$words = mail_cycle_words();
 	return "Bonjour {$name},\n\n"
 		. "Votre cycle est terminé : du {$first_day} au {$last_day}, {$nb_days} jours. Voici son export complet, en pièces jointes.\n\n"
 		. "- PDF : {$words["pdf"]}\n"
 		. "- CSV : {$words["csv"]}\n"
 		. "- NFP : {$words["nfp"]}\n\n"
-		. "{$words["opt_out"]}\n{$account_url}\n\n"
+		. "{$words["opt_out"]}\n{$settings_url}\n\n"
 		. "À bientôt sur moncycle.app\n\n"
 		. "Ce mail a été envoyé automatiquement par MONCYCLE.APP, merci de ne pas y répondre. Vous le recevez car l'envoi automatique des cycles est activé sur votre compte.";
 }

@@ -261,9 +261,9 @@ refactoring the old code.
 `www_data/js/`. The Content-Security-Policy is `script-src 'self'`:
 
 - **No inline script and no inline handler anywhere.** Every page loads its own file with `defer` (`js/auth.js`, `js/register.js`,
-  `js/account.js`, `js/tableau.js`, `js/swagger-init.js`).
+  `js/settings.js`, `js/tableau.js`, `js/swagger-init.js`).
 - **Nothing a user can store goes into the page as HTML.** Names, comments and labels go through `.text()`, `.val()` or text nodes
-  (`moncycle_app_show_error()` for a server message). jQuery's `append(string)` reads a `<` or an entity in a string as HTML, so a text
+  (`settings_say()` for a server message). jQuery's `append(string)` reads a `<` or an entity in a string as HTML, so a text
   is `document.createTextNode()`. The two pages from outside, the news banner (`NEWS_URL`, the `newsUrl` of `GET /api/v2/server_info`) and
   the terms of service (`TERMS_OF_SERVICE_URL`, `termsOfServiceUrl`), are never read by the page: each is a sandboxed iframe
   (`sandbox` without `allow-scripts`, `referrerpolicy="no-referrer"`), and the CSP's `frame-src` names their origins. An iframe of
@@ -282,12 +282,12 @@ refactoring the old code.
   has not created), `data_last_sync`, `data_version`. It runs the sync (`GET /api/v2/server_info` once for the version, `GET /api/v2/account`
   with its ETag, then `GET /api/v2/timeline_sync?since=`, one answer, not paged), the queue and its retries, and the end of the session
   (a 401 `unauthorized` empties all of localStorage through `moncycle_store.clear_storage()`, the one place that empties it; the
-  sign-in, sign-up and account pages call it too).
+  sign-in, sign-up and settings pages call it too).
   - A day refused as late (409 `stale_write`) is dropped from the queue and downloaded again, like any refusal.
   - A description made in the day form is shown at once from `moncycle_store.all_descriptions()` (the server's list plus the unsent
     ones, which have no id); a chip stands for a description by its **name**, which is what a day carries it by.
   - It holds no text and draws nothing: `tableau.js` (the timeline) listens to its events (`changed`, `status`, `sent`, `failed`).
-    `account.js` only loads it, so that a 401 ends the session there too, and asks for a sync after a change.
+    `settings.js` only loads it, so that a 401 ends the session there too, and asks for a sync after a change.
   - Bump `moncycle_store.schema` when what is stored changes shape: copies of another schema are dropped. An update of the app
     (`moncycle_store.schema`, or the `appVersion` of `server_info`, changes) drops the copy and reloads the page. Neither a build nor a
     commit is in `server_info`: a server update that keeps `APP_VERSION` does not reach a page that is open.

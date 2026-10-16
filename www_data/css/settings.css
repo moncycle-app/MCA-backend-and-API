@@ -1,0 +1,493 @@
+/* moncycle.app
+**
+** licence Creative Commons CC BY-NC-SA
+**
+** https://www.moncycle.app
+** https://github.com/moncycle-app/backend-api-web-app
+*/
+
+/* The settings page (settings.html, js/settings.js). Loaded after css/account.css, whose choice cards it reuses; everything here is
+** under .settings so that the rules of the sign-in and sign-up pages (the same file) do not reach it, nor these theirs. */
+
+.settings {
+	--line: rgba(128, 128, 128, .3);
+	--soft: #f0f0f0;
+	--green: #1e824c;
+	--green-tint: #d9f0e1;
+}
+
+@media (prefers-color-scheme: dark) {
+	.settings {
+		--soft: #191919;
+		--green-tint: #0a2014;
+	}
+}
+
+#warning_demo {
+	font-weight: bold;
+}
+
+#warning_demo a {
+	color: #fbca0b;
+}
+
+[hidden] {
+	display: none !important;
+}
+
+.settings form {
+	display: block;
+}
+
+.settings h2 {
+	margin: 10px 0 12px;
+}
+
+.settings h3 {
+	margin: 28px 0 6px;
+	font-size: 1em;
+	font-family: 'Montserrat';
+}
+
+.settings p,
+.settings li {
+	line-height: 1.5;
+}
+
+/* --- Fields: a label above its input, the input as wide as the column ------------------- */
+
+.settings .field {
+	margin-bottom: 16px;
+}
+
+.settings .field > label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: bold;
+	font-size: .9em;
+}
+
+.settings input[type=text],
+.settings input[type=email],
+.settings input[type=number],
+.settings input[type=password],
+.settings input[type=date],
+.settings select {
+	box-sizing: border-box;
+	width: 100%;
+	max-width: none;
+}
+
+.settings input[type=date] {
+	padding: 8px 10px;
+	background-color: var(--soft);
+	border: var(--soft) 1px solid;
+	border-radius: 5px;
+	color: inherit;
+}
+
+.settings input.input_user_account_totp {
+	max-width: 140px;
+	letter-spacing: .15em;
+}
+
+.settings .field .label_info {
+	display: block;
+	margin-top: 4px;
+}
+
+.settings .field_row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0 16px;
+}
+
+.settings .field_row .field {
+	flex: 1 1 140px;
+}
+
+a.button {
+	display: inline-block;
+	padding: 3px 5px;
+	font-size: 13.3333px;
+	background-color: var(--soft);
+	border: var(--soft) 1px solid;
+	border-radius: 5px;
+	color: var(--green);
+	text-transform: uppercase;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.settings .buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 12px 0 6px;
+}
+
+/* a button that reads as a link, inside a sentence */
+.settings button.link_button {
+	padding: 0;
+	border: 0;
+	background: none;
+	text-transform: none;
+	text-decoration: underline;
+	font-size: inherit;
+	font-style: italic;
+}
+
+.settings .choice_group {
+	margin-bottom: 22px;
+}
+
+.settings .choice_group legend {
+	margin-bottom: 8px;
+}
+
+.settings .choice_group .choice_check,
+.settings form > .choice_check {
+	margin-bottom: 14px;
+}
+
+/* a message under a form: its answer, empty until there is one */
+.form_msg {
+	margin: 8px 0 0;
+}
+
+.form_msg:empty {
+	display: none;
+}
+
+/* --- The menu: one tappable row per panel ------------------------------------------------ */
+
+.menu_item {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-bottom: 10px;
+	padding: 14px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	color: inherit;
+	text-decoration: none;
+}
+
+.menu_item:hover,
+.menu_item:focus-visible {
+	border-color: var(--green);
+	background-color: var(--green-tint);
+	outline: none;
+}
+
+.menu_item::after {
+	content: "›";
+	margin-left: auto;
+	font-size: 1.6em;
+	color: gray;
+}
+
+.menu_icon {
+	flex: 0 0 1.8em;
+	font-size: 1.5em;
+	text-align: center;
+}
+
+.menu_text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.menu_text small {
+	color: gray;
+}
+
+.menu_danger {
+	margin-top: 25px;
+	margin-bottom: 50px;
+}
+
+.menu_danger .menu_text b {
+	color: #ac2433;
+}
+
+.menu_danger:hover,
+.menu_danger:focus-visible {
+	border-color: #ac2433;
+	background-color: transparent;
+}
+
+/* --- A panel ---------------------------------------------------------------------------- */
+
+.back {
+	display: inline-block;
+	padding: 6px 0;
+	text-decoration: none;
+	font-weight: bold;
+}
+
+/* a block of a panel with its own title: the address, the password, the double authentication */
+.card {
+	margin-bottom: 14px;
+	padding: 4px 14px 14px;
+	border: 1px solid var(--line);
+	border-radius: 10px;
+}
+
+.card h3 {
+	margin-top: 12px;
+}
+
+.settings details > summary {
+	cursor: pointer;
+	color: var(--green);
+	font-weight: bold;
+	padding: 6px 0;
+}
+
+.settings details[open] > summary {
+	margin-bottom: 10px;
+}
+
+.settings details.help {
+	margin-top: 22px;
+}
+
+.settings details.help summary {
+	font-weight: normal;
+	font-size: .9em;
+	color: gray;
+}
+
+.settings .inline_row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.settings .inline_row input[type=text] {
+	flex: 1 1 160px;
+	width: auto;
+}
+
+.settings .inline_row .form_msg {
+	flex: 1 0 100%;
+	margin: 0;
+}
+
+.settings .inline_row select {
+	flex: 0 0 auto;
+	width: auto;
+}
+
+.totp_ways {
+	padding-left: 18px;
+}
+
+.totp_ways li {
+	margin-bottom: 12px;
+}
+
+#totp_qrcode {
+	margin-top: 8px;
+}
+
+/* key / value: the key small and grey, the value bold */
+.kv {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 14px;
+	margin: 8px 0 0;
+	line-height: 1.4;
+}
+
+.kv dt {
+	color: gray;
+	font-size: .85em;
+}
+
+.kv dd {
+	margin: 0;
+	font-weight: bold;
+	overflow-wrap: anywhere;
+}
+
+/* a token's facts are too long for two columns on a phone: the key above its value */
+.token_row .kv {
+	grid-template-columns: 1fr;
+	gap: 0;
+}
+
+.token_row .kv dt {
+	margin-top: 8px;
+}
+
+.kv dd small {
+	display: block;
+	font-weight: normal;
+	color: gray;
+}
+
+.settings .tech_info {
+	margin-top: 40px;
+}
+
+/* --- Sensations & observations: a line per keyword, and what acts on it under the one being edited ---------
+** The line is the emoji of its type, its name (all the room there is) and the number of days. The type, the copy to the comments
+** and the delete show under the keyword being edited only (.desc_active, set by js/settings.js).
+*/
+
+.desc_row {
+	margin-bottom: 4px;
+	padding: 4px;
+	border-radius: 8px;
+}
+
+/* the keyword being edited: green, which no button is (they are grey); and the message that replaces a keyword once it is moved */
+.desc_row.desc_active,
+.desc_moved {
+	background-color: var(--green-tint);
+}
+
+.desc_moved {
+	margin-bottom: 4px;
+	padding: 8px 10px;
+	border-radius: 8px;
+}
+
+.desc_line {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.desc_icon {
+	flex: 0 0 1.6em;
+	text-align: center;
+	cursor: default;
+}
+
+.settings .desc_line .desc_name {
+	flex: 1 1 0;
+	width: auto;
+	min-width: 0;
+}
+
+/* a name that does not fit shows it, and the whole of it is the tooltip */
+.desc_name:not(:focus) {
+	text-overflow: ellipsis;
+}
+
+.desc_count {
+	flex: 0 0 auto;
+	min-width: 1.5em;
+	text-align: center;
+	font-weight: bold;
+	color: gray;
+}
+
+.desc_actions {
+	display: none;
+	margin: 6px 0 2px calc(1.6em + 6px);
+}
+
+.desc_row.desc_active .desc_actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.settings .desc_actions select {
+	width: auto;
+	max-width: 60%;
+}
+
+/* --- NFP import report ------------------------------------------------------------------
+** The answer to an import, or to the dry run that only reports what one would do. It is a block of counts plus foldable lists, and the
+** lists can hold thousands of dates, so they start closed and the block scrolls rather than pushing the rest of the page away.
+*/
+
+#import_report:not(:empty) {
+	margin-top: 15px;
+	padding: 10px 12px;
+	border-radius: 5px;
+	background-color: var(--soft);
+	font-size: .9em;
+	max-height: 60vh;
+	overflow-y: auto;
+}
+
+.import_line {
+	margin: 0 0 .5em 0;
+}
+
+.import_head {
+	font-weight: bold;
+}
+
+.import_list {
+	margin-bottom: .5em;
+}
+
+.import_list ul {
+	margin: .3em 0 .8em 0;
+	padding-left: 1.5em;
+}
+
+.import_list li {
+	margin-bottom: .2em;
+	overflow-wrap: anywhere;
+}
+
+/* --- Connexions and access tokens: one card per token ------------------------------------ */
+
+.token_row {
+	margin-bottom: 10px;
+	padding: 12px 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	overflow-wrap: anywhere;
+}
+
+.token_title {
+	margin-bottom: 6px;
+}
+
+/* the first characters of a token: a small chip next to its name */
+.token_prefix {
+	margin-left: 6px;
+	padding: 1px 6px;
+	border-radius: 4px;
+	background-color: var(--soft);
+	font-size: .85em;
+	cursor: help;
+}
+
+.token_row form {
+	margin-top: 10px;
+}
+
+#f_tokens_revoke_all {
+	margin-top: 16px;
+}
+
+#f_token_create {
+	margin-top: 8px;
+}
+
+.token_copy {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.settings #i_token_new_value {
+	flex: 1 1 0;
+	min-width: 0;
+	width: auto;
+	font-family: monospace;
+}

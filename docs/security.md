@@ -25,7 +25,7 @@ one), so a stolen session cannot make itself another token without the password.
 | `name` | The client's own word for itself (256 characters at most, shown as text). Helps the owner find a device, proves nothing. |
 | `scope` | `readWrite` (default) or `readOnly`. A read-only token gets `403 read_only_token` on any method but `GET`, `HEAD` and `OPTIONS`; it may still end its own session. |
 | `expiresInDays` | 1 to 365. The token dies on that day whatever its use and opens nothing from then on; the cron only erases it. Without it, a token is erased after 40 days unused or a year after its creation. |
-| `cookie` | `true`: the session is also set as the `HttpOnly` cookie. Otherwise no cookie is set, so a token made on the account page cannot replace the session it was made from. |
+| `cookie` | `true`: the session is also set as the `HttpOnly` cookie. Otherwise no cookie is set, so a token made on the settings page cannot replace the session it was made from. |
 
 The token is always in the answer, the web app's included, so a script injected into the page could read it: the
 `script-src 'self'` policy (see [Stored text and scripts](#stored-text-and-scripts)) is what stands in the way.
@@ -76,7 +76,7 @@ bcrypt hash is made either way.
 `POST /api/v2/recover_password` only mails a reset link: **the password stays what it is until the link is used**, so asking for one
 locks nobody out. Using a reset link sets the password, proves the address and empties the slot. It does not close the sessions
 that are open nor touch the TOTP: a mail tells the owner that the password changed, and they can close the other sessions from the
-account page. `POST /api/v2/recover_password` sleeps 1 to 5 s on purpose (so that its timing does not tell whether the address has an
+settings page. `POST /api/v2/recover_password` sleeps 1 to 5 s on purpose (so that its timing does not tell whether the address has an
 account) and holds a worker meanwhile: rate-limit it at the edge.
 
 **Account settings.** `POST /api/v2/account` changes every setting. Three of them hand the account or its cycles over, and want the

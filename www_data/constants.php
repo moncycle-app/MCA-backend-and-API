@@ -166,7 +166,7 @@ const NFP_METHOD_SYMPTOTHERMIC_FR = "symptothermic_fr";
 const NFP_METHODS_NATIVE = [NFP_METHOD_CERVICAL_MUCUS, NFP_METHOD_FERTILITY_CARE];
 const NFP_METHODS_KNOWN = [NFP_METHOD_CERVICAL_MUCUS, NFP_METHOD_FERTILITY_CARE, NFP_METHOD_SYMPTOTHERMIC_FR];
 
-// user_account.nfp_method: id => [the method, temperature tracked]. Read by lib/user_account.php only; js/account.js carries a copy.
+// user_account.nfp_method: id => [the method, temperature tracked]. Read by lib/user_account.php only; js/tableau.js carries a copy.
 const NFP_METHOD_BY_ID = [
 	1 => [NFP_METHOD_CERVICAL_MUCUS, true],
 	2 => [NFP_METHOD_CERVICAL_MUCUS, false],
