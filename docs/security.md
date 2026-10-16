@@ -59,7 +59,7 @@ used at `POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "reset
 
 - The link is a page of the app with the purpose and the token in its **fragment** (`APP_URL` + `verify_email#purpose=...&t=...`).
   A fragment reaches no server, log or `Referer`, and a mail scanner that only fetches the link runs no script, so it uses nothing up.
-- The token is 32 random bytes; the database keeps its SHA-256 only, with what it is for, when it dies (3 days to verify, 1 hour to
+- The token is 32 random bytes; the database keeps its SHA-256 only, with what it is for, when it dies (3 days to verify, 5 hours to
   choose a password, 1 day to change the address) and, for a change of address, the address it leads to.
 - **An account has one slot.** A new link replaces the one before it, whatever that one was for. A link is single use and checked
   against its purpose: the link of one action does not do another.

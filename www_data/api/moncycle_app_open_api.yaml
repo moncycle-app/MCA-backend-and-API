@@ -929,7 +929,7 @@ paths:
           `POST /account` that changes `loginEmail`) replaces the one before it, whatever that one was for.
         - A link is **single use** and checked against its purpose: the link of one action cannot do
           another (`invalid_token`).
-        - It lives 3 days (`accountCreation`), 1 hour (`resetPassword`) or 1 day (`changeEmail`), then
+        - It lives 3 days (`accountCreation`), 5 hours (`resetPassword`) or 1 day (`changeEmail`), then
           answers `token_expired`.
 
         ### What each purpose does
@@ -1306,7 +1306,7 @@ paths:
         So your client cannot know whether a mail was really sent. Show a neutral message, for
         example: *"If an account exists for this address, a link to choose a new password has been sent."*
 
-        The link lives 1 hour and works once. **An account has one slot for the link it is waiting
+        The link lives 5 hours and works once. **An account has one slot for the link it is waiting
         for** (a verification, a reset, a change of address): this call replaces whatever was there,
         so it also cancels a change of address that was waiting. It proves the address as well: it
         works for an account whose address was never verified.

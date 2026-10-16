@@ -53,8 +53,9 @@ function mail_send(string $kind, array $to, string $subject, string $html, strin
 	}
 }
 
-// The frame of every mail but the cycle's: the greeting, the content, the sign-off, and why it was sent.
-function mail_html(string $greeting, string $content, string $why): string {
+// The frame of every mail but the cycle's: the greeting, the content, the sign-off, an optional $ps (HTML) right after it, and why it was sent.
+function mail_html(string $greeting, string $content, string $why, string $ps = ""): string {
+	if ($ps !== "") $ps = "<p style=\"font-size:.85em\">{$ps}</p>";
 	return <<<HTML
 	<div style='font-family: sans-serif;'>{$greeting}<br />
 	<br />
@@ -62,7 +63,7 @@ function mail_html(string $greeting, string $content, string $why): string {
 	À bientôt,<br />
 	<br />
 	<a href='https://www.moncycle.app' style='color: unset; text-decoration:none'>mon<span style='color: #1e824c;font-weight:bold'>cycle</span>.app</a><br />
-	<br />
+	{$ps}<br />
 	<p style="color:gray;font-size:.85em;font-style: italic;">Merci d'utiliser MONCYCLE.APP! Ce mail a été envoyé automatiquement, merci de ne pas y répondre. {$why}</p><br />
 	</div>
 	HTML;
@@ -78,6 +79,13 @@ function mail_recipients(array $account): array {
 // $because completes "Vous le recevez car ...".
 function mail_why(string $because = "vous possédez un compte sur MONCYCLE.APP"): string {
 	return "Vous le recevez car $because. La réception d'emails est nécessaire au bon fonctionnement de l'application. Si vous ne souhaitez plus recevoir d'emails de notre part, merci de ne plus utiliser MONCYCLE.APP.";
+}
+
+// Short moment for a subject: "16/10 14:32". Every subject is short and carries a detail of its own (this moment, or what the mail is
+// about: a token prefix, an erasure date), so that two mails of a kind never share one and a mailbox does not stack them. It holds no
+// address and no text of a user: a subject crosses servers in clear.
+function mail_when(): string {
+	return date("d/m H:i");
 }
 
 // A page of the app with the address filled in.
@@ -98,6 +106,12 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 	$url = rtrim(APP_URL, "/") . "/verify_email#purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
 	$shown = htmlspecialchars($url);
 	$link = "<a style='color: #1e824c; word-break: break-all' href='{$shown}'>{$shown}</a>";
+	$label = match ($kind) {
+		"verify_email" => "💃🕺 Confirmer mon adresse !",
+		"account_exists", "reset_password" => "🔑 Choisir un nouveau mot de passe",
+		"confirm_email" => "📬 Confirmer la nouvelle adresse",
+	};
+	$button = "<a href='{$shown}' style='display:inline-block;padding:12px 22px;border-radius:8px;background:#1e824c;color:#ffffff;font-weight:bold;text-decoration:none'>{$label}</a>";
 	$minutes = EMAIL_TOKEN_LIFETIME_MINUTES[$purpose];
 	$lifetime = match (true) {
 		$minutes % 1440 === 0 => ($minutes / 1440) . ($minutes > 1440 ? " jours" : " jour"),
@@ -106,13 +120,15 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 	};
 	$name = htmlspecialchars($name);
 	$days = ACCOUNT_UNVERIFIED_DELETE_DAYS;
+	$ps = "PS: si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur:<br />{$link}";
 
 	[$subject, $greeting, $content, $why, $text] = match ($kind) {
-		"verify_email" => ['Confirmez votre adresse e-mail', "Bonjour {$name},", <<<HTML
+		"verify_email" => ['Confirmez votre adresse (' . mail_when() . ')', "Bonjour {$name},", <<<HTML
 			Bienvenue sur MONCYCLE.APP!<br />
 			<br />
-			Pour activer votre compte, confirmez votre adresse e-mail en ouvrant ce lien:<br />
-			{$link}<br />
+			Pour activer votre compte, confirmez votre adresse e-mail:<br />
+			<br />
+			{$button}<br />
 			<br />
 			Ce lien est valable {$lifetime}. Sans confirmation, le compte est supprimé au bout de {$days} jours.<br />
 			<br />
@@ -120,36 +136,39 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 			<br />
 			HTML, mail_why("un compte a été créé sur MONCYCLE.APP avec cette adresse"),
 			"Bienvenue sur MONCYCLE.APP!\n\nPour activer votre compte, confirmez votre adresse e-mail en ouvrant ce lien:\n"],
-		"account_exists" => ['Vous avez déjà un compte', "Bonjour {$name},", <<<HTML
+		"account_exists" => ['Vous avez déjà un compte (' . mail_when() . ')', "Bonjour {$name},", <<<HTML
 			Quelqu'un vient de demander la création d'un compte avec cette adresse, mais vous en avez déjà un.<br />
 			<br />
-			Si c'est vous et que vous avez perdu votre mot de passe, vous pouvez en choisir un nouveau en ouvrant ce lien (valable {$lifetime}):<br />
-			{$link}<br />
+			Si c'est vous et que vous avez perdu votre mot de passe, vous pouvez en choisir un nouveau (lien valable {$lifetime}):<br />
+			<br />
+			{$button}<br />
 			<br />
 			Sinon, ignorez ce message: votre compte et votre mot de passe n'ont pas changé.<br />
 			<br />
 			HTML, mail_why(), "Vous avez déjà un compte sur MONCYCLE.APP.\n\nPour choisir un nouveau mot de passe, ouvrez ce lien:\n"],
-		"reset_password" => ['Choisissez un nouveau mot de passe', "Bonjour {$name},", <<<HTML
-			Vous avez demandé à changer votre mot de passe. Pour en choisir un nouveau, ouvrez ce lien:<br />
-			{$link}<br />
+		"reset_password" => ['Nouveau mot de passe (' . mail_when() . ')', "Bonjour {$name},", <<<HTML
+			Vous avez demandé à changer votre mot de passe. Pour en choisir un nouveau, cliquez ici:<br />
+			<br />
+			{$button}<br />
 			<br />
 			Ce lien est valable {$lifetime} et ne peut servir qu'une fois.<br />
 			<br />
 			Si ce n'est pas vous, ignorez ce message: votre mot de passe n'a pas changé.<br />
 			<br />
 			HTML, mail_why(), "Pour choisir un nouveau mot de passe, ouvrez ce lien:\n"],
-		"confirm_email" => ['Confirmez votre nouvelle adresse e-mail', "Bonjour,", <<<HTML
+		"confirm_email" => ['Confirmez la nouvelle adresse (' . mail_when() . ')', "Bonjour,", <<<HTML
 			Le compte de {$name} sur MONCYCLE.APP va utiliser cette adresse pour se connecter et recevoir ses cycles.<br />
 			<br />
-			Pour le confirmer, ouvrez ce lien (valable {$lifetime}):<br />
-			{$link}<br />
+			Pour le confirmer (lien valable {$lifetime}):<br />
+			<br />
+			{$button}<br />
 			<br />
 			Sinon, ignorez ce message: rien ne sera changé.<br />
 			<br />
 			HTML, mail_why("quelqu'un a demandé à utiliser cette adresse pour un compte MONCYCLE.APP"),
 			"Pour confirmer cette adresse comme adresse de connexion de votre compte moncycle.app, ouvrez ce lien:\n"],
 	};
-	return mail_send($kind, [$email], $subject, mail_html($greeting, $content, $why), $text . $url);
+	return mail_send($kind, [$email], $subject, mail_html($greeting, $content, $why, $ps), $text . $url);
 }
 
 // A password replaced by a link: the sessions already open stay open, so this mail is how the owner learns of it.
@@ -162,7 +181,7 @@ function mail_send_password_changed(string $email, string $name): bool {
 	Si ce n'est pas vous, {$login}, changez votre mot de passe depuis la page "👨‍💻 Mon compte" et déconnectez vos autres appareils.<br />
 	<br />
 	HTML;
-	return mail_send('password_changed', [$email], 'Votre mot de passe a changé', mail_html("Bonjour {$name},", $content, mail_why()),
+	return mail_send('password_changed', [$email], 'Mot de passe changé (' . mail_when() . ')', mail_html("Bonjour {$name},", $content, mail_why()),
 		'Le mot de passe de votre compte moncycle.app vient d\'être changé. Si ce n\'est pas vous, changez-le et déconnectez vos autres appareils.');
 }
 
@@ -176,7 +195,7 @@ function mail_send_email_change_requested(string $email, string $new_email, stri
 	Si ce n'est pas vous, demandez un nouveau mot de passe avec « mot de passe perdu » sur la page de connexion: cela annule la demande. Changez ensuite votre mot de passe.<br />
 	<br />
 	HTML;
-	return mail_send('email_change_requested', [$email], 'Changement de votre adresse de connexion demandé', mail_html("Bonjour {$name},", $content, mail_why()),
+	return mail_send('email_change_requested', [$email], 'Changement d\'adresse demandé (' . mail_when() . ')', mail_html("Bonjour {$name},", $content, mail_why()),
 		'Le changement de votre adresse de connexion vers ' . $new_email . ' a été demandé. Si ce n\'est pas vous, utilisez « mot de passe perdu » pour l\'annuler.');
 }
 
@@ -188,7 +207,7 @@ function mail_send_email_change_taken(string $email): bool {
 	Rien n'a été modifié. Si ce n'est pas vous, ignorez ce message.<br />
 	<br />
 	HTML;
-	return mail_send('email_change_taken', [$email], 'Cette adresse est déjà utilisée', mail_html("Bonjour,", $content, mail_why()),
+	return mail_send('email_change_taken', [$email], 'Adresse déjà utilisée (' . mail_when() . ')', mail_html("Bonjour,", $content, mail_why()),
 		'Quelqu\'un a demandé à utiliser cette adresse pour un autre compte, mais elle est déjà celle de votre compte. Rien n\'a changé.');
 }
 
@@ -202,7 +221,7 @@ function mail_send_email_changed(string $email, string $new_email, string $name)
 	Si ce n'est pas vous, quelqu'un d'autre utilise votre compte: contactez-nous depuis <a style='color: #1e824c' href='https://www.moncycle.app'>moncycle.app</a>.<br />
 	<br />
 	HTML;
-	return mail_send('email_changed', [$email], 'L\'adresse de votre compte a changé',
+	return mail_send('email_changed', [$email], 'Adresse de connexion changée (' . mail_when() . ')',
 		mail_html("Bonjour {$name},", $content, mail_why("vous possédiez un compte sur MONCYCLE.APP avec cette adresse")),
 		'L\'adresse de connexion de votre compte moncycle.app est maintenant ' . $new_email . '.');
 }
@@ -220,7 +239,7 @@ function mail_send_notification_emails_changed(string $email, string $new_list):
 	Si ce n'est pas vous, {$login} et changez votre mot de passe depuis la page "👨‍💻 Mon compte".<br />
 	<br />
 	HTML;
-	return mail_send('notification_emails', [$email], 'Les adresses qui reçoivent vos cycles ont changé', mail_html("Bonjour,", $content, mail_why()),
+	return mail_send('notification_emails', [$email], 'Adresses des cycles modifiées (' . mail_when() . ')', mail_html("Bonjour,", $content, mail_why()),
 		$new_list === ""
 			? 'La liste des adresses de votre compte qui reçoivent vos cycles a été vidée.'
 			: 'Les adresses de votre compte qui reçoivent vos cycles, avec votre adresse de connexion, sont maintenant: ' . $listed . '.');
@@ -236,22 +255,24 @@ function mail_send_new_login(array $account, string $name, string $prefix, strin
 	$token_name = htmlspecialchars($name);
 	$token_prefix = htmlspecialchars($prefix);
 	$agent = is_null($user_agent) ? "inconnu" : htmlspecialchars(mb_substr($user_agent, 0, MAIL_USER_AGENT_CHARS));
+	$when = date("d/m/Y à H:i");
 	$access = $scope === "readOnly" ? "lecture seule" : "lecture et écriture";
 	$until = is_null($expires_at) ? "" : "<br />Valable jusqu'au <b>" . gmdate("d/m/Y", strtotime($expires_at . " UTC")) . "</b>";
 	$login = mail_link($email, "auth", "connectez-vous");
 	$content = <<<HTML
 	Une nouvelle connexion à votre compte vient d'avoir lieu.<br />
 	<br />
+	Date: <b>{$when}</b><br />
 	Nom: <b>{$token_name}</b><br />
 	Début du jeton: <b><code>{$token_prefix}</code></b><br />
-	Accès: {$access}{$until}<br />
-	Navigateur ou application: {$agent}<br />
+	Accès: <b>{$access}</b>{$until}<br />
+	Navigateur ou application: <b>{$agent}</b><br />
 	<br />
 	Si c'est vous, il n'y a rien à faire. Sinon, {$login}, changez votre mot de passe depuis la page "👨‍💻 Mon compte" et cochez "Déconnecter tous mes autres appareils": la liste de vos connexions s'y trouve aussi.<br />
 	<br />
 	HTML;
-	return mail_send('new_login', [$email], 'Nouvelle connexion à votre compte', mail_html("Bonjour {$account_name},", $content, mail_why()),
-		"Une nouvelle connexion à votre compte moncycle.app vient d'avoir lieu ($name, début du jeton {$prefix}). Si ce n'est pas vous, changez votre mot de passe.");
+	return mail_send('new_login', [$email], "Nouvelle connexion, jeton {$prefix}", mail_html("Bonjour {$account_name},", $content, mail_why()),
+		"Une nouvelle connexion à votre compte moncycle.app vient d'avoir lieu ($name, le {$when}, début du jeton {$prefix}). Si ce n'est pas vous, changez votre mot de passe.");
 }
 
 function mail_send_reminder(array $account): bool {
@@ -272,7 +293,7 @@ function mail_send_reminder(array $account): bool {
 	</ol>
 	HTML;
 	$why = "Vous le recevez car vous possédez un compte sur MONCYCLE.APP. La réception d'emails est nécessaire au bon fonctionnement de l'application. Si vous ne souhaitez plus recevoir d'emails de notre part, ignorez ce mail, vous n'en recevrez plus d'autre.";
-	return mail_send('reminder', mail_recipients($account), "Comment allez-vous?", mail_html("Bonjour {$name},", $content, $why),
+	return mail_send('reminder', mail_recipients($account), "Comment allez-vous? (" . mail_when() . ")", mail_html("Bonjour {$name},", $content, $why),
 		"Cela fait longtemps que l'on ne vous a pas vu sur moncycle.app, tout va bien?");
 }
 
@@ -295,7 +316,7 @@ function mail_send_deletion_warning(array $account, int $days): bool {
 	<br />
 	HTML;
 	$why = "Vous le recevez car vous possédez un compte inactif sur MONCYCLE.APP; ce mail est nécessaire pour vous informer, conformément au RGPD, de la suppression prochaine de vos données en l'absence d'activité.";
-	return mail_send('deletion_warning', mail_recipients($account), "Votre compte moncycle.app va être supprimé dans $days jours",
+	return mail_send('deletion_warning', mail_recipients($account), "Suppression de votre compte le " . date("d/m/Y", strtotime("+$days days")),
 		mail_html("Bonjour {$name},", $content, $why),
 		"Faute d'activité, votre compte moncycle.app sera supprimé dans $days jours. Connectez-vous pour le conserver.");
 }

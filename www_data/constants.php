@@ -133,7 +133,7 @@ const EMAIL_TOKEN_PURPOSE_NAMES = [
 // purpose => how long the link lives, in minutes: a reset hands the account over, a verification may be read days later.
 const EMAIL_TOKEN_LIFETIME_MINUTES = [
 	EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION => 3 * 24 * 60,
-	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => 60,
+	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => 5 * 60,
 	EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL => 24 * 60,
 ];
 // An account whose address was never verified is erased by the cron after this many days (the address is free again).
