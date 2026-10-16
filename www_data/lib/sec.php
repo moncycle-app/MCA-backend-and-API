@@ -29,10 +29,27 @@ function sec_hash(string $password): string {
 
 // The problem of a password a client chooses, as an issue of its field, or null. The message never holds the password.
 function sec_password_issue(string $password, string $field): ?array {
-	if (strlen($password) < PASSWORD_MIN_LENGTH) return input_issue($field, "password_too_short", "'$field' is too short: the minimum is " . PASSWORD_MIN_LENGTH . " characters.");
 	if (strlen($password) > PASSWORD_MAX_BYTES) return input_issue($field, "password_too_long", "'$field' is too long: the maximum is " . PASSWORD_MAX_BYTES . " bytes.");
 	if (str_contains($password, "\0")) return input_issue($field, "password_invalid", "'$field' must not contain a null character.");
+	if (!sec_password_matches_policy($password)) return input_issue($field, "password_too_weak", "'$field' does not meet the password policy (GET /api/v2/server_info, passwordPolicyRegex).");
 	return null;
+}
+
+// The regex in force: the operator's PASSWORD_POLICY_REGEX, or the default when it is empty or is not a valid regex (a typo in the
+// settings must not lock every sign-up out, nor let every password through).
+function sec_password_policy_regex(): string {
+	$set = PASSWORD_POLICY_REGEX;
+	if ($set === "" || @preg_match(sec_password_policy_pattern($set), "") === false) return PASSWORD_POLICY_REGEX_DEFAULT;
+	return $set;
+}
+
+// The regex as a PCRE pattern: the delimiter is a control character no setting holds, and /u reads the password as UTF-8.
+function sec_password_policy_pattern(string $regex): string {
+	return "\x01" . $regex . "\x01u";
+}
+
+function sec_password_matches_policy(string $password): bool {
+	return preg_match(sec_password_policy_pattern(sec_password_policy_regex()), $password) === 1;
 }
 
 function sec_exit_if_logged_out(?array $user_account): void {

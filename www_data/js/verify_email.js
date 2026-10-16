@@ -13,6 +13,11 @@
 // is what is sent to POST /api/v2/verify_email.
 
 $(document).ready(function(){
+	// the password policy is a setting of the server (PASSWORD_POLICY_REGEX, told by server_info); the server checks it again
+	$.get("api/v2/server_info").done(function(ret) {
+		const policy = ((ret || {}).data || {}).passwordPolicyRegex;
+		if (policy) $("#i_new_password, #i_new_password_conf").attr("pattern", policy);
+	});
 	const pages = {
 		accountCreation: {
 			title: "Confirmer votre adresse e-mail",
@@ -88,7 +93,7 @@ $(document).ready(function(){
 				rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
 				email_taken: "Cette adresse est déjà utilisée par un autre compte.",
 				missing_field: "Données manquantes.",
-				password_too_short: "Le mot de passe est trop court (10 caractères au moins).",
+				password_too_weak: "Le mot de passe ne respecte pas la règle des mots de passe.",
 				password_too_long: "Le mot de passe est trop long (72 octets au plus).",
 				password_invalid: "Le mot de passe contient un caractère interdit."
 			};

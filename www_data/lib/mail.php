@@ -178,7 +178,7 @@ function mail_send_password_changed(string $email, string $name): bool {
 	$content = <<<HTML
 	Le mot de passe de votre compte vient d'être changé.<br />
 	<br />
-	Si ce n'est pas vous, {$login}, changez votre mot de passe depuis la page "👨‍💻 Mon compte" et déconnectez vos autres appareils.<br />
+	Si ce n'est pas vous, {$login}, changez votre mot de passe depuis la page "⚙️ Réglages" et déconnectez vos autres appareils.<br />
 	<br />
 	HTML;
 	return mail_send('password_changed', [$email], 'Mot de passe changé (' . mail_when() . ')', mail_html("Bonjour {$name},", $content, mail_why()),
@@ -236,7 +236,7 @@ function mail_send_notification_emails_changed(string $email, string $new_list):
 	$login = mail_link($email, "auth", "connectez-vous");
 	$content = <<<HTML
 	{$what}<br />
-	Si ce n'est pas vous, {$login} et changez votre mot de passe depuis la page "👨‍💻 Mon compte".<br />
+	Si ce n'est pas vous, {$login} et changez votre mot de passe depuis la page "⚙️ Réglages".<br />
 	<br />
 	HTML;
 	return mail_send('notification_emails', [$email], 'Adresses des cycles modifiées (' . mail_when() . ')', mail_html("Bonjour,", $content, mail_why()),
@@ -268,7 +268,7 @@ function mail_send_new_login(array $account, string $name, string $prefix, strin
 	Accès: <b>{$access}</b>{$until}<br />
 	Navigateur ou application: <b>{$agent}</b><br />
 	<br />
-	Si c'est vous, il n'y a rien à faire. Sinon, {$login}, changez votre mot de passe depuis la page "👨‍💻 Mon compte" et cochez "Déconnecter tous mes autres appareils": la liste de vos connexions s'y trouve aussi.<br />
+	Si c'est vous, il n'y a rien à faire. Sinon, {$login}, changez votre mot de passe depuis la page "⚙️ Réglages" et cochez "Déconnecter tous mes autres appareils": la liste de vos connexions s'y trouve aussi.<br />
 	<br />
 	HTML;
 	return mail_send('new_login', [$email], "Nouvelle connexion, jeton {$prefix}", mail_html("Bonjour {$account_name},", $content, mail_why()),
@@ -331,7 +331,7 @@ function mail_cycle_words(): array {
 	return [
 		"pdf" => "Le graphique de votre cycle, à partager avec votre moniteur ou votre instructrice.",
 		"csv" => "Vos observations jour par jour, à ouvrir dans LibreOffice ou Microsoft Excel pour une analyse plus détaillée.",
-		"nfp" => "Le fichier NFP contient toutes les données de ce cycle dans un format d’échange : conservez-le comme sauvegarde, vous pourrez le réimporter dans moncycle.app depuis « Mon compte », section « Importer mes données ». Il est également compatible avec d’autres applications si vous souhaitez migrer vos données.",
+		"nfp" => "Le fichier NFP contient toutes les données de ce cycle dans un format d’échange : conservez-le comme sauvegarde, vous pourrez le réimporter dans moncycle.app depuis « ⚙️ Réglages », section « Importer un fichier NFP ». Il est également compatible avec d’autres applications si vous souhaitez migrer vos données.",
 		"opt_out" => "Cet envoi est automatique. Vous pouvez le désactiver à tout moment : ouvrez « Réglages », section « Cycles par e-mail », puis décochez « Recevoir chaque cycle par e-mail ».",
 	];
 }

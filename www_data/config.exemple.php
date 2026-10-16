@@ -72,6 +72,11 @@ define("NEWS_URL", "https://www.moncycle.app/actu.html");
 // GET /api/v2/server_info tells it to every client. Empty: no page to show or link (the box stays required).
 define("TERMS_OF_SERVICE_URL", "https://www.moncycle.app/ToS/term_of_service_fr.html");
 
+// The password policy: a regex, without delimiters (PCRE, and JavaScript for the `pattern` of a form), that a new password must match. Empty
+// or not a valid regex: the default, PASSWORD_POLICY_REGEX_DEFAULT of constants.php (10 characters at least, a lower case letter, an upper
+// case letter, a digit). The 72-byte limit of bcrypt applies whatever the regex says. GET /api/v2/server_info tells the one in force.
+define("PASSWORD_POLICY_REGEX", PASSWORD_POLICY_REGEX_DEFAULT);
+
 // Login brute-force defense. A value of 0 turns the feature it sets off.
 // Failed attempts on an account older than this many minutes restart at 1 (0: they are not
 // counted at all, so there is no captcha and no lockout); db_update_login_failure() binds it too.

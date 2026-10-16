@@ -26,6 +26,8 @@ else {
 		// the terms of service are a page of the server's choice (TERMS_OF_SERVICE_URL, told by server_info): shown here in a frame, and in a tab of
 		// their own from the link below it. None told: no frame and no link, the box stays.
 		$.ajax({type : "GET", url : "api/v2/server_info", dataType : "json"}).done(function(ret) {
+			const policy = ((ret || {}).data || {}).passwordPolicyRegex;
+			if (policy) $("#i_password, #i_password_conf").attr("pattern", policy);
 			const url = ((ret || {}).data || {}).termsOfServiceUrl;
 			if (!/^https:\/\//i.test(url || "")) return;
 			$("#f_terms").attr("src", url).prop("hidden", false);
@@ -94,7 +96,7 @@ else {
 					captcha_unavailable: "Le captcha est indisponible pour le moment, réessayez plus tard.",
 					rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
 					password: "Le mot de passe est invalide.",
-					password_too_short: "Le mot de passe est trop court (10 caractères au moins).",
+					password_too_weak: "Le mot de passe ne respecte pas la règle des mots de passe.",
 					password_too_long: "Le mot de passe est trop long (72 octets au plus).",
 					password_invalid: "Le mot de passe contient un caractère interdit.",
 					birthYear: "La date de naissance n'est pas réaliste.",

@@ -208,7 +208,7 @@ const settings_text = {
 		invalid_email : "l’adresse e-mail n’est pas valide",
 		email_unchanged : "c’est déjà l’adresse de connexion de votre compte",
 		"notificationEmails" : "les adresses doivent être valides, séparées par « ; », 5 au plus",
-		password_too_short : "le nouveau mot de passe est trop court (10 caractères au moins)",
+		password_too_weak : "le nouveau mot de passe ne respecte pas la règle des mots de passe (voir l'indication sous le champ)",
 		password_too_long : "le nouveau mot de passe est trop long (72 octets au plus)",
 		password_invalid : "le nouveau mot de passe contient un caractère interdit",
 		password_unchanged : "le nouveau mot de passe est identique à l’ancien",
@@ -1365,6 +1365,7 @@ function settings_load_server_info() {
 	$.get("api/v2/server_info").done(function (ret) {
 		const info = (ret || {}).data || {};
 		$("#tech_info_ver").text(info.appVersion ?? "?");
+		if (info.passwordPolicyRegex) $("#i_pw1, #i_pw2").attr("pattern", info.passwordPolicyRegex);
 		if (!/^https:\/\//i.test(info.termsOfServiceUrl || "")) return;
 		$("#a_terms").attr("href", info.termsOfServiceUrl);
 		$("#terms_about").prop("hidden", false);

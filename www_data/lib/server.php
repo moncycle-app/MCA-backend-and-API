@@ -13,6 +13,7 @@ declare(strict_types=1);
 // the app (APP_VERSION) is also the schema's: the row `schema_version` of key_value must say it. The contract's version is the v2 of the URL.
 
 require_once __DIR__ . "/sec_captcha.php";
+require_once __DIR__ . "/sec.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/upgrade.php";
@@ -38,9 +39,9 @@ function server_info(): array {
 		"demoEnabled" => DEMO_ENABLED,
 		"captchaAvailable" => sec_captcha_ready(),
 		"newsUrl" => str_starts_with(NEWS_URL, "https://") ? NEWS_URL : null,
+		"passwordPolicyRegex" => sec_password_policy_regex(),
 		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
 		"limits" => [
-			"passwordMinBytes" => PASSWORD_MIN_LENGTH,
 			"passwordMaxBytes" => PASSWORD_MAX_BYTES,
 			"accountNicknameMaxChars" => ACCOUNT_LIMIT_NICKNAME_CHARS,
 			"registerCommentMaxChars" => ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS,

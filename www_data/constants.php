@@ -43,7 +43,10 @@ const COOKIE_AUTH_TOKEN = "MONCYCLEAPP_TOKEN";
 // The values the COOKIE_SAMESITE setting takes (the attribute is these with a capital: Strict, Lax, None).
 const COOKIE_SAMESITE_VALUES = ["strict", "lax", "none"];
 
-const PASSWORD_MIN_LENGTH = 10;
+// The default password policy: 10 characters at least, one lower case letter, one upper case letter, one digit. A regex WITHOUT
+// delimiters, written to mean the same in PCRE and in JavaScript (a client puts it in a `pattern` attribute); the operator's
+// PASSWORD_POLICY_REGEX replaces it. GET /api/v2/server_info tells the one in force.
+const PASSWORD_POLICY_REGEX_DEFAULT = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$';
 // bcrypt reads 72 bytes and silently drops the rest: a longer password is refused rather than half kept.
 const PASSWORD_MAX_BYTES = 72;
 // The hash of a password nobody knows, at the cost of password_hash(): a sign-in for an address with no account is checked against it,
@@ -220,7 +223,7 @@ const INPUT_ISSUE_CODES = [
 	"date_mismatch",        // the date of the body is not the one of the URL
 	"body_not_allowed",     // a body on a request that takes none
 	"password_required",    // the current password is needed for this change
-	"password_too_short",
+	"password_too_weak",    // the password does not match the policy (PASSWORD_POLICY_REGEX)
 	"password_too_long",
 	"password_invalid",
 	"password_unchanged",

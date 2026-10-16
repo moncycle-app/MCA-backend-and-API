@@ -720,9 +720,8 @@ paths:
                   example: marie@example.org
                 password:
                   type: string
-                  minLength: 10
                   description: |-
-                    The password the user chose: 10 characters at least, **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character. It is stored hashed. It is ignored when the address already has an account.
+                    The password the user chose, matching the server's password policy (`passwordPolicyRegex` of `server_info`; by default 10 characters at least, a lower case letter, an upper case letter and a digit), **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character. It is stored hashed. It is ignored when the address already has an account.
                   example: a long passphrase
                 birthYear:
                   type: integer
@@ -4000,7 +3999,7 @@ components:
         code:
           type: string
           description: A stable slug to branch on.
-          enum: [unknown_field, read_only_field, missing_field, wrong_type, invalid_value, out_of_range, too_long, too_many, invalid_date, invalid_timestamp, invalid_email, date_mismatch, body_not_allowed, password_required, password_too_short, password_too_long, password_invalid, password_unchanged, email_unchanged, invalid_range, terms_not_accepted]
+          enum: [unknown_field, read_only_field, missing_field, wrong_type, invalid_value, out_of_range, too_long, too_many, invalid_date, invalid_timestamp, invalid_email, date_mismatch, body_not_allowed, password_required, password_too_weak, password_too_long, password_invalid, password_unchanged, email_unchanged, invalid_range, terms_not_accepted]
           example: invalid_value
         message:
           type: string
@@ -4070,13 +4069,14 @@ components:
             `POST /register` requires `termsAccepted: true`. A client that signs people up shows this page (or links to it) beside the box to
             tick. `null` when the instance has no page, and for any value that is not an https URL.
           example: https://www.moncycle.app/ToS/term_of_service_fr.html
+        passwordPolicyRegex:
+          type: string
+          description: The regex (no delimiters; PCRE and JavaScript syntax) a new password must match, else `400` with the issue `password_too_weak`. The default asks for 10 characters at least, a lower case letter, an upper case letter and a digit; the operator can replace it (`PASSWORD_POLICY_REGEX`). A form can put it in a `pattern`.
+          example: '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$'
         limits:
           type: object
           description: The numbers a form can check before it sends anything.
           properties:
-            passwordMinBytes:
-              type: integer
-              example: 10
             passwordMaxBytes:
               type: integer
               example: 72
@@ -4180,8 +4180,7 @@ components:
         newPassword:
           type: string
           format: password
-          minLength: 10
-          description: The new password. 10 characters at least, **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character, different from the current one. Needs `password`.
+          description: The new password. It must match the server's password policy (`passwordPolicyRegex` of `server_info`; by default 10 characters at least, a lower case letter, an upper case letter and a digit), **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character, different from the current one. Needs `password`.
         logoutOtherDevices:
           type: boolean
           default: false
