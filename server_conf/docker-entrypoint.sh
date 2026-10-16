@@ -8,6 +8,7 @@
 #   3b. makes the ServerName of Apache from the host of APP_URL (APP_SERVER_NAME),
 #   4. starts the schedulers (supercronic) unless CRON_ENABLED is off: one for the daily job (server_conf/moncycle.crontab)
 #      and, when DEMO_ENABLED is on, one for the hourly reset of the demo accounts (server_conf/moncycle-demo.crontab),
+#   5. prints the moncycle.app banner,
 # then hands over to the php image's own entrypoint. Any other command (`docker run <image> php ...`) is run as it is.
 set -eu
 
@@ -85,6 +86,17 @@ if [ "${1:-}" = "apache2-foreground" ]; then
 			esac
 			;;
 	esac
+
+	# the banner of every start, last thing in `docker logs` before Apache's own lines
+	cat <<'BANNER'
+                                       _
+ _ __ ___   ___  _ __   ___ _   _  ___| | ___   __ _ _ __  _ __
+| '_ ` _ \ / _ \| '_ \ / __| | | |/ __| |/ _ \ / _` | '_ \| '_ \
+| | | | | | (_) | | | | (__| |_| | (__| |  __/| (_| | |_) | |_) |
+|_| |_| |_|\___/|_| |_|\___|\__, |\___|_|\___(_)__,_| .__/| .__/
+                            |___/                   |_|   |_|
+
+BANNER
 fi
 
 exec docker-php-entrypoint "$@"
