@@ -547,13 +547,15 @@ moncycle_app = {
 	},
 	// The write of a day was taken by the server.
 	day_sent : function (detail) {
-		if (detail.date != moncycle_app.menu_opened_date || moncycle_store.pending[detail.date]) return;
+		if (moncycle_app.menu_opened_date === null || moncycle_store.pending[moncycle_app.menu_opened_date]) return;
+		// the bulk form saves the days before the open one: nothing of the open day is waiting once the queue is empty
+		if (detail.date != moncycle_app.menu_opened_date && Object.keys(moncycle_store.pending).length > 0) return;
 		$("#jour_form_saving").hide();
 		$("#jour_form_unsent").hide();
 		$("#jour_form_saved").show();
 	},
 	day_failed : function (detail) {
-		if (detail.date != moncycle_app.menu_opened_date) return;
+		if (detail.date != moncycle_app.menu_opened_date && Object.keys(moncycle_store.pending).length > 0) return;
 		$("#jour_form_saving").hide();
 		$("#jour_form_unsent").hide();
 	},

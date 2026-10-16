@@ -193,7 +193,7 @@ const ACCOUNT_UPDATE_FIELDS = [
 	"nickname", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
 	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
 ];
-const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "totpState"];
+const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "oldestDay", "totpState"];
 
 // The names a day body may use (POST /api/v2/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
 const DAY_INPUT_FIELDS = [

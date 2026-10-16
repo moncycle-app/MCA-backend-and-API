@@ -12,6 +12,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/../../config.php";
 require_once __DIR__ . "/../../lib/api.php";
 require_once __DIR__ . "/../../lib/data.php";
+require_once __DIR__ . "/../../lib/db.php";
 require_once __DIR__ . "/../../lib/input.php";
 require_once __DIR__ . "/../../lib/sec_token.php";
 require_once __DIR__ . "/../../lib/user_account.php";
@@ -51,7 +52,7 @@ if ($path !== []) http_exit_not_found();
 if ($method === "GET") {
 	input_exit_unless_none();
 
-	$account = user_account_to_json($user_account);
+	$account = user_account_to_json($user_account, db_select_day_timeline_oldest_date($db, $user_account["no_user_account"]));
 	// a client that keeps the account sends back the ETag it was given and is told when nothing changed
 	$etag = 'W/"' . md5((string) json_encode($account)) . '"';
 	header("ETag: $etag");

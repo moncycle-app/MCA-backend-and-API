@@ -63,9 +63,11 @@ function nfp_export_day(array $day): array {
 function nfp_export_cycles($db, string $start_date, string $end_date, array $user_account, ?int &$rows_read = null): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$method = user_account_method_name(intval($user_account["nfp_method"]));
-	$cycle_start_date = db_select_cycle($db, $start_date, $no_user_account) ?? $start_date;
+	$cycle_start_date = db_select_cycle($db, $start_date, $no_user_account);
 
-	$rows = db_select_day_timelines_range($db, $cycle_start_date, date_next_day($end_date), $no_user_account);
+	$rows = db_select_day_timelines_range($db, $cycle_start_date ?? $start_date, date_next_day($end_date), $no_user_account);
+	// no cycle starts before the period: it begins at its first day, not at the date asked, or the file opens on a run of empty days
+	if (is_null($cycle_start_date)) $cycle_start_date = $rows[0]["date_obs"] ?? $start_date;
 	$descriptions = data_descriptions_by_day($db, $rows, $no_user_account);
 	$rows = array_column($rows, null, 'date_obs');
 	$rows_read = count($rows);

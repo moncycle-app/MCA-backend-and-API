@@ -502,6 +502,11 @@ function db_select_day_timelines_range($db, string $start_date, ?string $end_dat
 	);
 }
 
+// The date of the account's oldest day, null when it has none.
+function db_select_day_timeline_oldest_date($db, $no_user_account): ?string {
+	return db_value($db, "SELECT MIN(date_obs) FROM day_timeline WHERE no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
+}
+
 // The dates of a range the account has a day on, from the index alone.
 function db_select_day_timeline_dates_frame($db, string $start_date, string $end_date, $no_user_account): array {
 	return db_column($db,

@@ -1641,7 +1641,7 @@ paths:
 
         ### Strict: a wrong request is refused, and told in full
 
-        An **unknown** field, a **read-only** field of `GET /account` (`userId`, `inscriptionDate`, `totpState`) and a
+        An **unknown** field, a **read-only** field of `GET /account` (`userId`, `inscriptionDate`, `oldestDay`, `totpState`) and a
         **wrong value** are all refused with `400 validation_failed`, with every problem in `details.issues`.
         Nothing is silently ignored, and nothing is changed when anything is wrong. See the introduction,
         "Errors that tell the whole story".
@@ -3126,7 +3126,7 @@ components:
     Account:
       type: object
       description: |-
-        The account and its settings, as `GET /account` shows them (and `POST /account` answers). `userId`, `inscriptionDate` and
+        The account and its settings, as `GET /account` shows them (and `POST /account` answers). `userId`, `inscriptionDate`, `oldestDay` and
         `totpState` are read-only: sent in a `POST /account`, they are refused.
       properties:
         userId:
@@ -3161,6 +3161,12 @@ components:
           format: date-time
           description: When the account was created, UTC.
           example: "2024-06-14T09:21:03Z"
+        oldestDay:
+          type: string
+          format: date
+          nullable: true
+          description: The date of the oldest day the account holds, `null` when it holds none. Read-only. An export asked from an earlier date starts there anyway.
+          example: "2023-11-02"
         sponsor:
           type: boolean
           description: Is this account a financial supporter of the project?
@@ -4160,7 +4166,7 @@ components:
       type: object
       description: |-
         Every field is optional. A field that is not in this list is refused (`unknown_field`), and so are the read-only fields
-        of `Account` (`userId`, `inscriptionDate`, `totpState`).
+        of `Account` (`userId`, `inscriptionDate`, `oldestDay`, `totpState`).
       properties:
         nickname:
           type: string

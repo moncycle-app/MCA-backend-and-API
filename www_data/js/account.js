@@ -319,6 +319,12 @@ $(document).ready(function(){
 		if (moncycle_app_usr.research) $("#i_research").prop('checked', true);
 		if (moncycle_app_usr.timelineAscending) $("#i_timeline_asc").prop('checked', true);
 		$("#i_auto_mail_export").prop('checked', !!moncycle_app_usr.autoMailExport);
+		// nothing to export before the first day; with no day at all, nothing to export
+		if (moncycle_app_usr.oldestDay) {
+			$("#i_start_date, #i_end_date").attr("min", moncycle_app_usr.oldestDay);
+			$("#export_oldest_day").text(moncycle_app_usr.oldestDay.split("-").reverse().join("/"));
+			$("#export_oldest").show();
+		}
 		let d = new Date(moncycle_app_usr.inscriptionDate);
 		let m = d.getMonth()+1;
 		let j = d.getDate();

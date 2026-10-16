@@ -307,12 +307,12 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	// the account as it is now: the row the request started from, with what was written
 	$after = array_merge($user_account, $new, ["name_user_account" => $new["name"]]);
 	if (!empty($changed)) $after["last_write_client_UTC"] = $last_write_client_UTC;
-	return ["status" => 200, "data" => user_account_to_json($after), "meta" => $meta];
+	return ["status" => 200, "data" => user_account_to_json($after, db_select_day_timeline_oldest_date($db, $user_account["no_user_account"])), "meta" => $meta];
 }
 
 // The account as a client starts from it ($user_account: the row of sec_token_authenticate()). Nothing secret. The cycles are in the
 // sync, the news banner in GET /api/v2/server_info.
-function user_account_to_json(array $user_account): array {
+function user_account_to_json(array $user_account, ?string $oldest_day): array {
 	$nfp_method = intval($user_account["nfp_method"]);
 	return [
 		"userId" => intval($user_account["no_user_account"]),
@@ -323,6 +323,7 @@ function user_account_to_json(array $user_account): array {
 		"birthYear" => $user_account["age"],
 		"nickname" => $user_account["name_user_account"],
 		"inscriptionDate" => http_iso8601($user_account["inscription_date"]),
+		"oldestDay" => $oldest_day,
 		"sponsor" => boolval($user_account["sponsor"]),
 		"research" => boolval($user_account["research"]),
 		"timelineAscending" => boolval($user_account["timeline_asc"]),
