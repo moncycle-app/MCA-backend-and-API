@@ -203,7 +203,7 @@ info:
 
     ```bash
     curl -s http://localhost:8003/api/v2/server_info
-    # -> 200 {"data":{"app":"moncycle.app","appVersion":15,"maintenanceMode":false,"registrationEnabled":true,"limits":{...},...}}
+    # -> 200 {"data":{"app":"moncycle.app","appVersion":"15","maintenanceMode":false,"registrationEnabled":true,"limits":{...},...}}
     ```
 
     Creating an account needs a captcha, which the server keeps nowhere: `POST /captcha` gives a picture
@@ -544,8 +544,8 @@ paths:
 
         ### The version
 
-        `appVersion` — an integer, the version of the **app** the server runs. It is also the version of the database
-        schema: the server serves nothing from a database at another number. It rises with each release, so a client that
+        `appVersion` — a string, the version of the **app** the server runs (`15`, `15dev`, `15.2`). The digits it starts with are
+        the version of the database schema: the server serves nothing from a database at another number. It rises with each release, so a client that
         finds a different number than last time knows the server was updated (the web app then drops its local copy
         and reloads). It says nothing of the contract, which is the `v2` of the address. It is the only version the
         server tells: not the build, not the commit.
@@ -4038,9 +4038,9 @@ components:
           type: string
           example: moncycle.app
         appVersion:
-          type: integer
-          description: The version of the app the server runs, also the version of its database schema. It rises with each release; the version of the contract is the `v2` of the address.
-          example: 15
+          type: string
+          description: The version of the app the server runs; the digits it starts with are the version of its database schema. It rises with each release; the version of the contract is the `v2` of the address.
+          example: "15"
         maintenanceMode:
           type: boolean
           description: Is the server in maintenance? Every other endpoint then answers `503 maintenance`.

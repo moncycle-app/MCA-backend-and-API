@@ -15,14 +15,16 @@ declare(strict_types=1);
 require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/http.php";
+require_once __DIR__ . "/upgrade.php";
 
-// A 503 when the database is not at APP_VERSION, after the maintenance exit (the migrations run in maintenance).
+// A 503 when the database is not at the schema version of APP_VERSION, after the maintenance exit (the migrations run in maintenance).
 function server_exit_if_schema_mismatch($db): void {
 	$value = db_select_key_value($db, SCHEMA_VERSION_KEY);
 	$version = $value === false || is_null($value) ? null : intval($value);
-	if ($version === APP_VERSION) return;
+	$needed = upgrade_schema_version();
+	if ($version === $needed) return;
 	header('Content-Type: application/json');
-	http_error(503, "schema_mismatch", "The database is not at the version this server needs (it has " . ($version ?? "none") . ", the server needs " . APP_VERSION . "). Run the migrations, then start the server again.");
+	http_error(503, "schema_mismatch", "The database is not at the version this server needs (it has " . ($version ?? "none") . ", the server needs " . $needed . "). Run the migrations, then start the server again.");
 }
 
 // What a client needs before it signs in, from the settings alone: no database, so it answers in maintenance too. The version told is the

@@ -9,11 +9,11 @@
 
 declare(strict_types=1);
 
-// The version of the app, the one number of the release, the database schema and its migrations. The row 'schema_version' of key_value
-// (schema.sql inserts it, every migration sets it) must say this number or nothing is served (503 schema_mismatch). The newest migration is
-// script/migration/v<APP_VERSION - 1>_to_v<APP_VERSION>.*; GET /api/v2/server_info tells it as appVersion. The version of the API
-// contract is the v2 of the URL (api/v2/), not this number.
-const APP_VERSION = 15;
+// The version of the app, a string that starts with the number of the database schema ("15", "15dev", "15.2", "15rc"). The digits it starts
+// with are the schema's version: the row 'schema_version' of key_value (schema.sql inserts it, every migration sets it) must say that integer
+// or nothing is served (503 schema_mismatch); upgrade_schema_version() reads it. The newest migration is script/migration/v<N - 1>_to_v<N>.*;
+// GET /api/v2/server_info tells the whole string as appVersion. The version of the API contract is the v2 of the URL (api/v2/), not this one.
+const APP_VERSION = "15dev";
 
 // The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
 // config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db.php) stay next

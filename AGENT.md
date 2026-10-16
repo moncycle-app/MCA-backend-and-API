@@ -323,7 +323,7 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
   separate `script/demo_reset.php` for the hourly demo reload. `DEMO_ENABLED` (default **false**) gates the sign-in and the sessions
   of accounts 2 and 3 (`sec_account_enabled()`, answering `403 account_disabled` / 401) and that reload.
 - **Every `require_once` is `__DIR__`-based**: a script runs from any directory.
-- **Two versions.** `APP_VERSION` (`constants.php`, first constant of the file) is an integer: the release, the schema this code is written
+- **Two versions.** `APP_VERSION` (`constants.php`, first constant of the file) is a string starting with an integer (`15`, `15dev`): the release, whose leading digits are the schema this code is written
   for, and the row `schema_version` of `key_value` (`schema.sql` inserts it, **every migration ends by setting it**; the three must agree;
   a database that says another number is served nothing: 503 `schema_mismatch`). `GET /api/v2/server_info` tells it as `appVersion`, and
   the NFP export writes it as `sourceAppVersion`. There is no build date, no commit and no `build.json`. Because the number is also

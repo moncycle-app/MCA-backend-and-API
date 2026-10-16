@@ -11,6 +11,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
 
+// The schema version the code is written for: the digits APP_VERSION starts with ("15dev" and "15.2" are 15). A version that does not start
+// with a digit is a mistake of constants.php, not something to serve with.
+function upgrade_schema_version(): int {
+	if (preg_match('/^\d+/', APP_VERSION, $match) !== 1) throw new RuntimeException("APP_VERSION \"" . APP_VERSION . "\" does not start with the schema version number");
+	return intval($match[0]);
+}
+
 // The version the database is at: the row schema_version of key_value, or UPGRADE_UNVERSIONED_VERSION for a v14 database (no row, the table
 // still called cle_valeur). null: no version and not a v14 database, which no migration knows.
 function upgrade_database_version($db): ?int {
@@ -26,7 +33,7 @@ function upgrade_include_runner(string $file): void {
 	require $file;
 }
 
-// Brings the database from its version to APP_VERSION, one migration (script/migration/vN-1_to_vN.php, else .sql) at a time, and checks that
+// Brings the database from its version to the schema version of APP_VERSION, one migration (script/migration/vN-1_to_vN.php, else .sql) at a time, and checks that
 // each one set the version it leads to. Says what it does on the standard output. One instance at a time (a server lock): another waits,
 // then finds the work done. false: nothing more was done, and the reason is printed; a migration that throws leaves the exception to the caller.
 function upgrade_run($db): bool {
@@ -40,16 +47,17 @@ function upgrade_run($db): bool {
 			echo "auto_upgrade: the database has no schema version and is not a v" . UPGRADE_UNVERSIONED_VERSION . " one: nothing here can upgrade it." . PHP_EOL;
 			return false;
 		}
-		echo "auto_upgrade: the code is at version " . APP_VERSION . ", the database at version " . $from . "." . PHP_EOL;
-		if ($from === APP_VERSION) {
+		$target = upgrade_schema_version();
+		echo "auto_upgrade: the code is at version " . APP_VERSION . " (schema " . $target . "), the database at version " . $from . "." . PHP_EOL;
+		if ($from === $target) {
 			echo "auto_upgrade: nothing to upgrade." . PHP_EOL;
 			return true;
 		}
-		if ($from > APP_VERSION) {
+		if ($from > $target) {
 			echo "auto_upgrade: the database is newer than this code (a newer release made it): update the code, a migration never goes back." . PHP_EOL;
 			return false;
 		}
-		for ($to = $from + 1; $to <= APP_VERSION; $to++) {
+		for ($to = $from + 1; $to <= $target; $to++) {
 			$base = __DIR__ . "/../script/migration/v" . ($to - 1) . "_to_v" . $to;
 			echo "auto_upgrade: migrating to version " . $to . " ..." . PHP_EOL;
 			if (is_file($base . ".php")) {

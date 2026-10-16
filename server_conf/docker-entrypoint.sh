@@ -5,6 +5,7 @@
 #       what it does is printed, so `docker logs` shows it,
 #   2. makes the key that signs the captcha challenges when none is given (CAPTCHA_SECRET),
 #   3. makes the frame-src of the CSP from NEWS_URL and TERMS_OF_SERVICE_URL (CSP_FRAME_SRC),
+#   3b. makes the ServerName of Apache from the host of APP_URL (APP_SERVER_NAME),
 #   4. starts the schedulers (supercronic) unless CRON_ENABLED is off: one for the daily job (server_conf/moncycle.crontab)
 #      and, when DEMO_ENABLED is on, one for the hourly reset of the demo accounts (server_conf/moncycle-demo.crontab),
 # then hands over to the php image's own entrypoint. Any other command (`docker run <image> php ...`) is run as it is.
@@ -63,6 +64,13 @@ if [ "${1:-}" = "apache2-foreground" ]; then
 	CSP_FRAME_SRC="${CSP_FRAME_SRC# }"
 	[ -n "$CSP_FRAME_SRC" ] || CSP_FRAME_SRC="'none'"
 	export CSP_FRAME_SRC
+
+	# Apache's ServerName (zz-moncycleapp.conf): the host of APP_URL, read from config.php for its default. Without one Apache guesses
+	# from the container's address and prints AH00558. Not a host name (a typo, no https): localhost, which only silences the warning.
+	app_url=$(as_web_user php -r 'require "/var/www/html/config.php"; echo APP_URL;')
+	APP_SERVER_NAME=$(printf '%s' "$app_url" | sed -nE 's#^https?://([A-Za-z0-9.-]+)(:[0-9]+)?(/.*)?$#\1#p')
+	APP_SERVER_NAME="${APP_SERVER_NAME:-localhost}"
+	export APP_SERVER_NAME
 
 	# the same words as the boolean settings of the app (true/false, on/off, yes/no, 1/0, any case); a typo keeps the
 	# default: on for CRON_ENABLED, off for DEMO_ENABLED. One scheduler per crontab: it reads its file itself, as the web user.
