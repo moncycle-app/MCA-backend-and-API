@@ -169,8 +169,9 @@
 			<section class="panel" id="panel_descriptions" hidden>
 				<a class="back" href="#">‹ Réglages</a>
 				<h2>🧠 Sensations &amp; observations</h2>
-				<p>Ce sont les mots clés que vous cochez dans votre tableau. Touchez-en un pour le renommer, changer son type ou le supprimer. Le nombre à droite est celui des jours qui l'utilisent.</p>
+				<p>Ce sont les mots clés que vous cochez dans votre tableau. Touchez-en un pour le renommer, changer son type, le fusionner dans un autre ou le supprimer. Le nombre à droite est celui des jours qui l'utilisent.</p>
 
+				<p class="desc_unknown_note label_info" hidden></p>
 				<div id="desc_froms_container"><center>⏳</center></div>
 				<p class="form_msg" id="desc_msg" role="status"></p>
 
@@ -187,7 +188,7 @@
 
 				<details class="help">
 					<summary>Que font les boutons d'un mot clé ?</summary>
-					<p>Le bouton <b>💬</b> déplace le mot clé dans le commentaire de chaque jour qui l'utilise, puis le supprime (action définitive). Le bouton <b>❌</b> le supprime sans rien copier.</p>
+					<p>Le bouton <b>💬</b> déplace le mot clé dans le commentaire de chaque jour qui l'utilise, puis le supprime (action définitive). Le bouton <b>❌</b> le supprime sans rien copier. Le menu <b>🔀</b> remplace le mot clé par un autre sur chaque jour qui l'utilise, puis le supprime (action définitive).</p>
 				</details>
 			</section>
 
@@ -234,6 +235,7 @@
 
 				<h3>Exporter mes observations</h3>
 				<p class="label_info">Tout ou partie de vos observations, plusieurs cycles dans un même fichier.</p>
+				<p class="desc_unknown_note label_info" hidden></p>
 				<form method="get" action="api/v2/export" id="f_export_complexe">
 					<div class="field_row">
 						<div class="field">
@@ -517,6 +519,14 @@
 					<dt>Date d'inscription</dt><dd id="tech_info_insc"></dd>
 					<dt>Version de l'application</dt><dd id="tech_info_ver"></dd>
 				</dl>
+
+				<h3>Dépannage</h3>
+				<p class="label_info">Une information semble absente ou périmée sur cet appareil ?</p>
+				<div class="buttons">
+					<button type="button" id="but_local_sync">🔄 Forcer la synchronisation</button>
+					<button type="button" id="but_local_reset">🧹 Vider les données locales</button>
+				</div>
+				<p class="form_msg" id="local_msg" role="status"></p>
 			</section>
 
 

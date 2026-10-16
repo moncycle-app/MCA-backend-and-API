@@ -63,6 +63,7 @@ const moncycle_app_text = {
 		return `Cycle du ${moncycle_app_text.date_short(start)}. <span class='cycle_fin'>au ${moncycle_app_text.date_short(end)}. </span> de <span class='nb_jours'>${nb}</span> jours`;
 	},
 	but_export_nfp : "🚀 export NFP",
+	unknown_type_note : "⚠️ Des mots clés de ce cycle n’ont pas de type (« à définir »). Dans l’export NFP ils sont écrits dans le commentaire du jour : réimportés, ils ne seront plus des mots clés. Choisissez leur type dans Réglages › Sensations & observations avant d’exporter.",
 	but_export_csv : "&#x1F522; export CSV",
 	but_export_pdf : "&#x1F4C4; export PDF",
 	label_anonymous_export : " anonymiser les exports PDF et NFP",
@@ -843,6 +844,11 @@ moncycle_app = {
 				$(this).attr("href", url.join("?"));
 			});
 		});
+		// a keyword with no type has no field in the NFP format: its days carry it in their comment (nfp_export_day)
+		let has_untyped = Object.keys(moncycle_store.days).some(function (date) {
+			return date >= c_date_str && date <= c_date_fin_str && (moncycle_store.days[date].freeOther || []).length > 0;
+		});
+		if (has_untyped) c_action.append($("<p>", {class: "unknown_type_note"}).text(moncycle_app_text.unknown_type_note));
 		c_action.append("<br />");
 		c_action.append(anonymous_checkbox);
 		c_action.append(`<label for='anonymous_${id_buts}_${discri}' class='label_anonymous_export'>${moncycle_app_text.label_anonymous_export}</label>`);

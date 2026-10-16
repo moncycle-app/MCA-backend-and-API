@@ -491,3 +491,8 @@ a.button {
 	width: auto;
 	font-family: monospace;
 }
+
+/* the notice about keywords with no type: there only while one exists */
+.desc_unknown_note[hidden] {
+	display: none;
+}

@@ -41,6 +41,27 @@ const settings_text = {
 		return `Êtes-vous sûr de vouloir supprimer la description « ${name} » ?\n\nLes jours auxquels ${name} a été associé perdront cette information de manière irréversible. La description « ${name} » est actuellement associée à une date.`;
 	},
 
+	/* --- the local copy ------------------------------------------------------------ */
+	local_reset_confirm : "Vider les données gardées dans ce navigateur ?\n\nVous restez connecté et rien n’est supprimé de votre compte : tout est téléchargé de nouveau. Les changements pas encore envoyés sont conservés.",
+	local_reset_running : "⏳ nettoyage et téléchargement…",
+	local_reset_done : "✅ données locales vidées puis téléchargées de nouveau.",
+	local_sync_running : "⏳ synchronisation…",
+	local_sync_done : "✅ synchronisé.",
+	local_failed : "synchronisation impossible (connexion ?). Réessayez.",
+
+	/* --- a description merged into another ------------------------------------- */
+	desc_merge_placeholder : "🔀 Fusionner dans…",
+	desc_merge_title : "Remplacer cette description par une autre sur tous les jours associés, puis la supprimer (action définitive)",
+	desc_merge_confirm : function (name, target, count) {
+		return `Fusionner « ${name} » dans « ${target} » ?\n\n`
+			+ (count ? `Sur ${count > 1 ? `chacun des ${count} jours` : "le jour"} où « ${name} » figure, « ${target} » le remplacera.` : `Aucun jour n’utilise « ${name} ».`)
+			+ `\nEnsuite « ${name} » sera supprimée.\n\n⚠️ Action définitive, sans retour en arrière.`;
+	},
+	desc_merge_done : function (name, target, count) { return `✅ « ${name} » a été fusionnée dans « ${target} » (${settings_text.count(count, "jour", "jours")}).`; },
+	desc_merge_gone : "Cette description ou la cible n’existe plus.",
+	// shown when a keyword has no type: the NFP export writes it into the comment of its days
+	desc_unknown_note : "⚠️ Les mots clés de type « à définir » ne sont pas reconnus comme sensation ou observation : dans un export NFP ils sont écrits dans le commentaire du jour, et une réimportation les y laissera (ce ne seront plus des mots clés). Choisissez leur type avant d’exporter.",
+
 	/* --- a description moved into the comments of its days ------------------ */
 	desc_comment_button_title : "Déplacer cette description dans le commentaire de tous les jours associés, puis la supprimer (action définitive)",
 	desc_delete_button_title : "Supprimer cette description sans rien copier",
@@ -442,6 +463,7 @@ function settings_show_method_entries() {
 // what a panel loads each time it opens
 const settings_on_open = {
 	descriptions : function () { settings_descriptions_load(); },
+	donnees : function () { settings_descriptions_load(); },
 	appareils : function () { settings_tokens_load(); },
 };
 
@@ -580,6 +602,7 @@ function settings_descriptions_load() {
 	return $.get("api/v2/description").done(function (ret) {
 		settings_descriptions = ret.data.map(settings_desc_from_api);
 		settings_desc_draw();
+		settings_desc_unknown_update();
 	}).fail(function (jqXHR) {
 		settings_say($("#desc_msg"), "error", settings_error(jqXHR));
 	});
@@ -594,10 +617,31 @@ function settings_desc_draw() {
 	settings_descriptions.forEach(function (description) { container.append(settings_desc_row(description)); });
 }
 
+// The notice about keywords with no type shows only while one exists (here, in the list and above the export).
+function settings_desc_unknown_update() {
+	$(".desc_unknown_note").prop("hidden", !settings_descriptions.some(function (known) { return known.type == 0; }));
+}
+
+// The keywords a row can be merged into: every other one, listed again each time the row is touched (others come and go).
+function settings_desc_merge_options(row) {
+	const select = row.find(".desc_merge");
+	if (select.length == 0) return;
+	const id = row.data("id");
+	const wanted = [["", settings_text.desc_merge_placeholder]];
+	settings_descriptions.forEach(function (known) {
+		if (known.id !== id) wanted.push([String(known.id), settings_desc_type_icon[known.type] + " " + known.name]);
+	});
+	// left alone when it is already right: rebuilding a list while it is open drops the choice being made
+	const shown = select.children("option").map(function () { return this.value + "\n" + this.textContent; }).get().join("\n");
+	if (shown == wanted.map(function (one) { return one.join("\n"); }).join("\n")) return;
+	select.empty();
+	wanted.forEach(function (one) { select.append($("<option>", {value: one[0]}).text(one[1])); });
+}
+
 // A keyword is a form: its line (type's emoji, name, count) and, under it while it is the one being edited, its type and its two buttons.
 // Built with the DOM, never as HTML: a name is free text and would break out of value="...".
 function settings_desc_row(description) {
-	const type_select = $("<select>", {name: "type", "aria-label": "Type"}).append(
+	const type_select = $("<select>", {name: "type", class: "desc_type", "aria-label": "Type"}).append(
 		$("<option>", {value: "2", selected: description.type == 2}).text("🧠 Sensation"),
 		$("<option>", {value: "1", selected: description.type == 1}).text("👀 Observation"),
 		$("<option>", {value: "0", selected: description.type == 0, disabled: true}).text("❓ à définir"));
@@ -607,6 +651,7 @@ function settings_desc_row(description) {
 		$("<span>", {class: "desc_count", title: settings_text.desc_count_title}).text(description.use_count));
 	const actions = $("<div>", {class: "desc_actions"}).append(
 		type_select,
+		$("<select>", {class: "desc_merge", name: "merge", title: settings_text.desc_merge_title, "aria-label": settings_text.desc_merge_title}),
 		$("<button>", {type: "submit", name: "action", value: "comment", class: "desc_comment", title: settings_text.desc_comment_button_title, "aria-label": settings_text.desc_comment_button_title}).text("💬"),
 		$("<button>", {type: "submit", name: "action", value: "delete", class: "desc_delete", title: settings_text.desc_delete_button_title, "aria-label": settings_text.desc_delete_button_title}).text("❌"));
 	// the first submit button is the one Enter presses in the name field: it does nothing (the name is saved as it is typed)
@@ -640,6 +685,7 @@ function settings_desc_save(row) {
 		// what the page holds of the keyword follows what was saved (the duplicate check, the emoji)
 		known.name = name;
 		known.type = type;
+		settings_desc_unknown_update();
 		row.find(".desc_icon").text(settings_desc_type_icon[type]).attr("title", settings_text.desc_type_name[type]);
 		settings_sync_later();
 	}).fail(function (jqXHR) {
@@ -661,6 +707,7 @@ function settings_desc_delete(row) {
 	settings_api("DELETE", "api/v2/description/" + encodeURIComponent(id)).done(function () {
 		settings_descriptions = settings_descriptions.filter(function (other) { return other.id !== id; });
 		row.remove();
+		settings_desc_unknown_update();
 		// the row is gone: the line of the list says it
 		settings_say($("#desc_msg"), "ok", settings_text.desc_deleted, true);
 		settings_sync_later();
@@ -729,6 +776,7 @@ async function settings_desc_move_to_comments(row) {
 		try { await moncycle_store.sync(); }
 		catch (e) { /* at the next sync */ }
 		settings_descriptions = settings_descriptions.filter(function (other) { return other.id !== id; });
+		settings_desc_unknown_update();
 		// the row is a message now: what it said is in the comments
 		row.attr("class", "desc_moved").removeAttr("id").removeData("id").empty().append(document.createTextNode(settings_text.desc_comment_moved(description.name, plan)));
 		settings_say($("#desc_msg"), "ok", settings_text.desc_comment_done, true);
@@ -740,8 +788,70 @@ async function settings_desc_move_to_comments(row) {
 	}
 }
 
+// A keyword merged into another: its days take the other (written through the queue of js/store.js like any day), then it is deleted.
+// Same course as the move into the comments; the server sees ordinary writes of days and one delete.
+async function settings_desc_merge(row, target_id) {
+	if (settings_desc_move_run) return;
+	const line = row.find(".form_msg");
+	settings_desc_move_run = {dates: {}, done: 0, refused: [], line: line};
+	const run = settings_desc_move_run;
+	const id = row.data("id");
+	const select = row.find(".desc_merge");
+	select.prop("disabled", true);
+	settings_say(line, "busy", settings_text.desc_comment_syncing);
+	try {
+		try { await moncycle_store.sync(); }
+		catch (e) {
+			settings_say(line, "error", settings_text.desc_comment_sync_failed);
+			return;
+		}
+		settings_say(line, "", "");
+		const source = moncycle_store.descriptions.find(function (known) { return known.id === id; });
+		const target = moncycle_store.descriptions.find(function (known) { return known.id === target_id; });
+		if (!source || !target) return alert(settings_text.desc_merge_gone);
+		if (source.name !== row.find(".desc_name").val()) return alert(settings_text.desc_comment_unsaved);
+		const change = moncycle_store.plan_description_merge(source, target);
+		if (!confirm(settings_text.desc_merge_confirm(source.name, target.name, change.length))) return;
+
+		if (change.length) {
+			change.forEach(function (one) { run.dates[one.date] = true; });
+			settings_say(line, "busy", settings_text.desc_comment_progress(0, change.length));
+			moncycle_store.queue_merge(change, new Date().toISOString().replace(/\.\d+Z$/, "Z"));
+			try { await moncycle_store.flush(); }
+			catch (e) { /* what the server could not take stays in the queue, and is sent again */ }
+			const waiting = change.filter(function (one) { return moncycle_store.pending[one.date]; }).length;
+			const refused = run.refused.length;
+			if (waiting || refused) {
+				settings_say(line, "error", waiting ? settings_text.desc_comment_offline : settings_text.desc_comment_refused(change.length - refused, refused));
+				return;
+			}
+		}
+
+		settings_say(line, "busy", settings_text.desc_comment_deleting);
+		try { await moncycle_store.request("DELETE", "api/v2/description/" + encodeURIComponent(id)); }
+		catch (jqXHR) {
+			console.error(jqXHR);
+			settings_say(line, "error", settings_text.desc_comment_delete_failed);
+			return;
+		}
+		try { await moncycle_store.sync(); }
+		catch (e) { /* at the next sync */ }
+		settings_descriptions = settings_descriptions.filter(function (other) { return other.id !== id; });
+		settings_desc_unknown_update();
+		row.attr("class", "desc_moved").removeAttr("id").removeData("id").empty().append(document.createTextNode(settings_text.desc_merge_done(source.name, target.name, change.length)));
+		settings_say($("#desc_msg"), "ok", settings_text.saved, true);
+		// the counts of the other rows are stale: the list is read again
+		settings_descriptions_load();
+	}
+	finally {
+		settings_desc_move_run = null;
+		select.prop("disabled", false).val("");
+	}
+}
+
 function settings_setup_descriptions() {
 	const container = $("#desc_froms_container");
+	$(".desc_unknown_note").text(settings_text.desc_unknown_note);
 
 	// What acts on a keyword shows under the one being edited, and stays while the focus or the pointer is in that row. Not :focus-within:
 	// a click on a button does not focus it in Safari and Firefox on macOS, and the row would close under the finger.
@@ -749,10 +859,16 @@ function settings_setup_descriptions() {
 		const row = $(event.target).closest(".desc_row");
 		$(".desc_row.desc_active").not(row).removeClass("desc_active");
 		row.addClass("desc_active");
+		// not while the merge list itself is used: a browser aims its events at the <option> clicked, which is inside it
+		if (row.length && $(event.target).closest(".desc_merge").length == 0) settings_desc_merge_options(row);
 	});
 
 	container.on("input", ".desc_name", function () { settings_desc_save($(this).closest(".desc_row")); });
-	container.on("change", ".desc_actions select", function () { settings_desc_save($(this).closest(".desc_row")); });
+	container.on("change", ".desc_type", function () { settings_desc_save($(this).closest(".desc_row")); });
+	container.on("change", ".desc_merge", function () {
+		const target_id = parseInt($(this).val());
+		if (!isNaN(target_id)) settings_desc_merge($(this).closest(".desc_row"), target_id);
+	});
 	container.on("submit", ".desc_row", function (event) {
 		event.preventDefault();
 		const row = $(this);
@@ -1299,6 +1415,7 @@ $(document).ready(function () {
 
 	settings_setup_autosave();
 	settings_setup_descriptions();
+	settings_setup_local_copy();
 	settings_setup_notifications();
 	settings_setup_export();
 	settings_setup_import();
@@ -1318,3 +1435,30 @@ $(document).ready(function () {
 		settings_say($("#page_msg"), "error", settings_text.account_not_loaded + settings_error(jqXHR));
 	});
 });
+
+
+/* ===========================================================================
+** 5f. DÉPANNAGE: the local copy, emptied or synchronised by hand
+** ======================================================================== */
+
+function settings_setup_local_copy() {
+	const line = $("#local_msg");
+	const buttons = $("#but_local_reset, #but_local_sync");
+	const run = function (busy, done, before) {
+		buttons.prop("disabled", true);
+		settings_say(line, "busy", busy);
+		if (before) before();
+		moncycle_store.sync().then(function () {
+			settings_say(line, "ok", done, true);
+		}, function (jqXHR) {
+			// a session that is over has already left the page
+			if (jqXHR && jqXHR.status !== undefined) console.error(jqXHR);
+			settings_say(line, "error", settings_text.local_failed);
+		}).finally(function () { buttons.prop("disabled", false); });
+	};
+	$("#but_local_sync").on("click", function () { run(settings_text.local_sync_running, settings_text.local_sync_done); });
+	$("#but_local_reset").on("click", function () {
+		if (!confirm(settings_text.local_reset_confirm)) return;
+		run(settings_text.local_reset_running, settings_text.local_reset_done, moncycle_store.reset_local);
+	});
+}

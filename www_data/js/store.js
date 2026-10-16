@@ -154,6 +154,18 @@ const moncycle_store = {
 	clear_storage : function () {
 		try { localStorage.clear(); } catch (e) { }
 	},
+	// Empties what this browser holds, except the sign-in marker (`auth`: the pages need it to know a session exists; the session
+	// token itself is an HttpOnly cookie, out of reach of the script) and the unsent changes. The next sync downloads everything again.
+	reset_local : function () {
+		moncycle_store.wipe_data(true);
+		try {
+			Object.keys(localStorage).forEach(function (key) {
+				if (key !== "auth" && !key.startsWith("data_")) localStorage.removeItem(key);
+			});
+		} catch (e) { }
+		// the version stamp was erased: check_version writes it again
+		moncycle_store.checked_version = false;
+	},
 	// The session is over: the copy is personal data, so nothing of it stays in the browser.
 	expire_session : function () {
 		if (moncycle_store.expired) return;
@@ -513,6 +525,32 @@ const moncycle_store = {
 	queue_comments : function (change, last_write_client_utc) {
 		change.forEach(function (one) {
 			let day = Object.assign({}, moncycle_store.days[one.date], {comment : one.comment});
+			moncycle_store.queue_day(moncycle_store.body_of_day(day, last_write_client_utc));
+		});
+	},
+
+	// Merging a description into another: every day that carries `source` carries `target` instead (in the list of the target's type),
+	// the other keywords of the day untouched. Nothing is written. `change` is {date, fields: {listName: [names]}}.
+	plan_description_merge : function (source, target) {
+		let from_field = moncycle_store.description_field[source.type];
+		let to_field = moncycle_store.description_field[target.type];
+		let change = [];
+		Object.keys(moncycle_store.days).sort().forEach(function (date) {
+			let day = moncycle_store.days[date];
+			if (!(day[from_field] || []).includes(source.name)) return;
+			let fields = {};
+			fields[from_field] = day[from_field].filter(function (name) { return name !== source.name; });
+			let to_list = fields[to_field] || (day[to_field] || []).slice();
+			if (!to_list.includes(target.name)) to_list.push(target.name);
+			fields[to_field] = to_list;
+			change.push({date : date, fields : fields});
+		});
+		return change;
+	},
+	// The `change` of a merge plan, written like any write of a day.
+	queue_merge : function (change, last_write_client_utc) {
+		change.forEach(function (one) {
+			let day = Object.assign({}, moncycle_store.days[one.date], one.fields);
 			moncycle_store.queue_day(moncycle_store.body_of_day(day, last_write_client_utc));
 		});
 	},
