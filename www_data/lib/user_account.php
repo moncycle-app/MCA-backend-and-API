@@ -98,7 +98,7 @@ function user_account_notification_emails_parse(mixed $value): ?string {
 
 // A new address gets an account that cannot be used until the address is proved, and the link that proves it. An address that has an
 // account (proved or not) is left exactly as it is, and its owner gets a link to choose a new password: nothing a stranger types reaches
-// an account, and the answer is the same either way. $new: nickname, email, password, birth_year, nfp_method, comment, research.
+// an account, and the answer is the same either way. $new: nickname, email, password, birth_year, nfp_method, comment, research, language.
 // Answers ["captcha" => verdict, "account" => [no_user_account, name, login_email] or null, "token" => for the mail or null,
 // "created" => bool]; the mail is the caller's, once this has committed. The captcha is checked first (a refused one costs no bcrypt),
 // and again under the lock of an existing account: of requests that come together with one captcha, one mail.
@@ -117,7 +117,7 @@ function user_account_register($db, array $new, mixed $captcha_token, mixed $cap
 
 		$registered = db_transaction($db, function () use ($db, $new, $password_hash, $captcha_token, $captcha_answer, $ip, $existing) {
 			if (is_null($existing)) {
-				$no_user_account = db_insert_user_account($db, $new["nickname"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"]);
+				$no_user_account = db_insert_user_account($db, $new["nickname"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"], $new["language"]);
 				if (is_null($no_user_account)) return null;   // taken since the read
 
 				log_context(["uid" => intval($no_user_account)]);
@@ -171,7 +171,7 @@ function user_account_check_settings(array $account, array $body, array &$issues
 	$new = [
 		"name" => $account["name_user_account"], "notification_emails" => $account["notification_emails"], "nfp_method" => $account["nfp_method"],
 		"age" => $account["age"], "sponsor" => $account["sponsor"], "timeline_asc" => $account["timeline_asc"], "research" => $account["research"],
-		"auto_mail_export" => $account["auto_mail_export"],
+		"auto_mail_export" => $account["auto_mail_export"], "language" => $account["language"],
 	];
 	$changed = [];
 
@@ -186,6 +186,9 @@ function user_account_check_settings(array $account, array $body, array &$issues
 
 	$birth_year = user_account_birth_year($body, $issues);
 	if (!is_null($birth_year)) [$new["age"], $changed[]] = [$birth_year, "birthYear"];
+
+	$language = input_choice($body, "language", ACCOUNT_LANGUAGES, $issues, false);
+	if (!is_null($language)) [$new["language"], $changed[]] = [$language, "language"];
 
 	foreach (["timelineAscending" => "timeline_asc", "research" => "research", "sponsor" => "sponsor", "autoMailExport" => "auto_mail_export"] as $json => $column) {
 		$flag = input_bool_field($body, $json, $issues);
@@ -321,6 +324,7 @@ function user_account_to_json(array $user_account, ?string $oldest_day): array {
 		"method" => user_account_method_name($nfp_method),
 		"temperatureTracking" => user_account_tracks_temperature($nfp_method),
 		"birthYear" => $user_account["age"],
+		"language" => $user_account["language"],
 		"nickname" => $user_account["name_user_account"],
 		"inscriptionDate" => http_iso8601($user_account["inscription_date"]),
 		"oldestDay" => $oldest_day,

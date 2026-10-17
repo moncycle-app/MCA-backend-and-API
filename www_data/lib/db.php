@@ -146,11 +146,11 @@ function db_select_user_account_by_email($db, string $email): ?array {
 }
 
 // The new id, null when the address has an account. The terms are accepted now: the sign-up refuses a request that does not accept them.
-function db_insert_user_account($db, $name, $nfp_method, $age, $email, $password_hash, $register_comment, $research): ?string {
+function db_insert_user_account($db, $name, $nfp_method, $age, $email, $password_hash, $register_comment, $research, string $language = ACCOUNT_DEFAULT_LANGUAGE): ?string {
 	return db_unless_duplicate(fn() => db_insert($db,
 		"INSERT INTO user_account (name, nfp_method, age, login_email, password, language, register_comment, research, terms_accepted_at)
 		VALUES (:name, :nfp_method, :age, :login_email, :password, :language, :register_comment, :research, NOW())",
-		["name" => $name, "nfp_method" => $nfp_method, "age" => $age, "login_email" => $email, "password" => $password_hash, "language" => ACCOUNT_DEFAULT_LANGUAGE, "register_comment" => $register_comment, "research" => $research]
+		["name" => $name, "nfp_method" => $nfp_method, "age" => $age, "login_email" => $email, "password" => $password_hash, "language" => $language, "register_comment" => $register_comment, "research" => $research]
 	));
 }
 
@@ -204,11 +204,11 @@ function db_select_user_account_unverified_old($db, int $days): array {
 	);
 }
 
-// $fields: name, notification_emails, nfp_method, age, sponsor, timeline_asc, research, auto_mail_export
+// $fields: name, notification_emails, nfp_method, age, sponsor, timeline_asc, research, auto_mail_export, language
 function db_update_user_account_settings($db, $no_user_account, array $fields, string $last_write_client_UTC): int {
 	return db_exec($db,
 		"UPDATE user_account SET `name` = :name, notification_emails = :notification_emails, nfp_method = :nfp_method, age = :age, sponsor = :sponsor,
-		timeline_asc = :timeline_asc, research = :research, auto_mail_export = :auto_mail_export, last_write_client_UTC = :last_write_client_UTC
+		timeline_asc = :timeline_asc, research = :research, auto_mail_export = :auto_mail_export, `language` = :language, last_write_client_UTC = :last_write_client_UTC
 		WHERE no_user_account = :no_user_account",
 		$fields + ["last_write_client_UTC" => $last_write_client_UTC, "no_user_account" => $no_user_account]
 	);
@@ -251,7 +251,7 @@ function db_select_user_account_auth_token($db, string $auth_token_str): ?array 
 		J.scope AS scope_auth_token, " . db_sql_old_auth_token("J.") . " AS expired_auth_token,
 		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.login_email, C.notification_emails,
 		C.nb_connection_attempts, C.last_failed_attempt, C.sponsor, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
-		C.last_password_change, C.register_comment, C.totp_secret, C.totp_state, C.research, C.timeline_asc, C.auto_mail_export, C.last_write_client_UTC
+		C.last_password_change, C.register_comment, C.totp_secret, C.totp_state, C.research, C.timeline_asc, C.auto_mail_export, C.language, C.last_write_client_UTC
 		FROM auth_token AS J INNER JOIN user_account AS C ON J.no_user_account = C.no_user_account
 		WHERE auth_token_str = :auth_token_str LIMIT 1",
 		["auth_token_str" => $auth_token_str]

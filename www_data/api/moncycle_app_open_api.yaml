@@ -742,6 +742,11 @@ paths:
                   enum: [cervicalMucus, fertilityCare]
                   default: cervicalMucus
                   description: Tracking method. Defaults to `cervicalMucus` when omitted. See introduction, section 7.
+                language:
+                  type: string
+                  enum: [EN, FR, ES, DE, IT, PL, PT]
+                  default: EN
+                  description: "The language of the account, among `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT`. The server only stores it for now (the texts of the app and of the mails are French whatever its value). Defaults to `EN` when omitted."
                 temperatureTracking:
                   type: boolean
                   default: false
@@ -3151,6 +3156,10 @@ components:
           type: integer
           description: Year of birth, approximate, used for anonymous statistics.
           example: 1994
+        language:
+          type: string
+          enum: [EN, FR, ES, DE, IT, PL, PT]
+          description: "The language of the account, among `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT`. The server only stores it for now (the texts of the app and of the mails are French whatever its value)."
         nickname:
           type: string
           description: The user's nickname, their initials for instance (the app does not collect the identity of its users).
@@ -4212,6 +4221,10 @@ components:
           type: integer
           description: Year of birth, for anonymous statistics. The current year or up to 100 years earlier.
           example: 1994
+        language:
+          type: string
+          enum: [EN, FR, ES, DE, IT, PL, PT]
+          description: "The language of the account, among `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT`. The server only stores it for now (the texts of the app and of the mails are French whatever its value)."
         timelineAscending:
           type: boolean
           description: |-
@@ -4243,7 +4256,7 @@ components:
           description: Names of the settings that were written (`password` when `newPassword` was set). Empty when nothing was. `loginEmail` is never in it, because it changes when the link is used.
           items:
             type: string
-            enum: [nickname, notificationEmails, method, birthYear, timelineAscending, research, sponsor, autoMailExport, password]
+            enum: [nickname, notificationEmails, method, birthYear, language, timelineAscending, research, sponsor, autoMailExport, password]
           example: [method]
         loggedOutDevices:
           type: integer

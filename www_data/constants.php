@@ -70,7 +70,8 @@ const CAPTCHA_IP_PREFIX_V6 = 64;
 // What a captcha is asked for: register, recover_password, and login once the account has failed LOGIN_CAPTCHA_THRESHOLD times.
 const CAPTCHA_PURPOSES = ["register", "recover", "login"];
 
-const ACCOUNT_DEFAULT_LANGUAGE = "FR";    // user_account.language of a new account, until the user can choose
+const ACCOUNT_LANGUAGES = ["EN", "FR", "ES", "DE", "IT", "PL", "PT"];   // user_account.language: the languages an account can choose
+const ACCOUNT_DEFAULT_LANGUAGE = "EN";   // user_account.language of an account that did not say
 // The two public demo accounts (script/db/demo.sql): never reminded, warned or erased, left out of the statistics. DEMO_ENABLED (config)
 // decides whether they can sign in and whether script/demo_reset.php puts them back every hour.
 const ACCOUNT_DEMO_ID_CERVICAL_MUCUS = 2;
@@ -193,7 +194,7 @@ const UPGRADE_LOCK_WAIT_SECONDS = 600;
 
 // The names a POST /api/v2/account body may use, and the ones of GET /api/v2/account that the server alone writes (refused if sent).
 const ACCOUNT_UPDATE_FIELDS = [
-	"nickname", "method", "temperatureTracking", "birthYear", "timelineAscending", "research", "sponsor", "autoMailExport",
+	"nickname", "method", "temperatureTracking", "birthYear", "language", "timelineAscending", "research", "sponsor", "autoMailExport",
 	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
 ];
 const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "oldestDay", "totpState"];

@@ -66,6 +66,7 @@ else {
 				email: $("#i_login_email").val(),
 				password: $("#i_password").val(),
 				birthYear: parseInt($("#i_anaissance").val()),
+				language: $("#i_language").val(),
 				captcha: $("#i_captcha").val(),
 				captchaToken: $("#i_captcha_token").val(),
 				method: $('input[name="method"]:checked').val(),

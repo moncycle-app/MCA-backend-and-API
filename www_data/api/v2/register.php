@@ -24,7 +24,7 @@ input_exit_unless_path_fits(input_path(), 0);
 
 $issues = [];
 input_query([], $issues);
-$body = input_body(["nickname", "email", "password", "birthYear", "method", "temperatureTracking", "discoveredComment", "okForResearch", "termsAccepted", "captcha", "captchaToken"], $issues);
+$body = input_body(["nickname", "email", "password", "birthYear", "method", "temperatureTracking", "discoveredComment", "okForResearch", "language", "termsAccepted", "captcha", "captchaToken"], $issues);
 
 if (!is_null($user_account) && !sec_session_is_demo($user_account)) {
 	http_error(409, "already_authenticated", "Account already logged in.", ["userId" => $user_account["no_user_account"]]);
@@ -44,6 +44,7 @@ $nickname = day_format_body_text($body, "nickname", ACCOUNT_LIMIT_NICKNAME_CHARS
 $discovered_comment = day_format_body_text($body, "discoveredComment", ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS, $issues);
 $nfp_method = user_account_method_id_from_json($body, $issues);
 $research = input_bool_field($body, "okForResearch", $issues);
+$language = input_choice($body, "language", ACCOUNT_LANGUAGES, $issues, false) ?? ACCOUNT_DEFAULT_LANGUAGE;
 if (input_bool_field($body, "termsAccepted", $issues) === false) {
 	$issues[] = input_issue("termsAccepted", "terms_not_accepted", "'termsAccepted' must be true: an account is not created unless its owner accepts the terms of service (their address is 'termsOfServiceUrl' in GET /api/v2/server_info).");
 }
@@ -53,7 +54,7 @@ input_exit_if_issues($issues);
 $attempt = sec_captcha_exit_unless_attempt_allowed($db, "register");
 $registration = user_account_register($db, [
 	"nickname" => $nickname, "email" => $email, "password" => $password, "birth_year" => $birth_year,
-	"nfp_method" => $nfp_method, "comment" => $discovered_comment, "research" => $research === true,
+	"nfp_method" => $nfp_method, "comment" => $discovered_comment, "research" => $research === true, "language" => $language,
 ], $body["captchaToken"] ?? null, $body["captcha"] ?? "", sec_client_ip());
 sec_captcha_exit_unless_ok($db, $attempt, $registration["captcha"], "register");
 
