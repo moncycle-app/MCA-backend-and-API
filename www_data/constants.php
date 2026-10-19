@@ -280,6 +280,32 @@ const PUB_STAT_KEYS = [
 ];
 
 // ===========================================================================
+// METRICS -- script/stat.php (read by Prometheus)
+// ===========================================================================
+
+// MariaDB `SHOW GLOBAL STATUS` variable => the metric it is exposed as. Counters keep MariaDB's own totals (Prometheus takes the rate).
+const STAT_DB_STATUS = [
+	"Threads_connected" => "db_threads_connected",
+	"Threads_running" => "db_threads_running",
+	"Max_used_connections" => "db_max_used_connections",
+	"Connections" => "db_connections_total",
+	"Aborted_connects" => "db_aborted_connects_total",
+	"Aborted_clients" => "db_aborted_clients_total",
+	"Questions" => "db_questions_total",
+	"Slow_queries" => "db_slow_queries_total",
+	"Innodb_row_lock_waits" => "db_innodb_row_lock_waits_total",
+	"Innodb_row_lock_time" => "db_innodb_row_lock_time_ms_total",
+	"Innodb_deadlocks" => "db_innodb_deadlocks_total",
+	"Created_tmp_disk_tables" => "db_tmp_disk_tables_total",
+	"Select_full_join" => "db_select_full_join_total",
+	"Uptime" => "db_uptime_seconds",
+];
+
+// The key_value rows the cron writes at the end of a run that did not fail (a dry run writes nothing).
+const CRON_LAST_SUCCESS_KEY = "cron_last_success";
+const CRON_LAST_DURATION_KEY = "cron_last_duration_ms";
+
+// ===========================================================================
 // SYNC -- GET /api/v2/timeline_sync (api/v2/timeline_sync.php, lib/data.php)
 // ===========================================================================
 

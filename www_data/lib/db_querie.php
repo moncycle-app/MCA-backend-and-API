@@ -559,6 +559,29 @@ function db_querie_count_user_accounts_with_totp($db): int {
 	return intval(db_ops_value($db, "SELECT COUNT(no_user_account) FROM user_account WHERE totp_state = " . TOTP_STATE_ACTIVE . " AND no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")"));
 }
 
+// Accounts that never verified their address, and the age in seconds of the oldest (null without any).
+function db_querie_select_user_accounts_unverified_summary($db): array {
+	return db_ops_row($db, "SELECT COUNT(no_user_account) AS nb, TIMESTAMPDIFF(SECOND, MIN(inscription_date), NOW()) AS oldest_seconds FROM user_account WHERE email_verified_at IS NULL");
+}
+
+// The server-wide counters of STAT_DB_STATUS, [metric => value]. `SHOW STATUS` needs no privilege.
+function db_querie_select_global_status($db): array {
+	$metrics = [];
+	foreach (db_ops_rows($db, "SHOW GLOBAL STATUS WHERE Variable_name IN ('" . implode("','", array_keys(STAT_DB_STATUS)) . "', 'Innodb_buffer_pool_reads', 'Innodb_buffer_pool_read_requests')") as $row) {
+		$metrics[$row["Variable_name"]] = intval($row["Value"]);
+	}
+	return $metrics;
+}
+
+function db_querie_select_max_connections($db): int {
+	return intval(db_ops_value($db, "SELECT @@max_connections"));
+}
+
+// Rows (an estimate, InnoDB) and bytes (data + indexes) of each table of the database in use.
+function db_querie_select_tables_size($db): array {
+	return db_ops_rows($db, "SELECT table_name AS name, table_rows AS nb, data_length + index_length AS bytes FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name");
+}
+
 function db_querie_count_auth_tokens($db): int {
 	return intval(db_ops_value($db, "SELECT COUNT(no_auth_token) FROM auth_token"));
 }
@@ -602,12 +625,4 @@ function db_querie_select_key_value($db, string $key): mixed {
 
 function db_querie_upsert_key_value($db, string $key, int $value): int {
 	return db_ops_exec($db, "INSERT INTO key_value (`key`, `value`) VALUES (:key, :value) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)", ["key" => $key, "value" => $value]);
-}
-
-function db_querie_update_increment_key_value($db, string $key): int {
-	return db_ops_exec($db, "UPDATE key_value SET `value` = `value` + 1 WHERE `key` = :key", ["key" => $key]);
-}
-
-function db_querie_update_reset_key_value($db, string $key): int {
-	return db_ops_exec($db, "UPDATE key_value SET `value` = 0 WHERE `key` = :key", ["key" => $key]);
 }

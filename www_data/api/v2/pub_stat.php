@@ -23,8 +23,4 @@ input_exit_unless_path_fits(input_path(), 0);
 // the numbers the cron keeps (counted now when it has not run yet)
 $stats = data_public_stats($db);
 
-db_querie_update_increment_key_value($db, "pub_visit_monthly");
-db_querie_update_increment_key_value($db, "pub_visit_weekly");
-db_querie_update_increment_key_value($db, "pub_visit_daily");
-
 http_data(200, $stats);

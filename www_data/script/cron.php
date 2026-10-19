@@ -27,6 +27,7 @@ if (array_diff($arguments, ["--dry-run"])) {
 }
 
 log_cron_start($dry_run);
+$cron_started = microtime(true);
 header("Content-Type: text/plain");
 
 echo "............................................................................." . PHP_EOL;
@@ -177,28 +178,10 @@ if (!$dry_run) data_public_stats_store($db);
 echo ($dry_run ? "[dry run] public stats would be stored" : "public stats stored") . PHP_EOL;
 log_cron_step("public_stats");
 
-// THE VISIT COUNTERS: every day, every Sunday, the first of the month
-
-$reset = $dry_run ? "would be reset" : "reset";
-$today = getdate();
-$counters = 1;
-
-if (!$dry_run) db_querie_update_reset_key_value($db, "pub_visit_daily");
-echo ($dry_run ? "[dry run] " : "") . "daily stats " . $reset;
-
-if ($today["wday"] == 0) {
-	if (!$dry_run) db_querie_update_reset_key_value($db, "pub_visit_weekly");
-	echo ", weekly stats " . $reset;
-	$counters++;
+// what script/stat.php tells Prometheus, so that a cron that stopped running is noticed
+if (!$dry_run) {
+	db_querie_upsert_key_value($db, CRON_LAST_SUCCESS_KEY, time());
+	db_querie_upsert_key_value($db, CRON_LAST_DURATION_KEY, (int) round((microtime(true) - $cron_started) * 1000));
 }
-
-if ($today["mday"] == 1) {
-	if (!$dry_run) db_querie_update_reset_key_value($db, "pub_visit_monthly");
-	echo ", monthly stats " . $reset;
-	$counters++;
-}
-
-echo PHP_EOL;
-log_cron_step("visit_counters", $counters);
 
 log_cron_end();

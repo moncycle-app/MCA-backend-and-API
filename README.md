@@ -23,7 +23,7 @@ Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-prof
 | `www_data/` | The whole app, and the web server's document root: the web app (static pages and scripts, no build step), the HTTP API (`api/v2/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`). |
 | `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description. |
 | `server_conf/` | What the Docker image runs on: Apache and PHP settings, the entrypoint, the crontabs. `zz-moncycleapp.conf` is the reference for any Apache. |
-| `docs/` | Security, deployment, upgrading and the log reference. |
+| `docs/` | Security, deployment, upgrading, monitoring and the log reference. |
 | `Dockerfile`, `docker-compose.exemple.yml` | The image and a compose file to start from. |
 
 Requirements: **PHP 8.4**, **MariaDB 11.1** (tested with 11.1.3) and an SMTP server (implicit TLS, port 465) for the mails that verify
@@ -275,6 +275,12 @@ steps, and what the v14 to v15 migration does to your data, are in [docs/upgradi
 The app writes its own structured log, to `stdout` by default (`docker logs`). A line says what happened, to which account and which
 row, and never the content: no password, token, address, text or query string. Rotation and retention are yours. The format, every
 key and every event are in [docs/logs.md](docs/logs.md).
+
+### Monitoring
+
+`script/stat.php` answers the Prometheus text format: accounts and usage, the cron's last run, MariaDB connections, locks and sizes, and
+OPcache. It is behind `APP_SCRIPT_ALLOW` like the rest of `script/`. Every metric, how to read it and alerts to start from are in
+[docs/monitoring.md](docs/monitoring.md).
 
 ## Security
 

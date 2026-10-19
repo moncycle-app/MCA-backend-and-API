@@ -134,7 +134,7 @@ Every key the code can write. The first block is on every line.
 | `cls` | Class of an exception. |
 | `sql` | SQLSTATE of a database exception. |
 | `at` | Where an exception was thrown, `file:line`. |
-| `step` | Which step of a cron run is done: `cycle_mails`, `reminders`, `deletion_warnings`, `account_deletions`, `unverified_deletions`, `tokens`, `login_attempts`, `public_stats`, `visit_counters`, in the order the run takes them. |
+| `step` | Which step of a cron run is done: `cycle_mails`, `reminders`, `deletion_warnings`, `account_deletions`, `unverified_deletions`, `tokens`, `login_attempts`, `public_stats`, in the order the run takes them. |
 | `ok` | The cron run reached its end. |
 | `ms` | Duration in milliseconds. |
 | `sent` | Mails the cron run sent. |

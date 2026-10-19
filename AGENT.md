@@ -387,7 +387,7 @@ There is no test suite in the repository: a change is checked by running the app
 - Code, names and comments in English. If you meet an old French function or variable name, rename it with word boundaries and check
   that nothing still uses the old one.
 - What a user reads stays French: the mails, the PDF labels, the texts of the web app. API error messages are English; the web app
-  shows its French text from the error `code`. The metric names of `script/stat.php` stay French: dashboards read them.
+  shows its French text from the error `code`. The metrics of `script/stat.php` are English and documented in [docs/monitoring.md](docs/monitoring.md): a new one goes in both.
 - The wording rules of [The project](#the-project) apply to every user-facing text.
 
 ## Known debt
