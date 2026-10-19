@@ -699,6 +699,23 @@ paths:
 
         `sent: false` means the mail could not be sent. Send the user to `POST /recover_password`: it
         mails a link that works for an account whose address is not proved yet as well.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `nickname` | string (max 255) | Yes | Nickname, initials for instance. Not a name. |
+        | `email` | string (email) | Yes | Login address; the link that proves it is mailed here. |
+        | `password` | string (max 72 bytes) | Yes | Chosen password, must match `passwordPolicyRegex` of `server_info`. |
+        | `birthYear` | integer | Yes | Year of birth, current year or up to 100 years earlier. Anonymous statistics only. |
+        | `termsAccepted` | boolean | Yes | Must be `true`: the terms of service are accepted. |
+        | `captcha` | string | Yes | The text read in the picture from `POST /captcha` (purpose `register`). |
+        | `captchaToken` | string | Yes | The `token` that came with that picture. |
+        | `method` | string: `cervicalMucus` or `fertilityCare` | No | Tracking method. Default `cervicalMucus`. |
+        | `language` | string: `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | No | Language of the account. Default `EN`. |
+        | `temperatureTracking` | boolean | No | Also record basal body temperature. Default `false`. |
+        | `discoveredComment` | string (max 255) | No | Free-text answer to how the user found the app. |
+        | `okForResearch` | boolean | No | Consent to share anonymous data with research. Default `false`. |
       security: []
       requestBody:
         required: true
@@ -849,6 +866,13 @@ paths:
         a token that was used up all answer `captcha_invalid`, with no clue as to which.
 
         The response carries `Cache-Control: no-store`. Only `POST` is accepted.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `purpose` | string: `register`, `recover` or `login` | Yes | What the captcha is for. |
+        | `email` | string (email) | Yes | The address of the call that follows. |
       security: []
       requestBody:
         required: true
@@ -946,6 +970,14 @@ paths:
 
         The password is checked **before** the link is touched: a refused password (`400`, issue `password_too_short`, ...) does not
         use the link up.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `purpose` | string: `accountCreation`, `resetPassword` or `changeEmail` | Yes | What the link is for, as the link says. |
+        | `token` | string | Yes | The token of the link (the `t` of its fragment). |
+        | `newPassword` | string (10 to 72 bytes) | Only for `resetPassword` | The new password. Not used by the other purposes. |
       security: []
       requestBody:
         required: true
@@ -1068,6 +1100,20 @@ paths:
         does not disconnect the laptop. There is no limit to their number: revoke the ones you do not use.
         **A script should sign in once and keep its token**, not sign in on every run: each sign-in is a new
         token in the list and a mail to the owner.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `email` | string (email) | Yes | Login address of the account. |
+        | `password` | string | Yes | Account password. |
+        | `name` | string (max 256) | No | Name of the token in `GET /token`. Default `API`. |
+        | `scope` | string: `readWrite` or `readOnly` | No | `readOnly` can only read and end its own session. Default `readWrite`. |
+        | `expiresInDays` | integer (1 to 365) | No | The token dies after this many days. Absent: erased after 40 days without use or a year. |
+        | `cookie` | boolean | No | `true` also sets the `MONCYCLEAPP_TOKEN` cookie. Default `false`. |
+        | `code` | integer or string (6 digits) | Only after `401 totp_required` | TOTP code of the authenticator app. |
+        | `captcha` | string | Only after `403 captcha_required` | The text read in the picture from `POST /captcha` (purpose `login`). |
+        | `captchaToken` | string | With `captcha` | The `token` that came with that picture. |
       security: []
       requestBody:
         required: true
@@ -1320,6 +1366,14 @@ paths:
         link waiting, and the link is made while the account is held: of requests that arrive
         together with one token, one makes a link and the others get `403 captcha_invalid`. The mail
         is sent after the link is saved, never before. No login token is needed.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `email` | string (email) | Yes | Login address of the account. |
+        | `captcha` | string | Yes | The text read in the picture from `POST /captcha` (purpose `recover`). |
+        | `captchaToken` | string | Yes | The `token` that came with that picture. |
       security: []
       requestBody:
         required: true
@@ -1389,7 +1443,9 @@ paths:
       summary: "Two-factor: step 1, start the setup"
       description: |-
         Starts the setup of **TOTP** two-factor authentication (the 6-digit code from an app
-        such as Aegis, FreeOTP or Google Authenticator). It is a `POST` because it **stores a new secret**.
+        such as Aegis, FreeOTP or Google Authenticator). It is a `POST` because it **stores a new secret** on the account and replaces the
+        previous one: it is not a read, so it is not a `GET` (a `GET` can be replayed by a browser or a proxy, and a read-only
+        token may call it), and two calls do not give the same answer.
 
         ### The three steps
 
@@ -1411,7 +1467,7 @@ paths:
         generates a **new secret and replaces the previous one**, so any code from a half-
         finished earlier attempt stops working.
 
-        | Field | Use |
+        | Response Field | Use |
         |---|---|
         | `qrcode` | A complete **SVG document as a string**. Render it directly; there is no PNG. |
         | `otpauth` | The `otpauth://` URI behind the QR code. Use it for a "tap to add" link on mobile. |
@@ -1420,6 +1476,10 @@ paths:
         `initSecret` and `otpauth` are as sensitive as a password. Never log them.
 
         A read-only token is refused (`403` `read_only_token`), as for every `POST`.
+
+        ### Body fields
+
+        None: send no body, or `{}`.
       responses:
         "200":
           description: Setup started. The account state is now `init`.
@@ -1478,6 +1538,13 @@ paths:
         A wrong password or code counts against the account like a failed sign-in (section 9): past the lockout threshold
         every such check, here and in `POST /account`, `POST /account/deletion` and `POST /totp/disable`, answers
         `403 account_locked` until the failures age out. The session itself stays valid.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `code` | string (digits) or integer | Yes | One real code from the authenticator app. Keep a leading zero. |
+        | `password` | string | Yes | Current password of the account. |
       requestBody:
         required: true
         content:
@@ -1533,6 +1600,12 @@ paths:
 
         It is a `POST` with the code in the body, not a `DELETE` with the code in the address: a one-time code does not
         belong in a URL (it would be in the logs of every proxy), and `DELETE` takes no body.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `code` | string (digits) or integer | Yes | One real code from the authenticator app. Keep a leading zero. |
       requestBody:
         required: true
         content:
@@ -1683,6 +1756,29 @@ paths:
         `loginEmailLinkSent` when `loginEmail` was: `false` means the mail with the link could not be sent. The link
         also goes out for an address that another account has, as a mail telling its owner, with the same
         answer: nobody can tell who has an account.
+
+        ### Body fields
+
+        Every key is optional (partial update): only the keys sent are changed. An empty `{}` is valid.
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `nickname` | string (max 255) | No | New nickname. Not empty. |
+        | `password` | string | With `newPassword`, `notificationEmails`, `loginEmail` | Current password; ignored otherwise. |
+        | `newPassword` | string (max 72 bytes) | No | New password, matching `passwordPolicyRegex`, different from the current one. Needs `password`. |
+        | `logoutOtherDevices` | boolean | No | With `newPassword` only: `true` closes every other session. Default `false`. |
+        | `loginEmail` | string (email) | No | Asks to change the login address; a link goes to the new one. Needs `password`, and `code` with two-factor. |
+        | `code` | string (digits) | With `loginEmail` when two-factor is on | TOTP code; ignored otherwise. |
+        | `notificationEmails` | string | No | Addresses that also receive the cycles, separated by `;` (5 at most, 1024 characters). `""` empties it. Needs `password`. |
+        | `method` | string: `cervicalMucus` or `fertilityCare` | No | Tracking method. Not sent: unchanged. |
+        | `temperatureTracking` | boolean | No | Also record basal temperature. Not sent: unchanged. |
+        | `birthYear` | integer | No | Year of birth, current year or up to 100 years earlier. |
+        | `language` | string: `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | No | Language of the account. |
+        | `timelineAscending` | boolean | No | Display preference: today at the top of the table. |
+        | `research` | boolean | No | Consent to contribute anonymous data to research. |
+        | `sponsor` | boolean | No | Marks the account as a financial supporter. |
+        | `autoMailExport` | boolean | No | Mail the export of each finished cycle. |
+        | `lastWriteClientUtc` | string (RFC 3339 date-time) | No | Your own clock. The server clock when absent. |
       requestBody:
         required: true
         description: Every field is optional. `{}` is valid and changes nothing.
@@ -1747,10 +1843,17 @@ paths:
       summary: Delete the account, for good
       description: |-
         Deletes the account for real: its days, labels and tokens go with it (database cascade). It needs the
-        password as confirmation. **It cannot be undone.**
+        password as confirmation, and the TOTP `code` when two-factor authentication is on. **It cannot be undone.**
 
         It is a `POST` on `/account/deletion`, not a `DELETE` on `/account`: a `DELETE` takes no body (many HTTP
         clients cannot send one), and the password has to travel somewhere.
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `password` | string | Yes | Current password, as confirmation. |
+        | `code` | string (digits) or integer | Only when two-factor is on | TOTP code of the authenticator app. Ignored when two-factor is off. |
       requestBody:
         required: true
         content:
@@ -1763,13 +1866,17 @@ paths:
                   type: string
                   format: password
                   description: The current password.
+                code:
+                  type: string
+                  description: The TOTP code. Required when two-factor authentication is on (without it the answer is `401 totp_required`); ignored otherwise. A string of digits (a leading zero matters), a number is accepted too.
+                  example: "091710"
       responses:
         "204":
           description: The account is gone. The cookie is cleared.
         "400":
           $ref: '#/components/responses/ValidationFailed'
         "401":
-          description: "`unauthorized` — no valid token. `invalid_password` — the password is wrong: nothing was deleted."
+          description: "`unauthorized` — no valid token. `invalid_password` — the password is wrong: nothing was deleted. `totp_required` — two-factor authentication is on and no `code` was sent. `totp_invalid` — `code` is wrong or expired."
           content:
             application/json:
               schema:
@@ -2014,6 +2121,38 @@ paths:
 
         Writing a day marks the account as active again. This matters because accounts with no
         activity for 4 years are deleted automatically.
+
+        ### Body fields
+
+        No key is mandatory, but the body replaces the whole day: **a key left out is cleared** (empty or `false`). Send the complete day.
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `date` | string (`YYYY-MM-DD`) | No | Leave out, or send the date of the address (else `date_mismatch`). |
+        | `cycleFirstDay` | boolean | No | `true` makes this date day 1 of a new cycle. |
+        | `dayNotObserved` | boolean | No | The user recorded no observation on this date. |
+        | `stampColor` | string or null: `Red`, `Green`, `Yellow`, `White` | No | Colour of the stamp on the chart. |
+        | `stampBaby` | boolean | No | Baby picture on the stamp (potentially fertile day). |
+        | `isPeak` | boolean | No | Peak day. |
+        | `counterStart` | integer or null (0 to 255) | No | Start a counter shown for this many days. `0` is stored as null. |
+        | `sexUnion` | boolean | No | Sexual intercourse on this date. |
+        | `booleanPregnancyDetected` | boolean | No | A pregnancy was detected on this date. |
+        | `freeMucusSensation` | array of string (max 256 each) | No | Cervical mucus: what the user feels. New names are created. |
+        | `freeMucusObservation` | array of string (max 256 each) | No | Cervical mucus: what the user sees. New names are created. |
+        | `freeOther` | array of string (max 256 each) | No | Cervical mucus: labels with no type yet. Omitted: they are unlinked. |
+        | `temperature` | number or null (0 to 99.99) | No | Basal body temperature. `0` means none. |
+        | `temperatureTime` | string or null (`hh:mm:ss`) | No | When it was taken. Ignored without a valid `temperature`. |
+        | `codifiedBleedingObservation` | string or null | No | FertilityCare: `VH`, `H`, `M`, `VL`, `B`, optional `L` suffix, or `L` alone. |
+        | `codifiedMucusSensation` | string or null | No | FertilityCare: `0`, `2`, `2W`, `4`, `6`, `8`, `10`, `10DL`, `10SL`, `10WL`. |
+        | `codifiedMucusObservation` | string or null | No | FertilityCare: any combination of `C`, `G`, `K`, `P`, `Y`, `L`. |
+        | `codifiedNumberObservations` | string or null | No | FertilityCare: `X1`, `X2`, `X3`, `AD`. |
+        | `codifiedPainObservations` | string or null | No | FertilityCare: `AP`, `RAP`, `LAP`. |
+        | `codifiedArrow` | string or null: `Up`, `Down`, `Right` | No | FertilityCare: the arrow drawn on the chart. |
+        | `comment` | string (max 256) | No | Free note of the user. |
+        | `lastWriteClientUtc` | string or null (RFC 3339 date-time) | No | Your own clock; decides which of two writes is the latest. Server clock when absent. |
+        | `cycleStartDate` | string (date) | Dropped | Computed by the server: accepted so a day read can be sent back, then ignored. |
+        | `cycleDay` | integer | Dropped | Computed by the server: accepted, then ignored. |
+        | `lastWriteDb` | string (date-time) | Dropped | Computed by the server: accepted, then ignored. |
       parameters:
         - $ref: '#/components/parameters/DatePath'
       requestBody:
@@ -2178,6 +2317,14 @@ paths:
         Names are **unique per account** and **case-sensitive**: a name that exists is `409 duplicate_name`. The type
         is `sensation` or `observation` (`undefined` is a label nobody classified yet: to classify
         one, `POST /description/{id}` it).
+
+        ### Body fields
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `name` | string (max 256) | Yes | Name of the label. Unique per account, case-sensitive. |
+        | `type` | string: `undefined`, `observation` or `sensation` | Yes | What the label stands for: `sensation` is felt, `observation` is seen. |
+        | `lastWriteClientUtc` | string (RFC 3339 date-time) | No | Your own clock. The server clock when absent. |
       requestBody:
         required: true
         content:
@@ -2243,6 +2390,16 @@ paths:
         Changes the `name` and / or the `type` of a label, **everywhere at once**: every day that carries it shows the new
         name or the new list (`freeMucusSensation` or `freeMucusObservation`) from then on, and comes back in the next
         `GET /timeline_sync`. Send at least one of the two; what you do not send stays.
+
+        ### Body fields
+
+        Send at least one of `name` and `type`; what is not sent stays.
+
+        | Key | Type | Required | Usage |
+        |---|---|---|---|
+        | `name` | string (max 256) | One of `name` or `type` | New name, applied to every day that carries the label. |
+        | `type` | string: `undefined`, `observation` or `sensation` | One of `name` or `type` | New type. |
+        | `lastWriteClientUtc` | string (RFC 3339 date-time) | No | Your own clock. The server clock when absent. |
       parameters:
         - $ref: '#/components/parameters/DescriptionId'
       requestBody:

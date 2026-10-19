@@ -1150,7 +1150,7 @@ function settings_show_totp_state(active) {
 	$("#totp_miseenpalce").prop("hidden", true);
 	$("#totp_state").prop("hidden", !active);
 	// the forms that sign in again ask for the code only when the account has one
-	$("#login_email_code_field, #token_new_code_wrapper").prop("hidden", !active);
+	$("#login_email_code_field, #token_new_code_wrapper, #deletion_code_field").prop("hidden", !active);
 }
 
 function settings_setup_totp() {
@@ -1383,7 +1383,10 @@ function settings_setup_deletion() {
 		const form = $(this);
 		const nickname = settings_account.nickname;
 		if (!confirm(settings_text.delete_confirm(nickname))) return;
-		settings_api("POST", form.attr("action"), {password: settings_read(form, "pw_before_deletion")}).done(function () {
+		const payload = {password: settings_read(form, "pw_before_deletion")};
+		const code = settings_read(form, "code");
+		if (code) payload.code = code;
+		settings_api("POST", form.attr("action"), payload).done(function () {
 			moncycle_store.clear_storage();
 			alert(settings_text.delete_done(nickname));
 			window.location.replace("auth");

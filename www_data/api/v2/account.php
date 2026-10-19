@@ -14,6 +14,7 @@ require_once __DIR__ . "/../../lib/api.php";
 require_once __DIR__ . "/../../lib/data.php";
 require_once __DIR__ . "/../../lib/db_querie.php";
 require_once __DIR__ . "/../../lib/input.php";
+require_once __DIR__ . "/../../lib/sec.php";
 require_once __DIR__ . "/../../lib/sec_token.php";
 require_once __DIR__ . "/../../lib/user_account.php";
 
@@ -24,13 +25,15 @@ input_exit_unless_path_fits($path, 1);
 $method = http_method();
 $issues = [];
 
-// DELETION OF THE ACCOUNT: POST /account/deletion, with the password
+// DELETION OF THE ACCOUNT: POST /account/deletion, with the password, and the TOTP code when two-factor is on
 if ($path === ["deletion"]) {
 	if ($method !== "POST") http_exit_method_not_allowed(["POST"]);
 
 	input_query([], $issues);
-	$body = input_body(["password"], $issues);
+	$body = input_body(["password", "code"], $issues);
 	$password = input_secret($body, "password", $issues);
+	$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
+	$code = $totp_active ? input_code($body, $issues, false) : null;
 	input_exit_if_issues($issues);
 
 	sec_token_reauth_exit_if_locked($user_account);
@@ -38,6 +41,12 @@ if ($path === ["deletion"]) {
 		sec_token_reauth_failed($db, $user_account);
 		log_event("account.refused", ["act" => "delete", "err" => "invalid_password"]);
 		http_error(401, "invalid_password", "Incorrect password.");
+	}
+	if ($totp_active && !sec_totp_code_valid($user_account, $code)) {
+		if (!is_null($code)) sec_token_reauth_failed($db, $user_account);   // a code asked for and not sent is no guess
+		log_event("account.refused", ["act" => "delete", "err" => is_null($code) ? "totp_required" : "totp_invalid"]);
+		if (is_null($code)) http_error(401, "totp_required", "A TOTP code is required.");
+		http_error(401, "totp_invalid", "The TOTP code is incorrect.");
 	}
 
 	data_delete_account($db, $user_account, "user_request");

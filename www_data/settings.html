@@ -540,6 +540,10 @@
 						<label class="rouge" for="pw_before_deletion">Mot de passe, pour confirmer</label>
 						<input class="rouge" id="pw_before_deletion" name="pw_before_deletion" type="password" autocomplete="current-password" required />
 					</div>
+					<div class="field" id="deletion_code_field" hidden>
+						<label class="rouge" for="i_deletion_code">Code d'authentification multifacteur</label>
+						<input class="rouge" type="number" id="i_deletion_code" name="code" inputmode="numeric" autocomplete="one-time-code" />
+					</div>
 					<button type="submit" class="rouge">⚠️ Supprimer définitivement mon compte</button>
 				</form>
 			</section>
