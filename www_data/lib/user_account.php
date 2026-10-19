@@ -67,11 +67,12 @@ function user_account_birth_year(array $body, array &$issues): ?int {
 	return null;
 }
 
-// The session's row holds no hash: it is read again.
-function user_account_password_matches($db, array $user_account, mixed $password): bool {
-	if (!is_string($password) || $password === "") return false;
+// The hash $password matches, or null. The session's row holds no hash: it is read again. The hash goes to sec_password_upgrade()
+// once the whole check has passed.
+function user_account_password_check($db, array $user_account, mixed $password): ?string {
+	if (!is_string($password) || $password === "") return null;
 	$hash = db_querie_select_user_account_by_email($db, $user_account["login_email"])["password"] ?? null;
-	return is_string($hash) && password_verify($password, $hash);
+	return is_string($hash) && password_verify($password, $hash) ? $hash : null;
 }
 
 // The notification addresses as the column keeps them: lower case, no duplicate, ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR between two;
@@ -101,13 +102,13 @@ function user_account_notification_emails_parse(mixed $value): ?string {
 // account (proved or not) is left exactly as it is, and its owner gets a link to choose a new password: nothing a stranger types reaches
 // an account, and the answer is the same either way. $new: nickname, email, password, birth_year, nfp_method, comment, research, language.
 // Answers ["captcha" => verdict, "account" => [no_user_account, name, login_email] or null, "token" => for the mail or null,
-// "created" => bool]; the mail is the caller's, once this has committed. The captcha is checked first (a refused one costs no bcrypt),
+// "created" => bool]; the mail is the caller's, once this has committed. The captcha is checked first (a refused one costs no hash),
 // and again under the lock of an existing account: of requests that come together with one captcha, one mail.
 function user_account_register($db, array $new, mixed $captcha_token, mixed $captcha_answer, string $ip): array {
 	$verdict = sec_captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
 	if ($verdict !== "ok") return ["captcha" => $verdict, "account" => null, "token" => null, "created" => false];
 
-	$password_hash = sec_hash($new["password"]);   // an address that has an account costs the same time
+	$password_hash = sec_password_hash($new["password"]);   // an address that has an account costs the same time
 
 	// An insert that finds the address taken keeps a share lock on the key until its transaction ends; two such requests that then
 	// lock the row wait for each other and MariaDB kills one (a deadlock: a 500). So that transaction ends with nothing written and the
@@ -234,7 +235,7 @@ function user_account_update($db, array $user_account, array $body, array $issue
 		$new_login_email = null;
 	}
 
-	$new_password = input_secret($body, "newPassword", $issues, false);
+	$new_password = input_password($body, "newPassword", $issues, false);
 	$issue = is_null($new_password) ? null : sec_password_issue($new_password, "newPassword");
 	if (!is_null($issue)) {
 		$issues[] = $issue;
@@ -246,7 +247,7 @@ function user_account_update($db, array $user_account, array $body, array $issue
 		$issues[] = input_issue("logoutOtherDevices", "invalid_value", "'logoutOtherDevices' closes the other sessions when the password changes: send it with 'newPassword'.");
 	}
 
-	$password = input_secret($body, "password", $issues, false);
+	$password = input_password($body, "password", $issues, false);
 	$sensitive = !is_null($new_notification_emails) || !is_null($new_login_email) || !is_null($new_password);
 	if ($sensitive) {
 		// a demo account's password is public: its password and addresses are no one's to change
@@ -266,7 +267,8 @@ function user_account_update($db, array $user_account, array $body, array $issue
 
 	if ($sensitive) {
 		sec_token_reauth_exit_if_locked($user_account);
-		if (!user_account_password_matches($db, $user_account, $password)) {
+		$hash = user_account_password_check($db, $user_account, $password);
+		if (is_null($hash)) {
 			sec_token_reauth_failed($db, $user_account);
 			log_event("account.refused", ["act" => "account", "err" => "invalid_password"]);
 			return $refuse(401, "invalid_password", "Incorrect password.");
@@ -278,7 +280,8 @@ function user_account_update($db, array $user_account, array $body, array $issue
 			return $given ? $refuse(401, "totp_invalid", "The TOTP code is incorrect.") : $refuse(401, "totp_required", "A TOTP code is required.");
 		}
 		sec_token_reauth_passed($db, $user_account);
-		if (!is_null($new_password) && user_account_password_matches($db, $user_account, $new_password)) {
+		if (is_null($new_password)) sec_password_upgrade($db, $no_user_account, $hash, $password);   // a new password replaces it anyway
+		elseif (!is_null(user_account_password_check($db, $user_account, $new_password))) {
 			input_exit_if_issues([input_issue("newPassword", "password_unchanged", "'newPassword' is identical to the current password.")]);
 		}
 	}
@@ -292,7 +295,7 @@ function user_account_update($db, array $user_account, array $body, array $issue
 		if (!empty($changed)) db_querie_update_user_account_settings($db, $no_user_account, $new, $last_write_client_UTC);
 		if (is_null($new_password)) return null;
 
-		db_querie_update_password($db, sec_hash($new_password), $no_user_account);
+		db_querie_update_password($db, sec_password_hash($new_password), $no_user_account);
 		// a reset link still in the mailbox is no use any more; a pending change of address is left alone
 		db_querie_update_user_account_email_token_clear($db, $no_user_account, EMAIL_TOKEN_PURPOSE_RESET_PASSWORD);
 		return $logout_other_devices === true ? db_querie_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : [];

@@ -105,12 +105,17 @@ Also:
   address; an address another account has gets a mail, same answer). `user_account.email_verified_at` NULL = the account cannot sign in
   (`sec_token_login`: `403 email_not_verified`, only after the right password, counted as nothing); the cron erases such accounts after
   `ACCOUNT_UNVERIFIED_DELETE_DAYS`. Any raw insert of an account must call `db_querie_update_user_account_email_verified()`.
-- **`sec.php`** passwords (`sec_hash()`, `sec_password_issue()`), TOTP, who may sign in (`sec_account_enabled()`,
+- **`sec.php`** passwords: `sec_password_hash()` is the one way a hash is made (Argon2id, `PASSWORD_HASH_OPTIONS`; never
+  `password_hash()` elsewhere, and a token is no password: `sec_token_hash()` is SHA-256), `password_verify()` reads it and the
+  older bcrypt hashes, `sec_password_upgrade()` makes an older hash again once a password check has fully passed (only where the row
+  still holds the hash checked); `sec_password_issue()` checks a new one (lengths in characters, `mb_strlen`, `PASSWORD_MAX_CHARS`;
+  `input_password()` caps any password field at `PASSWORD_INPUT_MAX_CHARS`). TOTP, who may sign in (`sec_account_enabled()`,
   `sec_session_is_demo()`), throttling (`sec_attempt_reserve()` / `_release()`: the attempt is written before the check and given back
   when it does not count), the client address (`sec_client_ip()`: `REMOTE_ADDR`, or `X-Forwarded-For` when the peer is in
   `TRUSTED_PROXIES`), and the write-origin check (`sec_exit_if_cross_origin()`: `APP_URL`, `WEB_APP_ORIGINS`).
 - **`sec_token.php`** the account's tokens and `/api/v2/token`. `sec_token_authenticate()` finds the account of the request (cookie or
-  `Authorization: Bearer`); `sec_token_login()` is the sign-in (returns its outcome, the endpoint answers; an account that must answer a
+  `Authorization: Bearer`); `sec_token_login()` is the sign-in (returns its outcome, the endpoint answers; a refusal that looked at the
+  account is held until `AUTH_LOGIN_REFUSAL_MIN_MS` after the request began, so that its time tells nothing; an account that must answer a
   captcha is checked inside `db_ops_transaction()` with its row locked); `sec_token_create()` makes the token (name, scope, expiry, cookie only
   on request, `sec_token_cookie_samesite()`: `COOKIE_SAMESITE`; user agent and address kept whole; its first characters are kept in the
   clear as `auth_token.auth_token_prefix`, unique per account, and the token is made again when the key refuses).

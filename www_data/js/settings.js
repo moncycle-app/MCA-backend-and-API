@@ -209,7 +209,7 @@ const settings_text = {
 		email_unchanged : "c’est déjà l’adresse de connexion de votre compte",
 		"notificationEmails" : "les adresses doivent être valides, séparées par « ; », 5 au plus",
 		password_too_weak : "le nouveau mot de passe ne respecte pas la règle des mots de passe (voir l'indication sous le champ)",
-		password_too_long : "le nouveau mot de passe est trop long (72 octets au plus)",
+		password_too_long : "le nouveau mot de passe est trop long (128 caractères au plus)",
 		password_invalid : "le nouveau mot de passe contient un caractère interdit",
 		password_unchanged : "le nouveau mot de passe est identique à l’ancien",
 		demo_account : "indisponible sur un compte de démo",

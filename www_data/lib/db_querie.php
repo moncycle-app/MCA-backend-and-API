@@ -135,6 +135,11 @@ function db_querie_update_password($db, string $password_hash, $no_user_account)
 	return db_ops_exec($db, "UPDATE user_account SET password = :password, last_password_change = NOW() WHERE no_user_account = :no_user_account", ["password" => $password_hash, "no_user_account" => $no_user_account]);
 }
 
+// The same password hashed again: no change of password for last_password_change, and nothing where the hash is no longer $old_hash.
+function db_querie_update_user_account_password_rehash($db, int $no_user_account, string $old_hash, string $new_hash): int {
+	return db_ops_exec($db, "UPDATE user_account SET password = :new_hash WHERE no_user_account = :no_user_account AND password = :old_hash", ["new_hash" => $new_hash, "no_user_account" => $no_user_account, "old_hash" => $old_hash]);
+}
+
 // A cleared day is a row too.
 function db_querie_count_days_of_account($db, $no_user_account): int {
 	return intval(db_ops_value($db, "SELECT COUNT(dt.no_day) FROM day_timeline AS dt WHERE dt.no_user_account = :no_user_account", ["no_user_account" => $no_user_account]));

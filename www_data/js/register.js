@@ -98,7 +98,7 @@ else {
 					rate_limited: "Trop de tentatives depuis ce réseau, réessayez plus tard.",
 					password: "Le mot de passe est invalide.",
 					password_too_weak: "Le mot de passe ne respecte pas la règle des mots de passe.",
-					password_too_long: "Le mot de passe est trop long (72 octets au plus).",
+					password_too_long: "Le mot de passe est trop long (128 caractères au plus).",
 					password_invalid: "Le mot de passe contient un caractère interdit.",
 					birthYear: "La date de naissance n'est pas réaliste.",
 					nickname: "Le pseudo est invalide ou trop long.",

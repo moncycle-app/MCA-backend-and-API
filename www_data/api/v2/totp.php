@@ -44,14 +44,15 @@ if ($step === "") {
 $enable = $step === "confirm";
 $body = input_body($enable ? ["code", "password"] : ["code"], $issues);
 $code = input_code($body, $issues);
-$password = $enable ? input_secret($body, "password", $issues) : null;
+$password = $enable ? input_password($body, "password", $issues) : null;
 input_exit_if_issues($issues);
 
 // CONFIRM or DISABLE. A wrong password or code counts against the account like a failed sign-in (lib/sec_token.php).
 if ($enable && $is_active) http_error(409, "totp_already_enabled", "Two-factor authentication is already enabled.");
 if (!$enable && !$is_active) http_error(409, "totp_not_enabled", "Two-factor authentication is not enabled.");
 sec_token_reauth_exit_if_locked($user_account);
-if ($enable && !user_account_password_matches($db, $user_account, $password)) {
+$hash = $enable ? user_account_password_check($db, $user_account, $password) : null;
+if ($enable && is_null($hash)) {
 	sec_token_reauth_failed($db, $user_account);
 	log_event("account.refused", ["act" => "totp_enable", "err" => "invalid_password"]);
 	http_error(401, "invalid_password", "Incorrect password.");
@@ -62,6 +63,7 @@ if (!sec_totp_code_valid($user_account, $code)) {
 	http_error(401, "totp_invalid", "Entered TOTP code is not valid.");
 }
 sec_token_reauth_passed($db, $user_account);
+if ($enable) sec_password_upgrade($db, intval($user_account["no_user_account"]), $hash, $password);
 
 $state = $enable ? TOTP_STATE_ACTIVE : TOTP_STATE_DISABLED;
 db_querie_update_user_account_totp($db, $user_account["no_user_account"], $state, $enable ? $user_account["totp_secret"] : null);

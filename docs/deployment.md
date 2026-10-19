@@ -17,7 +17,7 @@ The Docker image serves plain HTTP and is made to sit behind a reverse proxy. Th
   `X-Forwarded-Proto: https`: make the proxy set that header. If the proxy already sends HSTS, remove that line from
   [`server_conf/zz-moncycleapp.conf`](../server_conf/zz-moncycleapp.conf) to avoid a duplicate.
 - **Rate-limit** `/api/v2/token`, `/api/v2/register`, `/api/v2/recover_password`, `/api/v2/verify_email` and `/api/v2/captcha` (a captcha costs a JPEG to draw and is
-  kept nowhere; the app counts the attempts of `verify_email` per address, but cannot limit what it has not been asked, like the captcha). `/api/v2/recover_password` sleeps 1 to 5 s on purpose and holds one of the 30 workers meanwhile.
+  kept nowhere; the app counts the attempts of `verify_email` per address, but cannot limit what it has not been asked, like the captcha). `/api/v2/recover_password` sleeps 1 to 5 s on purpose and holds one of the 30 workers meanwhile; a password check holds 46 MiB for about 240 ms (Argon2id), and a refused sign-in holds its worker, asleep, until 400 ms ([security.md](security.md)).
 - **Cap the body at 256 KB** (`client_max_body_size 256k` with nginx), the same as Apache, so that a request that is too large is
   refused at the edge before it costs a worker.
 - **Not log query strings or paths.** `GET /api/v2/day/2026-09-20`, `GET /api/v2/day?from=`, `GET /api/v2/timeline_sync?since=` and

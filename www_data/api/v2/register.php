@@ -36,7 +36,7 @@ if (!REGISTRATION_ENABLED) {
 
 foreach (["nickname", "email", "password", "birthYear", "termsAccepted"] as $field) input_require($body, $field, $issues);
 $email = input_email($body, "email", $issues, false);
-$password = input_secret($body, "password", $issues, false);
+$password = input_password($body, "password", $issues, false);
 $issue = is_null($password) ? null : sec_password_issue($password, "password");
 if (!is_null($issue)) $issues[] = $issue;
 $birth_year = user_account_birth_year($body, $issues);

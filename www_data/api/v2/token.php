@@ -30,7 +30,7 @@ if ($method === 'POST') {
 	input_query([], $issues);
 	$body = input_body(["email", "password", "name", "scope", "expiresInDays", "cookie", "captcha", "captchaToken", "code"], $issues);
 	$body["email"] = input_email($body, "email", $issues);
-	input_secret($body, "password", $issues);
+	input_password($body, "password", $issues);
 	input_check_strings($body, ["captcha", "captchaToken"], $issues);
 	input_code($body, $issues, false);
 	$options = sec_token_parse_options($body, $issues);

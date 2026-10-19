@@ -48,7 +48,41 @@ privacy policy. They go with the token when it is revoked, expires, or the accou
 
 ## Sign-up, passwords and links by e-mail
 
-The password is chosen at sign-up (10 to 72 bytes: bcrypt reads 72 and drops the rest, so a longer one is refused). A new account
+The password is chosen at sign-up: 10 to 128 characters by default (the policy, `PASSWORD_POLICY_REGEX`, sets the least; 128 is the
+most whatever it says). Lengths count **Unicode characters, not bytes**: an accented letter or an emoji is one character, and the
+server (`mb_strlen`, the regex read as UTF-8), the web app and the API documentation count the same way. A password typed to sign in
+or to confirm an action is not held to the policy (it may have been chosen under an older one) and may be up to 1024 characters;
+longer is `400 validation_failed`, before anything is looked up. The body itself stays capped at 256 KB (Apache, `post_max_size`).
+
+**Hashing.** Every hash made is Argon2id (`password_hash(PASSWORD_ARGON2ID)`, `PASSWORD_HASH_OPTIONS` in `constants.php`: 46 MiB,
+4 passes, 1 thread, 238 ms on the production VPS), from `sec_password_hash()` alone. Accounts made before keep their bcrypt hash
+(cost 10 or 12), which still signs in; once a sign-in or a password asked again has fully passed (the TOTP code included), the hash is
+made again as Argon2id from the password just typed, so nobody is asked to change a password. That rewrite:
+
+- happens only after the whole check passed: a wrong password, a missing or wrong code, a captcha refused, a lockout or a throttled
+  request write nothing;
+- writes only where the row still holds the hash that was checked, so a password changed meanwhile on another device is kept;
+- is not a change of password: the sessions, the TOTP and `last_password_change` are left alone;
+- **skips a bcrypt hash when the password typed is longer than 72 bytes.** bcrypt reads the first 72 bytes and no more, so such a
+  password matches whatever follows them: hashing what was typed could store something other than the owner's password and lock
+  them out. Those accounts (older versions took any length) keep bcrypt until their password is changed.
+
+**A refused sign-in tells nothing by its time.** How long a password check takes depends on the hash stored: on the production
+VPS, bcrypt of cost 10 (PHP's default before 8.4) takes 85 ms, cost 12 324 ms, Argon2id 238 ms, and an address with no account is
+checked against an Argon2id hash nobody knows (`AUTH_DUMMY_PASSWORD_HASH`). Left as it is, the time of a wrong password would tell
+whether the address has an account, for as long as that account keeps its bcrypt hash: until its owner signs in, and for an inactive
+account until the cron erases it. So every refusal of `POST /api/v2/token` that comes from looking at the account (wrong password,
+unknown address, locked, disabled, not verified, TOTP code missing or wrong: `AUTH_LOGIN_REFUSALS_HELD`) is answered no sooner than
+`AUTH_LOGIN_REFUSAL_MIN_MS` (400 ms) after the request began, above the slowest check. A success is not held: whoever has the password
+knows the account. The refusals that do not look at the account (throttling, captcha, sign-in off) are answered at once, so that a
+flood of them holds no worker. Measured over HTTP after the change: 406–412 ms for an unknown address, Argon2id, bcrypt 10 and 12
+alike. If a check ever takes longer than the floor (a slower server, other options), raise the floor with it.
+
+Change the options only after measuring on the server that runs the app (and make the dummy hash and the demo hashes of `demo.sql`
+again). Each check holds its 46 MiB for its time: at most `MaxRequestWorkers` (30) of them at once, about 1.4 GiB; rate-limit the
+sign-in at the edge (deployment.md).
+
+A new account
 cannot sign in until its address is proved: `POST /api/v2/token` answers `403 email_not_verified`, but only to someone who gave the
 right password (a wrong one, or an unknown address, gets the usual `401 invalid_credentials`, so a sign-in tells nothing about an
 account it cannot open), and that refusal counts as no failed attempt.
@@ -71,7 +105,7 @@ used at `POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "reset
 `POST /api/v2/register` answers the same `202 {"sent": ...}` whether the address is new or already has an account (verified or not).
 It never touches an existing account, whatever the request says; it mails the owner a link to choose a new password instead of the
 one to verify. Everything the request can get wrong (a field, the password) is said before the address is looked up, and the
-bcrypt hash is made either way.
+password hash is made either way.
 
 `POST /api/v2/recover_password` only mails a reset link: **the password stays what it is until the link is used**, so asking for one
 locks nobody out. Using a reset link sets the password, proves the address and empties the slot. It does not close the sessions

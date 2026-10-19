@@ -94,7 +94,7 @@ $(document).ready(function(){
 				email_taken: "Cette adresse est déjà utilisée par un autre compte.",
 				missing_field: "Données manquantes.",
 				password_too_weak: "Le mot de passe ne respecte pas la règle des mots de passe.",
-				password_too_long: "Le mot de passe est trop long (72 octets au plus).",
+				password_too_long: "Le mot de passe est trop long (128 caractères au plus).",
 				password_invalid: "Le mot de passe contient un caractère interdit."
 			};
 			$("#et_error_msg").text(moncycle_store.error_pick(jqXHR, return_codes) || moncycle_store.error_text(jqXHR));

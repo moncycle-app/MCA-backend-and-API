@@ -23,13 +23,24 @@ require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
 
-function sec_hash(string $password): string {
-	return password_hash($password, PASSWORD_BCRYPT);
+// The one way a password is hashed. password_verify() reads this and the bcrypt hashes made before it alike.
+function sec_password_hash(string $password): string {
+	return password_hash($password, PASSWORD_ARGON2ID, PASSWORD_HASH_OPTIONS);
+}
+
+// Called once $password has been accepted against $hash (the whole check passed, a second factor included): a hash made otherwise
+// than sec_password_hash() is made again from it, so that the owner never has to change a password for it. The row is written only
+// while it still holds $hash: a password changed meanwhile is kept. A bcrypt hash reads the first 72 bytes and no more, so a longer
+// password that matched it may differ from its owner's after them: such a hash is left as it is, or the owner would be locked out.
+function sec_password_upgrade($db, int $no_user_account, string $hash, string $password): void {
+	if (!password_needs_rehash($hash, PASSWORD_ARGON2ID, PASSWORD_HASH_OPTIONS)) return;
+	if (password_get_info($hash)["algo"] === PASSWORD_BCRYPT && strlen($password) > 72) return;
+	db_querie_update_user_account_password_rehash($db, $no_user_account, $hash, sec_password_hash($password));
 }
 
 // The problem of a password a client chooses, as an issue of its field, or null. The message never holds the password.
 function sec_password_issue(string $password, string $field): ?array {
-	if (strlen($password) > PASSWORD_MAX_BYTES) return input_issue($field, "password_too_long", "'$field' is too long: the maximum is " . PASSWORD_MAX_BYTES . " bytes.");
+	if (mb_strlen($password) > PASSWORD_MAX_CHARS) return input_issue($field, "password_too_long", "'$field' is too long: the maximum is " . PASSWORD_MAX_CHARS . " characters.");
 	if (str_contains($password, "\0")) return input_issue($field, "password_invalid", "'$field' must not contain a null character.");
 	if (!sec_password_matches_policy($password)) return input_issue($field, "password_too_weak", "'$field' does not meet the password policy (GET /api/v2/server_info, passwordPolicyRegex).");
 	return null;

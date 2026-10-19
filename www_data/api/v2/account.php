@@ -31,13 +31,13 @@ if ($path === ["deletion"]) {
 
 	input_query([], $issues);
 	$body = input_body(["password", "code"], $issues);
-	$password = input_secret($body, "password", $issues);
+	$password = input_password($body, "password", $issues);
 	$totp_active = $user_account["totp_state"] == TOTP_STATE_ACTIVE;
 	$code = $totp_active ? input_code($body, $issues, false) : null;
 	input_exit_if_issues($issues);
 
 	sec_token_reauth_exit_if_locked($user_account);
-	if (!user_account_password_matches($db, $user_account, $password)) {
+	if (is_null(user_account_password_check($db, $user_account, $password))) {
 		sec_token_reauth_failed($db, $user_account);
 		log_event("account.refused", ["act" => "delete", "err" => "invalid_password"]);
 		http_error(401, "invalid_password", "Incorrect password.");

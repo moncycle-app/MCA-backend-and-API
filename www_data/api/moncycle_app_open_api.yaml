@@ -225,7 +225,7 @@ info:
     # -> 202 {"data":{"sent":true}}
     ```
 
-    The user chooses the password here (10 to 72 bytes). The account cannot be signed in to until its
+    The user chooses the password here (10 to 128 characters). The account cannot be signed in to until its
     address is proved: the mail holds a link (a page of the app, with a token in its fragment) that the page
     posts to `POST /verify_email` with `purpose: "accountCreation"`. Until then `POST /token` answers
     `403 email_not_verified`.
@@ -706,7 +706,7 @@ paths:
         |---|---|---|---|
         | `nickname` | string (max 255) | Yes | Nickname, initials for instance. Not a name. |
         | `email` | string (email) | Yes | Login address; the link that proves it is mailed here. |
-        | `password` | string (max 72 bytes) | Yes | Chosen password, must match `passwordPolicyRegex` of `server_info`. |
+        | `password` | string (max 128 characters) | Yes | Chosen password, must match `passwordPolicyRegex` of `server_info`. |
         | `birthYear` | integer | Yes | Year of birth, current year or up to 100 years earlier. Anonymous statistics only. |
         | `termsAccepted` | boolean | Yes | Must be `true`: the terms of service are accepted. |
         | `captcha` | string | Yes | The text read in the picture from `POST /captcha` (purpose `register`). |
@@ -737,8 +737,9 @@ paths:
                   example: marie@example.org
                 password:
                   type: string
+                  maxLength: 128
                   description: |-
-                    The password the user chose, matching the server's password policy (`passwordPolicyRegex` of `server_info`; by default 10 characters at least, a lower case letter, an upper case letter and a digit), **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character. It is stored hashed. It is ignored when the address already has an account.
+                    The password the user chose, matching the server's password policy (`passwordPolicyRegex` of `server_info`; by default 10 characters at least, a lower case letter, an upper case letter and a digit), **128 characters at most** (Unicode characters, not bytes; `passwordMaxChars` of `server_info` `limits`), no null character. It is stored hashed. It is ignored when the address already has an account.
                   example: a long passphrase
                 birthYear:
                   type: integer
@@ -977,7 +978,7 @@ paths:
         |---|---|---|---|
         | `purpose` | string: `accountCreation`, `resetPassword` or `changeEmail` | Yes | What the link is for, as the link says. |
         | `token` | string | Yes | The token of the link (the `t` of its fragment). |
-        | `newPassword` | string (10 to 72 bytes) | Only for `resetPassword` | The new password. Not used by the other purposes. |
+        | `newPassword` | string (10 to 128 characters) | Only for `resetPassword` | The new password. Not used by the other purposes. |
       security: []
       requestBody:
         required: true
@@ -997,7 +998,8 @@ paths:
                 newPassword:
                   type: string
                   minLength: 10
-                  description: Required for `resetPassword` only. 10 characters at least, 72 bytes at most, no null character.
+                  maxLength: 128
+                  description: Required for `resetPassword` only. 10 characters at least by default (`passwordPolicyRegex`), 128 at most (Unicode characters, not bytes), no null character.
       responses:
         "415":
           $ref: '#/components/responses/UnsupportedMediaType'
@@ -1733,7 +1735,7 @@ paths:
 
         | Field | What it does | Also needs |
         |---|---|---|
-        | `newPassword` | sets the new password, at once (10 to 72 bytes, different from the current one) | `logoutOtherDevices: true` closes the other sessions |
+        | `newPassword` | sets the new password, at once (10 to 128 characters, different from the current one) | `logoutOtherDevices: true` closes the other sessions |
         | `notificationEmails` | the addresses that receive the finished cycles, the reminders and the warnings, with the login address. A string, `;` between two, 5 at most, `""` to empty it. Made at once; a notice goes to the login address | |
         | `loginEmail` | **asks** to change the address that signs in. Nothing changes yet: a link goes to the **new** address and the change happens when it is used (`POST /verify_email`, purpose `changeEmail`, 1 day); the old address is told | the TOTP `code` when the account has one |
 
@@ -1765,7 +1767,7 @@ paths:
         |---|---|---|---|
         | `nickname` | string (max 255) | No | New nickname. Not empty. |
         | `password` | string | With `newPassword`, `notificationEmails`, `loginEmail` | Current password; ignored otherwise. |
-        | `newPassword` | string (max 72 bytes) | No | New password, matching `passwordPolicyRegex`, different from the current one. Needs `password`. |
+        | `newPassword` | string (max 128 characters) | No | New password, matching `passwordPolicyRegex`, different from the current one. Needs `password`. |
         | `logoutOtherDevices` | boolean | No | With `newPassword` only: `true` closes every other session. Default `false`. |
         | `loginEmail` | string (email) | No | Asks to change the login address; a link goes to the new one. Needs `password`, and `code` with two-factor. |
         | `code` | string (digits) | With `loginEmail` when two-factor is on | TOTP code; ignored otherwise. |
@@ -1865,6 +1867,7 @@ paths:
                 password:
                   type: string
                   format: password
+                  maxLength: 1024
                   description: The current password.
                 code:
                   type: string
@@ -3183,7 +3186,8 @@ components:
         password:
           type: string
           format: password
-          description: The account password.
+          maxLength: 1024
+          description: The account password. Any length a password was ever chosen with, up to 1024 characters (longer is `400` with the issue `too_long`).
           example: demo
         name:
           type: string
@@ -4243,9 +4247,10 @@ components:
           type: object
           description: The numbers a form can check before it sends anything.
           properties:
-            passwordMaxBytes:
+            passwordMaxChars:
               type: integer
-              example: 72
+              description: The longest new password, in Unicode characters (code points), not bytes. A password typed to sign in or confirm may be up to 1024.
+              example: 128
             accountNicknameMaxChars:
               type: integer
               example: 255
@@ -4342,11 +4347,13 @@ components:
         password:
           type: string
           format: password
+          maxLength: 1024
           description: The current account password. Required to change `newPassword`, `notificationEmails` or `loginEmail`; ignored otherwise.
         newPassword:
           type: string
           format: password
-          description: The new password. It must match the server's password policy (`passwordPolicyRegex` of `server_info`; by default 10 characters at least, a lower case letter, an upper case letter and a digit), **72 bytes at most** (bcrypt reads no more, so a longer one is refused instead of being half kept), no null character, different from the current one. Needs `password`.
+          maxLength: 128
+          description: The new password. It must match the server's password policy (`passwordPolicyRegex` of `server_info`; by default 10 characters at least, a lower case letter, an upper case letter and a digit), **128 characters at most** (Unicode characters, not bytes; `passwordMaxChars` of `server_info` `limits`), no null character, different from the current one. Needs `password`.
         logoutOtherDevices:
           type: boolean
           default: false
@@ -4432,6 +4439,7 @@ components:
           example: "091710"
         password:
           type: string
+          maxLength: 1024
           description: The current password of the account.
 
     TotpCodeRequest:

@@ -33,7 +33,7 @@ function email_token_issue($db, int $no_user_account, int $purpose, ?string $new
 }
 
 // What would refuse the link, read without a lock: "invalid_token" (unknown, used, replaced, or for another purpose), "token_expired", or
-// null. It lets a caller skip expensive work (a bcrypt) for a link that cannot work; email_token_use() decides, under the lock.
+// null. It lets a caller skip expensive work (a password hash) for a link that cannot work; email_token_use() decides, under the lock.
 function email_token_refusal($db, mixed $token, int $purpose): ?string {
 	if (!is_string($token) || $token === "" || strlen($token) > EMAIL_TOKEN_LIMIT_CHARS) return "invalid_token";
 	$account = db_querie_select_user_account_by_email_token($db, sec_token_hash($token));
@@ -76,7 +76,7 @@ function email_token_complete($db, array $body, array $issues = []): array {
 
 	$new_password = null;
 	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {
-		$new_password = input_secret($body, "newPassword", $issues);
+		$new_password = input_password($body, "newPassword", $issues);
 		$issue = is_null($new_password) ? null : sec_password_issue($new_password, "newPassword");
 		if (!is_null($issue)) $issues[] = $issue;
 	}
@@ -85,10 +85,10 @@ function email_token_complete($db, array $body, array $issues = []): array {
 	}
 	input_exit_if_issues($issues);
 
-	// before the lock, as bcrypt is slow, and only for a link that can work: nobody can make the server hash for a token it does not know
+	// before the lock, as a password hash is slow, and only for a link that can work: nobody can make the server hash for a token it does not know
 	$password_hash = null;
 	$refusal = $purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD ? email_token_refusal($db, $body["token"], $purpose) : null;
-	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD && is_null($refusal)) $password_hash = sec_hash($new_password);
+	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD && is_null($refusal)) $password_hash = sec_password_hash($new_password);
 
 	$used = !is_null($refusal) ? ["error" => $refusal] : email_token_use($db, $body["token"], $purpose, function (array $account) use ($db, $purpose, $password_hash) {
 		if ($purpose === EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL) {

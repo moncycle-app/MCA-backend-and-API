@@ -42,7 +42,7 @@ function server_info(): array {
 		"passwordPolicyRegex" => sec_password_policy_regex(),
 		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
 		"limits" => [
-			"passwordMaxBytes" => PASSWORD_MAX_BYTES,
+			"passwordMaxChars" => PASSWORD_MAX_CHARS,
 			"accountNicknameMaxChars" => ACCOUNT_LIMIT_NICKNAME_CHARS,
 			"registerCommentMaxChars" => ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS,
 			"notificationEmailsMax" => ACCOUNT_NOTIFICATION_EMAILS_MAX,

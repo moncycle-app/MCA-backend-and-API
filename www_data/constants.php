@@ -47,11 +47,24 @@ const COOKIE_SAMESITE_VALUES = ["strict", "lax", "none"];
 // delimiters, written to mean the same in PCRE and in JavaScript (a client puts it in a `pattern` attribute); the operator's
 // PASSWORD_POLICY_REGEX replaces it. GET /api/v2/server_info tells the one in force.
 const PASSWORD_POLICY_REGEX_DEFAULT = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$';
-// bcrypt reads 72 bytes and silently drops the rest: a longer password is refused rather than half kept.
-const PASSWORD_MAX_BYTES = 72;
-// The hash of a password nobody knows, at the cost of password_hash(): a sign-in for an address with no account is checked against it,
-// so that it takes as long as a wrong password.
-const AUTH_DUMMY_PASSWORD_HASH = '$2y$12$fFAyg7vWBJagg2QJOymLY.Ndi.VRQtAJhChoNUW7XiAxek8JDKUju';
+// Lengths in characters (Unicode code points: mb_strlen, the regex's /u, JSON Schema's maxLength). A new password is at most
+// PASSWORD_MAX_CHARS. A password typed to sign in or to confirm is not checked against the policy (it may have been chosen under an older
+// one, and older versions took any length) and only has to fit PASSWORD_INPUT_MAX_CHARS, a ceiling against absurd input.
+const PASSWORD_MAX_CHARS = 128;
+const PASSWORD_INPUT_MAX_CHARS = 1024;
+// Argon2id for every hash made (lib/sec.php): 46 MiB and 4 passes, measured at 238 ms on the production VPS (4 Haswell cores at
+// 2.4 GHz), about 90 ms on a recent machine. Each check holds the memory for that time: MaxRequestWorkers (zz-moncycleapp.conf) times
+// 46 MiB at worst. The time of a refused sign-in does not depend on these: AUTH_LOGIN_REFUSAL_MIN_MS.
+const PASSWORD_HASH_OPTIONS = ["memory_cost" => 47104, "time_cost" => 4, "threads" => 1];
+// The hash of a password nobody knows, made with PASSWORD_HASH_OPTIONS (make it again when they change): a sign-in for an address
+// with no account is checked against it, so that it does the work of a wrong password.
+const AUTH_DUMMY_PASSWORD_HASH = '$argon2id$v=19$m=47104,t=4,p=1$V0tydk9PbTN4RERTbkdrcA$aIY7svzUfMd8vNz3UP2rCfpz6kWhZMI4I4M0VNl2zRQ';
+// A refused sign-in that looked at the account is answered no sooner than this after the request began (lib/sec_token.php), so that
+// its time tells neither whether there is an account nor which hash it holds. Above the slowest check: bcrypt of cost 12, 324 ms on
+// the production VPS. A refusal holds its worker that long, asleep.
+const AUTH_LOGIN_REFUSAL_MIN_MS = 400;
+// The refusals of sec_token_login() that come from the account; the others (throttling, captcha, sign-in off) are answered at once.
+const AUTH_LOGIN_REFUSALS_HELD = ["account_disabled", "invalid_credentials", "account_locked", "email_not_verified", "totp_required", "totp_invalid"];
 
 // The captcha picture (lib/sec_captcha.php): its alphabet leaves out the glyphs that look alike (o 0, i l j 1, s 5, z 2, b 6 8, g q 9,
 // u v, c e).
@@ -216,7 +229,7 @@ const INPUT_ISSUE_CODES = [
 	"wrong_type",           // a string where a number is expected, a list for an object...
 	"invalid_value",        // right type, not one of the allowed values
 	"out_of_range",         // a number, a date or a length outside its limits
-	"too_long",             // a text over the limit of its column
+	"too_long",             // a text over its limit (its column's, or PASSWORD_INPUT_MAX_CHARS for a password)
 	"too_many",             // a list or a span over its limit
 	"invalid_date",         // not a real YYYY-MM-DD date
 	"invalid_timestamp",    // not an RFC 3339 timestamp with a zone

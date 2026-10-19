@@ -185,6 +185,14 @@ function input_secret(array $body, string $field, array &$issues, bool $required
 	return $body[$field];
 }
 
+// A password (input_secret()) of at most PASSWORD_INPUT_MAX_CHARS characters. The message never holds the password.
+function input_password(array $body, string $field, array &$issues, bool $required = true): ?string {
+	$password = input_secret($body, $field, $issues, $required);
+	if (is_null($password) || mb_strlen($password) <= PASSWORD_INPUT_MAX_CHARS) return $password;
+	$issues[] = input_issue($field, "too_long", "'$field' is too long: the maximum is " . PASSWORD_INPUT_MAX_CHARS . " characters.");
+	return null;
+}
+
 // An RFC 3339 timestamp with a zone, as the UTC "Y-m-d H:i:s" the app stores; null when absent (or wrong: an issue).
 function input_timestamp(mixed $value, string $field, array &$issues): ?string {
 	if (is_null($value)) return null;

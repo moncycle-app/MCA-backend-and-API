@@ -169,7 +169,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | Setting | Default | Description |
 |---|---|---|
 | `CAPTCHA_SECRET` | made at start-up (Docker) | The key that signs the captcha challenges: random, **32 characters or more**. Empty or shorter: the captcha is closed, and sign-up, password recovery and the sign-in of an account that must answer a captcha answer `503 captcha_unavailable`. Instances behind one address must share it. |
-| `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients by `GET /api/v2/server_info` (`passwordPolicyRegex`); the API answers `400` `password_too_weak` otherwise. Passwords stay limited to 72 bytes. |
+| `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients by `GET /api/v2/server_info` (`passwordPolicyRegex`); the API answers `400` `password_too_weak` otherwise. A new password is 128 characters at most whatever it says (Unicode characters, not bytes). |
 | `LOGIN_ATTEMPTS_DECAY_MINUTES` | `60` | Failed logins on an account older than this restart the count; `0` counts nothing, so no captcha and no lockout. |
 | `LOGIN_CAPTCHA_THRESHOLD` | `3` | Failed logins after which a captcha is asked; `0` never asks. |
 | `LOGIN_LOCKOUT_THRESHOLD` | `15` | Failed logins after which a wrong password locks the account; `0` never locks. |

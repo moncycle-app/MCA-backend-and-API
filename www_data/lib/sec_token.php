@@ -172,14 +172,28 @@ function sec_token_reauth_passed($db, array $user_account): void {
 	if (intval($user_account["nb_connection_attempts"] ?? 0) > 0) db_querie_update_login_failures_clear($db, $user_account["no_user_account"]);
 }
 
-// A sign-in. $body has been checked by the endpoint (email normalised, password a non-empty string, the types of code, captcha and
+// A sign-in (sec_token_login_outcome()). A refusal that came from looking at the account (AUTH_LOGIN_REFUSALS_HELD) is answered no
+// sooner than AUTH_LOGIN_REFUSAL_MIN_MS after the request began: how long a password check takes depends on the kind of hash stored
+// (bcrypt of cost 10 or 12, Argon2id) and on whether there is an account at all, and the time of the answer must tell neither. A
+// success is not held: whoever has the password knows the account. The wait happens here, after any lock has been let go.
+function sec_token_login($db, array $body, array $token_options): array {
+	$login = sec_token_login_outcome($db, $body, $token_options);
+	if (!isset($login["data"]) && in_array($login["code"], AUTH_LOGIN_REFUSALS_HELD, true)) {
+		$started = floatval($_SERVER["REQUEST_TIME_FLOAT"] ?? microtime(true));
+		$left_us = intval(($started + AUTH_LOGIN_REFUSAL_MIN_MS / 1000 - microtime(true)) * 1000000);
+		if ($left_us > 0) usleep($left_us);
+	}
+	return $login;
+}
+
+// The sign-in itself. $body has been checked by the endpoint (email normalised, password a non-empty string, the types of code, captcha and
 // captchaToken), and so have $token_options. Answers ["status" => 201, "data" => ...] or ["status", "code", "message", "meta"].
 // Every outcome is logged. A refusal is counted against the address (a row reserved before the checks, given back on success), and a
 // wrong password or code against the account too, which drives the captcha and the lockout. The lockout only stops a wrong password, so
 // it cannot lock the owner out; with TOTP it stops the code as well, since the code is then the only thing left to guess.
 // An account that must answer a captcha is checked with its row locked from the captcha to the end: the captcha is tied to the
 // account's counters, which every outcome moves, so of the requests that come together with one captcha only the first tries a password.
-function sec_token_login($db, array $body, array $token_options): array {
+function sec_token_login_outcome($db, array $body, array $token_options): array {
 	$client_ip = sec_client_ip();
 	$user_account = db_querie_select_user_account_by_email($db, $body["email"]) ?? [];
 	$account_locked = sec_token_login_over($user_account, LOGIN_LOCKOUT_THRESHOLD);
@@ -235,6 +249,7 @@ function sec_token_login($db, array $body, array $token_options): array {
 		}
 
 		$attempts = sec_token_login_attempts($user_account);   // the failures this sign-in ends
+		sec_password_upgrade($db, intval($user_account["no_user_account"]), $user_account["password"], $body["password"]);
 		$session = sec_token_create($db, $user_account, $token_options);
 		sec_attempt_release($db, $attempt);
 		log_event("auth.login_succeeded", [
@@ -259,7 +274,7 @@ function sec_token_login($db, array $body, array $token_options): array {
 	if ($verdict !== "ok") return $captcha_refused($verdict);
 
 	return db_ops_transaction($db, function () use ($db, $captcha_verdict, $captcha_refused, $check_credentials, &$user_account, &$account_locked) {
-		// held until the end, bcrypt included, and read again: a request that came with the same captcha has moved the counters
+		// held until the end, the password hash included, and read again: a request that came with the same captcha has moved the counters
 		$no_user_account = $user_account["no_user_account"];
 		$user_account = db_querie_select_user_account_for_update($db, $no_user_account) ? (db_querie_select_user_account($db, $no_user_account) ?? []) : [];
 		$account_locked = sec_token_login_over($user_account, LOGIN_LOCKOUT_THRESHOLD);
