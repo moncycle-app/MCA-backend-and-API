@@ -15,7 +15,7 @@ if (PHP_SAPI !== "cli") {
 }
 
 require_once __DIR__ . "/../../config.php";
-require_once __DIR__ . "/../../lib/db.php";
+require_once __DIR__ . "/../../lib/db_ops.php";
 require_once __DIR__ . "/../../lib/sec.php";
 require_once __DIR__ . "/../../lib/sec_token.php";
 
@@ -31,7 +31,7 @@ print("-----");
 print(PHP_EOL);
 print(PHP_EOL);
 
-$db = db_open();
+$db = db_ops_open();
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 // NOTE: MariaDB commits at every ALTER TABLE / CREATE TABLE / RENAME, so the transaction below protects the

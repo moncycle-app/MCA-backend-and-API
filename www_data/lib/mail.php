@@ -321,6 +321,33 @@ function mail_send_deletion_warning(array $account, int $days): bool {
 		"Faute d'activité, votre compte moncycle.app sera supprimé dans $days jours. Connectez-vous pour le conserver.");
 }
 
+// "15 novembre 2026" for "2026-11-15".
+function mail_french_date(string $ymd): string {
+	$months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+	$date = new DateTimeImmutable($ymd);
+	return ($date->format("j") === "1" ? "1er" : $date->format("j")) . " " . $months[intval($date->format("n")) - 1] . " " . $date->format("Y");
+}
+
+// The notice of new terms of service to the whole account (login address and notifications). $url and $effective_date ("YYYY-MM-DD") are
+// the caller's, checked by it (script/terms_notice.php): the URL is escaped here all the same.
+function mail_send_terms_update(array $account, string $url, string $effective_date): bool {
+	$name = htmlspecialchars($account["name"]);
+	$link = htmlspecialchars($url);
+	$day = mail_french_date($effective_date);
+	$content = <<<HTML
+	Nous mettons à jour les conditions générales d'utilisation de MONCYCLE.APP.<br />
+	<br />
+	Les nouvelles conditions entrent en vigueur le <b>{$day}</b>. Vous pouvez les lire ici:<br />
+	<a style='color: #1e824c' href='{$link}'>{$link}</a><br />
+	<br />
+	En continuant à utiliser MONCYCLE.APP après cette date, vous acceptez ces modifications. Si vous ne les acceptez pas, merci de ne plus utiliser l'application: vous pouvez supprimer votre compte depuis la page "⚙️ Réglages".<br />
+	<br />
+	HTML;
+	$why = mail_why("vous possédez un compte sur MONCYCLE.APP et que nous devons vous informer de ce changement");
+	return mail_send('terms_update', mail_recipients($account), "Conditions d'utilisation: nouveautés au {$day}", mail_html("Bonjour {$name},", $content, $why),
+		"Les conditions générales d'utilisation de moncycle.app changent et entrent en vigueur le {$day}: {$url}\nEn continuant à utiliser l'application après cette date, vous acceptez ces modifications.");
+}
+
 // ---------------------------------------------------------------------------
 // The mail of a finished cycle: a layout of its own (a card, the cycle in figures, a row per attachment), and no "mails are needed"
 // footer, since the user can turn this one off.
@@ -442,7 +469,7 @@ function mail_cycle_text(string $name, string $first_day, string $last_day, int 
 		. "Ce mail a été envoyé automatiquement par MONCYCLE.APP, merci de ne pas y répondre. Vous le recevez car l'envoi automatique des cycles est activé sur votre compte.";
 }
 
-// The export of a finished cycle (a row of db_select_cycles_finished()), with $files: [file name => content].
+// The export of a finished cycle (a row of db_querie_select_cycles_finished()), with $files: [file name => content].
 function mail_send_cycle(array $account, string $first_day, string $last_day, int $nb_days, array $files, int $rows_read): bool {
 	return mail_send('cycle', mail_recipients($account), "Votre cycle du $first_day au $last_day ($nb_days jours)",
 		mail_cycle_html($account["name"], $first_day, $last_day, $nb_days),

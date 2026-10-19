@@ -15,7 +15,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/day_format.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/user_account.php";
 
@@ -63,7 +63,7 @@ function doc_csv_dump($out, array $rows): void {
 
 // Every day of the account as stored, with its sensation and observation descriptions as two columns after the stamp.
 function doc_csv_raw_days($db, int $no_user_account): array {
-	$days = db_select_all_day_timeline($db, $no_user_account);
+	$days = db_querie_select_all_day_timeline($db, $no_user_account);
 	$descriptions = data_descriptions_by_day($db, $days, $no_user_account);
 
 	$rows = [];

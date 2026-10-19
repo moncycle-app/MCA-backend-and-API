@@ -40,7 +40,7 @@ if (!DEMO_ENABLED) {
 }
 
 try {
-	if (!$dry_run) data_reload_demo_accounts(db_open());
+	if (!$dry_run) data_reload_demo_accounts(db_ops_open());
 	echo ($dry_run ? "[dry run] demo accounts would be reloaded" : "demo accounts reloaded") . PHP_EOL;
 }
 catch (\Throwable $e) {

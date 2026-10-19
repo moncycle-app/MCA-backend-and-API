@@ -42,7 +42,7 @@ $deadline = time() + $wait;
 $db = null;
 while (is_null($db)) {
 	try {
-		$db = db_open();
+		$db = db_ops_open();
 	}
 	catch (\PDOException $e) {
 		if (time() >= $deadline) {

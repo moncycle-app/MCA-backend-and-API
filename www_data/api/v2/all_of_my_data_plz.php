@@ -18,7 +18,7 @@ require_once __DIR__ . "/../../lib/server.php";
 
 log_start(sec_client_ip());
 http_exit_if_maintenance();
-$db = db_open();
+$db = db_ops_open();
 server_exit_if_schema_mismatch($db);
 
 $user_account = sec_token_authenticate($db);
@@ -26,8 +26,8 @@ sec_redirect_if_logged_out($user_account);
 $no_user_account = $user_account["no_user_account"];
 
 // the account, its sessions and its days as stored, secrets masked; read first, for the log
-$account_row = sec_obfuscate_columns(db_select_user_account($db, $no_user_account), ["password", "totp_secret", "email_token_hash"]);
-$session_rows = array_map(fn($row) => sec_obfuscate_columns($row, ["auth_token_str"]), db_select_auth_tokens($db, $no_user_account));
+$account_row = sec_obfuscate_columns(db_querie_select_user_account($db, $no_user_account), ["password", "totp_secret", "email_token_hash"]);
+$session_rows = array_map(fn($row) => sec_obfuscate_columns($row, ["auth_token_str"]), db_querie_select_auth_tokens($db, $no_user_account));
 $day_rows = doc_csv_raw_days($db, $no_user_account);
 
 log_event("export.raw_dump", ["n" => count($day_rows), "ntk" => count($session_rows)]);

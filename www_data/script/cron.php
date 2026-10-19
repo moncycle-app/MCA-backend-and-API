@@ -41,16 +41,16 @@ if (MAINTENANCE_MODE) {
 	exit(1);
 }
 
-$db = db_open();
+$db = db_ops_open();
 
 // THE EXPORT OF A CYCLE THAT ENDED, by mail: PDF, CSV and NFP (cycles of at least 5 days, accounts that
 // have not turned auto_mail_export off)
 
 $handled = $failed = 0;
-foreach (db_select_cycles_finished($db) as $account) {
+foreach (db_querie_select_cycles_finished($db) as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);
 
-	$cycle_start = db_select_cycle($db, $account["cycle_complet"], $account["no_user_account"]);
+	$cycle_start = db_querie_select_cycle($db, $account["cycle_complet"], $account["no_user_account"]);
 	if (is_null($cycle_start)) continue;
 
 	$days = doc_export_days($db, $cycle_start, $account["cycle_complet"], $account);
@@ -87,7 +87,7 @@ log_cron_step("cycle_mails", $handled, $failed);
 // A REMINDER TO THE ACCOUNTS THAT HAVE GONE QUIET
 
 $handled = $failed = 0;
-foreach (db_select_user_account_inactive($db) as $account) {
+foreach (db_querie_select_user_account_inactive($db) as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
@@ -97,7 +97,7 @@ foreach (db_select_user_account_inactive($db) as $account) {
 	$sent = mail_send_reminder($account);
 	log_cron_count($sent ? "sent" : "ko");
 	if (!$sent) $failed++;
-	if ($sent) db_update_is_inactive($db, $account["no_user_account"], 1);
+	if ($sent) db_querie_update_is_inactive($db, $account["no_user_account"], 1);
 	echo ($sent ? "reminder sent to " : "COULD NOT send a reminder to ") . "{$account["login_email"]} (and {$account["notification_emails"]})" . PHP_EOL;
 }
 log_cron_step("reminders", $handled, $failed);
@@ -105,7 +105,7 @@ log_cron_step("reminders", $handled, $failed);
 // RGPD: WARN, THEN DELETE, THE ACCOUNTS INACTIVE FOR ACCOUNT_INACTIVITY_DELETE_YEARS
 
 $handled = $failed = 0;
-foreach (db_select_user_account_to_warn_before_deletion($db, ACCOUNT_INACTIVITY_DELETE_YEARS, ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE) as $account) {
+foreach (db_querie_select_user_account_to_warn_before_deletion($db, ACCOUNT_INACTIVITY_DELETE_YEARS, ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE) as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
@@ -120,7 +120,7 @@ foreach (db_select_user_account_to_warn_before_deletion($db, ACCOUNT_INACTIVITY_
 log_cron_step("deletion_warnings", $handled, $failed);
 
 $handled = 0;
-foreach (db_select_user_account_to_delete($db, ACCOUNT_INACTIVITY_DELETE_YEARS) as $account) {
+foreach (db_querie_select_user_account_to_delete($db, ACCOUNT_INACTIVITY_DELETE_YEARS) as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
@@ -136,7 +136,7 @@ log_cron_step("account_deletions", $handled);
 // THE ACCOUNTS WHOSE ADDRESS WAS NEVER PROVED: nobody could sign in to them, and the address is held until they go
 
 $handled = 0;
-foreach (db_select_user_account_unverified_old($db, ACCOUNT_UNVERIFIED_DELETE_DAYS) as $account) {
+foreach (db_querie_select_user_account_unverified_old($db, ACCOUNT_UNVERIFIED_DELETE_DAYS) as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	$handled++;
 	if ($dry_run) {
@@ -153,19 +153,19 @@ log_cron_step("unverified_deletions", $handled);
 
 log_context(["uid" => null]);
 if ($dry_run) {
-	$count = db_purge_auth_token($db, true);
+	$count = db_querie_purge_auth_token($db, true);
 	echo "[dry run] $count old tokens would be deleted" . PHP_EOL;
 	log_cron_step("tokens", $count);
-	$count = db_purge_login_attempt_ip($db, true);
+	$count = db_querie_purge_login_attempt_ip($db, true);
 	echo "[dry run] $count old login attempts (IP) would be deleted" . PHP_EOL;
 	log_cron_step("login_attempts", $count);
 }
 else {
-	$deleted = db_purge_auth_token($db, false);
+	$deleted = db_querie_purge_auth_token($db, false);
 	log_cron_count("tok", $deleted);
 	echo $deleted . " old tokens deleted" . PHP_EOL;
 	log_cron_step("tokens", $deleted);
-	$deleted = db_purge_login_attempt_ip($db, false);
+	$deleted = db_querie_purge_login_attempt_ip($db, false);
 	log_cron_count("ipa", $deleted);
 	echo $deleted . " old login attempts (IP) deleted" . PHP_EOL;
 	log_cron_step("login_attempts", $deleted);
@@ -183,17 +183,17 @@ $reset = $dry_run ? "would be reset" : "reset";
 $today = getdate();
 $counters = 1;
 
-if (!$dry_run) db_update_reset_key_value($db, "pub_visit_daily");
+if (!$dry_run) db_querie_update_reset_key_value($db, "pub_visit_daily");
 echo ($dry_run ? "[dry run] " : "") . "daily stats " . $reset;
 
 if ($today["wday"] == 0) {
-	if (!$dry_run) db_update_reset_key_value($db, "pub_visit_weekly");
+	if (!$dry_run) db_querie_update_reset_key_value($db, "pub_visit_weekly");
 	echo ", weekly stats " . $reset;
 	$counters++;
 }
 
 if ($today["mday"] == 1) {
-	if (!$dry_run) db_update_reset_key_value($db, "pub_visit_monthly");
+	if (!$dry_run) db_querie_update_reset_key_value($db, "pub_visit_monthly");
 	echo ", monthly stats " . $reset;
 	$counters++;
 }

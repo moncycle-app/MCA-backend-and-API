@@ -42,7 +42,7 @@ if ($method === 'POST') {
 	$no_user_account = intval($login["data"]["userId"]);
 	$token = sec_token_find($db, $no_user_account, $login["data"]["prefix"]) ?? [];
 	if (!in_array($no_user_account, ACCOUNT_DEMO_IDS, true)) {
-		$account = db_select_user_account($db, $no_user_account);
+		$account = db_querie_select_user_account($db, $no_user_account);
 		$expires_at = is_null($options["expires_in_days"]) ? null : date_parse_rfc3339($token["expiresAt"] ?? null);
 		if (!is_null($account)) mail_send_new_login($account, $options["name"], $login["data"]["prefix"], AUTH_TOKEN_SCOPE_NAMES[$options["scope"]], sec_token_user_agent(), $expires_at);
 	}
@@ -80,7 +80,7 @@ if ($method === 'DELETE') {
 
 	if (is_null($prefix) && !$others) {
 		if (!is_null($user_account)) {
-			db_delete_auth_token($db, $user_account["no_auth_token"], $user_account["no_user_account"]);
+			db_querie_delete_auth_token($db, $user_account["no_auth_token"], $user_account["no_user_account"]);
 			log_event("auth.logout");
 		}
 		sec_token_clear_cookie();

@@ -19,7 +19,7 @@ use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
 
 require_once __DIR__ . "/../vendor/autoload.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
 
@@ -127,7 +127,7 @@ function sec_totp_begin($db, array $user_account): array {
 	$totp->setLabel($user_account["login_email"]);
 	$totp->setIssuer('MONCYCLE.APP');
 	$totp->setParameter('image', APP_URL . "img/moncycleapp512.jpg");
-	db_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_INIT, $totp->getSecret());
+	db_querie_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_INIT, $totp->getSecret());
 
 	$qr_writer = new Writer(new ImageRenderer(new RendererStyle(150), new SvgImageBackEnd()));
 	return [
@@ -213,16 +213,16 @@ function sec_client_ip(): string {
 // attempt does not count), 0 when addresses are not limited, null when this one is over.
 function sec_attempt_reserve($db, string $ip): ?int {
 	if (LOGIN_IP_MAX_ATTEMPTS <= 0) return 0;
-	if (db_count_login_attempt_ip($db, $ip) >= LOGIN_IP_MAX_ATTEMPTS) return null;
+	if (db_querie_count_login_attempt_ip($db, $ip) >= LOGIN_IP_MAX_ATTEMPTS) return null;
 
-	$no_login_attempt_ip = intval(db_insert_login_attempt_ip($db, $ip));
-	if (db_count_login_attempt_ip($db, $ip) > LOGIN_IP_MAX_ATTEMPTS) {
-		db_delete_login_attempt_ip($db, $no_login_attempt_ip);
+	$no_login_attempt_ip = intval(db_querie_insert_login_attempt_ip($db, $ip));
+	if (db_querie_count_login_attempt_ip($db, $ip) > LOGIN_IP_MAX_ATTEMPTS) {
+		db_querie_delete_login_attempt_ip($db, $no_login_attempt_ip);
 		return null;
 	}
 	return $no_login_attempt_ip;
 }
 
 function sec_attempt_release($db, int $attempt): void {
-	if ($attempt > 0) db_delete_login_attempt_ip($db, $attempt);
+	if ($attempt > 0) db_querie_delete_login_attempt_ip($db, $attempt);
 }

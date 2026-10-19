@@ -18,7 +18,8 @@ declare(strict_types=1);
 require_once __DIR__ . "/user_account.php";
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/day_format.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_ops.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/nfp_format.php";
 
 // ---------------------------------------------------------------------------
@@ -147,7 +148,7 @@ function nfp_import_is_unstored_field(string $where): bool {
 // the file), warnings (accepted, but say so), ignored (a field this app has nowhere to store), mapped (stored narrower than the file
 // said), duplicates (dates the file holds twice, also in issues, as a list for the dry run). Issue or warning is whether the value can be
 // stored at all: whatever this app's own export writes must stay a warning, or it would write files it refuses to read back. Answers the
-// report with "plan" (one entry per day to write, encoded for db_update_day_timeline()), "cyclesRead" and "daysRead". $warnings are the
+// report with "plan" (one entry per day to write, encoded for db_querie_update_day_timeline()), "cyclesRead" and "daysRead". $warnings are the
 // earlier stages': they open the list. Nothing here touches the DB.
 function nfp_import_build_plan(object $file, array $user_account, array $warnings = []): array {
 	$account_method = user_account_method_name(intval($user_account["nfp_method"]));
@@ -582,7 +583,7 @@ function nfp_import_preview_plan($db, int $no_user_account, array $plan, bool $o
 	if (!empty($plan)) {
 		// the plan holds no date twice (stage 3 refuses it): one range query answers every date
 		$dates = array_column($plan, "date");
-		$existing = array_flip(db_select_day_timeline_dates_frame($db, min($dates), max($dates), $no_user_account));
+		$existing = array_flip(db_querie_select_day_timeline_dates_frame($db, min($dates), max($dates), $no_user_account));
 
 		foreach ($dates as $date) {
 			if (!isset($existing[$date])) {
@@ -597,7 +598,7 @@ function nfp_import_preview_plan($db, int $no_user_account, array $plan, bool $o
 
 	// the walk of nfp_import_write_plan(): the days it would write, sensations then observations, a name's first use deciding its type
 	$recorded = [];
-	foreach (db_select_description_name_type($db, $no_user_account) as $description) {
+	foreach (db_querie_select_description_name_type($db, $no_user_account) as $description) {
 		$recorded[$description["name"]] = intval($description["type"]);
 	}
 
@@ -650,8 +651,8 @@ function nfp_import_narrowed_note(string $date, string $name, int $recorded_type
 function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $override, string $last_write_client_UTC, ?array &$written_days = null, ?array &$created_descriptions = null): array {
 	$written_days = [];
 	$created_descriptions = [];
-	return db_transaction($db, function () use ($db, $no_user_account, $plan, $override, $last_write_client_UTC, &$written_days, &$created_descriptions) {
-		db_select_user_account_for_update($db, $no_user_account);
+	return db_ops_transaction($db, function () use ($db, $no_user_account, $plan, $override, $last_write_client_UTC, &$written_days, &$created_descriptions) {
+		db_querie_select_user_account_for_update($db, $no_user_account);
 		$created = [];
 		$overwritten = [];
 		$skipped = [];
@@ -663,7 +664,7 @@ function nfp_import_write_plan($db, int $no_user_account, array $plan, bool $ove
 		foreach ($plan as $entry) {
 			$date = $entry["date"];
 
-			$existing = db_select_day_timeline($db, $date, $no_user_account);
+			$existing = db_querie_select_day_timeline($db, $date, $no_user_account);
 			if (!is_null($existing)) $already[] = $date;
 
 			if (!is_null($existing) && !$override) {

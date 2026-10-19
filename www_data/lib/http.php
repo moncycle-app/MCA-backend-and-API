@@ -49,7 +49,7 @@ function http_exit_if_maintenance(): void {
 
 function http_respond(int $status, array $body): never {
 	http_response_code($status);
-	echo json_encode($body);
+	echo json_encode($body, API_JSON_FLAGS);
 	exit;
 }
 

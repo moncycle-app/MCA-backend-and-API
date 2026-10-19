@@ -16,7 +16,7 @@ declare(strict_types=1);
 const APP_VERSION = "15dev";
 
 // The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
-// config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db.php) stay next
+// config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db_querie.php) stay next
 // to the code that runs them.
 
 // ===========================================================================
@@ -113,7 +113,7 @@ const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
 const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
 // How much of the user agent the "new login" mail quotes.
 const MAIL_USER_AGENT_CHARS = 120;
-// A token made without "expiresInDays" dies after this many days, or after this many days unused (db_purge_auth_token()).
+// A token made without "expiresInDays" dies after this many days, or after this many days unused (db_querie_purge_auth_token()).
 const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
 const AUTH_TOKEN_IDLE_DAYS = 40;
 // The address of a token as GET /api/v2/token shows it, cut to these bits; the database keeps it whole.
@@ -303,6 +303,12 @@ const LOG_REQUEST_ID_PATTERN = '/^[A-Za-z0-9._:-]{1,64}$/D';
 
 // How a line is encoded: readable text, and a value that cannot be encoded is replaced, never fatal.
 const LOG_JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR;
+
+// The json_encode() flags of every JSON answer of the API (http_respond()).
+const API_JSON_FLAGS = JSON_PRETTY_PRINT;
+
+// The NFP file: accents and the timestamp readable, a round 37.0 kept a number, laid out to be read.
+const NFP_JSON_FLAGS = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_PRETTY_PRINT;
 
 // A line stays under LOG_LIMIT_LINE_BYTES, below PIPE_BUF (4096 on Linux): one write of that size is atomic, so the workers never
 // interleave their lines.
@@ -626,10 +632,10 @@ const DOC_FC_STAMPS = [
 	"R" => ['R', 190, 0, 4],
 	"G" => ['V', 45, 102, 23],
 	"Y" => ['J', 255, 255, 9],
-	"BB" => ['BBB', 255, 255, 255],
-	'RBB' => ['BBR', 190, 0, 0],
-	'GBB' => ['BBV', 130, 187, 106],
-	'YBB' => ['BBJ', 255, 255, 9],
+	"BB" => ['BBB', 255, 255, 255],  // bébé blanc
+	'RBB' => ['BBR', 190, 0, 0],     // bébé rouge
+	'GBB' => ['BBV', 130, 187, 106], // bébé vert
+	'YBB' => ['BBJ', 255, 255, 9],   // bébé jaune
 	'Gi' => ['G', 255, 236, 238], // pregnancy ("Grossesse") -- TODO: another letter, G reads like Green
 ];
 

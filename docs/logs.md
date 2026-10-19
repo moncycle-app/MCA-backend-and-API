@@ -127,7 +127,7 @@ Every key the code can write. The first block is on every line.
 | `fmt` | Export format: `pdf`, `csv`, `nfp`. |
 | `anon` | The export was anonymous. |
 | `per` | Length of the exported period in days (not the dates). |
-| `kind` | Which mail: `verify_email`, `account_exists`, `reset_password`, `password_changed`, `confirm_email`, `email_change_requested`, `email_change_taken`, `email_changed`, `notification_emails`, `new_login`, `cycle`, `reminder`, `deletion_warning`. |
+| `kind` | Which mail: `verify_email`, `account_exists`, `reset_password`, `password_changed`, `confirm_email`, `email_change_requested`, `email_change_taken`, `email_changed`, `notification_emails`, `new_login`, `cycle`, `reminder`, `deletion_warning`, `terms_update`. |
 | `to` | Number of recipients of a mail. |
 | `fil` | Number of attachments of a mail. |
 | `msg` | A scrubbed message: the mailer's error, an exception message, a fatal error. |

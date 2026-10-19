@@ -14,13 +14,13 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/sec.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/upgrade.php";
 
 // A 503 when the database is not at the schema version of APP_VERSION, after the maintenance exit (the migrations run in maintenance).
 function server_exit_if_schema_mismatch($db): void {
-	$value = db_select_key_value($db, SCHEMA_VERSION_KEY);
+	$value = db_querie_select_key_value($db, SCHEMA_VERSION_KEY);
 	$version = $value === false || is_null($value) ? null : intval($value);
 	$needed = upgrade_schema_version();
 	if ($version === $needed) return;

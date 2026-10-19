@@ -62,9 +62,11 @@ Also:
 
 ## The library, file by file
 
-- **`db.php`** every SQL statement, one small function each, built on `db_rows/row/column/value/exec/insert` (statements prepared
-  once per connection, parameters bound by PHP type), `db_transaction()` and `db_unless_duplicate()` (null when a unique key refuses
-  the write). A read answers what the caller needs: a list of rows, one row or `null`, a column, a scalar; a write answers a row count,
+- **`db_ops.php`** the connection and how a statement runs: `db_ops_open()`, `db_ops_run()` and `db_ops_rows/row/column/value/exec/insert`
+  (statements prepared once per connection, parameters bound by PHP type), `db_ops_transaction()`, `db_ops_unless_duplicate()` (null when a
+  unique key refuses the write), `db_ops_exec_script()`. No SQL of the app.
+- **`db_querie.php`** every SQL statement, one small function each, `db_querie_<verb>_<table>_<what>()`, built on `db_ops_*` (it requires
+  `db_ops.php`). A read answers what the caller needs: a list of rows, one row or `null`, a column, a scalar; a write answers a row count,
   an insert the new id. No business logic.
 - **`data.php`** what the app does with its data: `data_day` (a day built from its row, its cycle and its descriptions, no query: the
   sync, `GET /api/v2/day` and the exports all go through it), `data_construct_day` (one day read), `data_days_range`,
@@ -102,14 +104,14 @@ Also:
   sessions and TOTP alone), `email_token_request_email_change()` (called by `user_account_update()` for `loginEmail`: a link to the NEW
   address; an address another account has gets a mail, same answer). `user_account.email_verified_at` NULL = the account cannot sign in
   (`sec_token_login`: `403 email_not_verified`, only after the right password, counted as nothing); the cron erases such accounts after
-  `ACCOUNT_UNVERIFIED_DELETE_DAYS`. Any raw insert of an account must call `db_update_user_account_email_verified()`.
+  `ACCOUNT_UNVERIFIED_DELETE_DAYS`. Any raw insert of an account must call `db_querie_update_user_account_email_verified()`.
 - **`sec.php`** passwords (`sec_hash()`, `sec_password_issue()`), TOTP, who may sign in (`sec_account_enabled()`,
   `sec_session_is_demo()`), throttling (`sec_attempt_reserve()` / `_release()`: the attempt is written before the check and given back
   when it does not count), the client address (`sec_client_ip()`: `REMOTE_ADDR`, or `X-Forwarded-For` when the peer is in
   `TRUSTED_PROXIES`), and the write-origin check (`sec_exit_if_cross_origin()`: `APP_URL`, `WEB_APP_ORIGINS`).
 - **`sec_token.php`** the account's tokens and `/api/v2/token`. `sec_token_authenticate()` finds the account of the request (cookie or
   `Authorization: Bearer`); `sec_token_login()` is the sign-in (returns its outcome, the endpoint answers; an account that must answer a
-  captcha is checked inside `db_transaction()` with its row locked); `sec_token_create()` makes the token (name, scope, expiry, cookie only
+  captcha is checked inside `db_ops_transaction()` with its row locked); `sec_token_create()` makes the token (name, scope, expiry, cookie only
   on request, `sec_token_cookie_samesite()`: `COOKIE_SAMESITE`; user agent and address kept whole; its first characters are kept in the
   clear as `auth_token.auth_token_prefix`, unique per account, and the token is made again when the key refuses).
   `sec_token_parse_options` reads name, scope, expiresInDays, cookie of `POST /api/v2/token` (a 400 before anything is read);
@@ -162,7 +164,7 @@ require_once __DIR__ . "/../../lib/input.php";   // plus the lib files the endpo
   `http_exit_method_not_allowed([...])` answers a method the URL does not take.
 - A `DELETE` and a `GET` take no body (`input_check_no_body()`).
 - Browser downloads and pages do not use `api_start`: they use `sec_redirect_if_logged_out()`.
-- New SQL: a `db_<verb>_<table>_<what>()` function in `db.php`, bound parameters only.
+- New SQL: a `db_querie_<verb>_<table>_<what>()` function in `db_querie.php`, bound parameters only.
 - A day posted by a client goes `day_format_validate()` then `data_save_day()`: bad input is a 400 `invalid_day` with the list of
   problems, never a crash.
 - A new constant goes in `constants.php`. Two live in `lib/` on purpose, next to the code that runs them: `NFP_FILE_SCHEMA` and
@@ -196,8 +198,8 @@ clients. The rules for the server side:
   for a varchar goes through `day_format_text()` (string, cleaned, within the `*_LIMIT_*_CHARS` limit) before the DB; a number through
   its `*_STORABLE_*` range. The DB must never be the one to refuse a value.
 - **Sync.** `GET /api/v2/timeline_sync` selects on `last_write_db` (the DB clock), never on `last_write_client_UTC`. Any write of a day goes
-  through `db_update_day_timeline()`, which stamps it; a change that alters what a day *shows* without touching its row (a description
-  renamed, retyped or deleted) must stamp the days itself (`db_update_day_timeline_touch_description`). The descriptions come whole in
+  through `db_querie_update_day_timeline()`, which stamps it; a change that alters what a day *shows* without touching its row (a description
+  renamed, retyped or deleted) must stamp the days itself (`db_querie_update_day_timeline_touch_description`). The descriptions come whole in
   every sync: that is how a deletion reaches a client.
 - **Late writes.** A write of a day carries the client's own moment (`lastWriteClientUtc`) and the write made last wins:
   `data_save_day()` / `data_clear_day()` refuse one older than the stored day (`data_day_is_newer()`, inside the account lock) and the
@@ -205,9 +207,9 @@ clients. The rules for the server side:
   most `last_write_db`, so a client whose clock runs ahead cannot shut the others out. The NFP import does not compare: it is an
   explicit overwrite.
 - **One writer per account.** A transaction that reads then inserts (a day, a label, a link) starts with
-  `db_select_user_account_for_update()`, or two concurrent requests both find the row missing and the unique key throws.
+  `db_querie_select_user_account_for_update()`, or two concurrent requests both find the row missing and the unique key throws.
   `data_save_day`, `data_clear_day`, `data_save_description` and `nfp_import_write_plan` do; a new write path must too. A unique key
-  shared by accounts (`login_email`) cannot be locked that way: `db_insert_user_account()` answers null when the key refuses, and
+  shared by accounts (`login_email`) cannot be locked that way: `db_querie_insert_user_account()` answers null when the key refuses, and
   `register` answers 409.
 - **Maintenance and schema.** In maintenance every endpoint answers 503 `maintenance` before it opens the database, except
   `GET /api/v2/server_info`. A database whose `schema_version` is not `APP_VERSION` is served nothing: 503 `schema_mismatch`.
@@ -387,7 +389,7 @@ There is no test suite in the repository: a change is checked by running the app
 
 Delete a line when it is fixed.
 
-- `db.php` breaks the SQL rules above in 7 `SELECT *`, kept on purpose where a whole row is wanted: the raw data export, the account
+- `db_querie.php` breaks the SQL rules above in 7 `SELECT *`, kept on purpose where a whole row is wanted: the raw data export, the account
   and day rows, the two retention queries.
 - The web client repeats server logic in JS: the day codec and the FertilityCare groups in `js/tableau.js`, the method table in
   `js/tableau.js` (`NFP_METHOD_BY_ID` is its server twin: change both), and in `js/store.js` the day a body will become

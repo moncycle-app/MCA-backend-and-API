@@ -17,7 +17,7 @@ use Gregwar\Captcha\CaptchaBuilder;
 use Gregwar\Captcha\PhraseBuilder;
 
 require_once __DIR__ . "/../vendor/autoload.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/sec.php";
@@ -37,7 +37,7 @@ function sec_captcha_ip_scope(string $ip): string {
 // tells nothing about it: for register and recover the password hash and the pending link (a link made or used, a new password, and the
 // token is spent: one mail per captcha), for login the failure counters (a failed or a successful sign-in spends it).
 function sec_captcha_state($db, string $purpose, string $email): string {
-	$account = db_select_user_account_by_email($db, $email);
+	$account = db_querie_select_user_account_by_email($db, $email);
 	if (is_null($account)) return "";
 	if ($purpose === "login") return $account["nb_connection_attempts"] . ":" . $account["last_failed_attempt"];
 	return hash("sha256", $account["password"] . "|" . ($account["email_token_hash"] ?? ""));

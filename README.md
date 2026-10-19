@@ -228,6 +228,11 @@ inactive for 4 years and those whose address was never verified after 7 days (`A
   database you have not backed up.
 - Not once a day is a problem: more often sends duplicate mails, less often leaves expired tokens and misses mails. It has no time
   limit on the command line. It refuses to run in [maintenance mode](#maintenance-mode).
+- **`script/terms_notice.php`** tells every user (verified accounts, login address and notification list, demo accounts excepted) that the
+  terms of service change, from which date, and that using the app after it means accepting them. `--url=https://...` and
+  `--date=YYYY-MM-DD` are required; `--test-email=ADDRESS` sends ONE trial mail to that address only, `--send` mails everyone (one of the
+  two, never both). From a browser on the machine: `terms_notice.php?url=...&date=...&test_email=...` or `&send=1`. Nothing is remembered:
+  do not run `--send` twice.
 
 ### Demo accounts
 

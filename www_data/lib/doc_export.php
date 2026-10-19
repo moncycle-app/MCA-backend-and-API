@@ -14,7 +14,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/doc_mucus.php";
 require_once __DIR__ . "/doc_fc.php";
 require_once __DIR__ . "/user_account.php";
@@ -25,7 +25,7 @@ require_once __DIR__ . "/user_account.php";
 // counts from the latest cycleFirstDay inside it, and is null before the first one. Two queries, whatever the length.
 function doc_export_days($db, string $start_date, string $end_date, array $user_account): array {
 	$no_user_account = intval($user_account["no_user_account"]);
-	$rows = db_select_day_timelines_range($db, $start_date, date_next_day($end_date), $no_user_account);
+	$rows = db_querie_select_day_timelines_range($db, $start_date, date_next_day($end_date), $no_user_account);
 	$descriptions = data_descriptions_by_day($db, $rows, $no_user_account);
 
 	$today = date('Y-m-d');

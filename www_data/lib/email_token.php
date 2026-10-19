@@ -15,7 +15,8 @@ declare(strict_types=1);
 // is checked against its purpose. It points at a page of the app with the token in the fragment (never sent to a server, a log or a
 // Referer), and the page posts it to POST /api/v2/verify_email: a mail scanner that fetches the link uses nothing up.
 
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_ops.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/input.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/mail.php";
@@ -25,7 +26,7 @@ require_once __DIR__ . "/sec_token.php";
 // A new link in the account's slot; answers the token for the mail. $new_email: the address a change of address changes to.
 function email_token_issue($db, int $no_user_account, int $purpose, ?string $new_email = null): string {
 	$token = rtrim(strtr(base64_encode(random_bytes(EMAIL_TOKEN_BYTES)), "+/", "-_"), "=");
-	db_update_user_account_email_token($db, $no_user_account, sec_token_hash($token), $purpose, EMAIL_TOKEN_LIFETIME_MINUTES[$purpose], $new_email);
+	db_querie_update_user_account_email_token($db, $no_user_account, sec_token_hash($token), $purpose, EMAIL_TOKEN_LIFETIME_MINUTES[$purpose], $new_email);
 	log_context(["uid" => $no_user_account]);
 	log_event("account.email_token_issued", ["purp" => EMAIL_TOKEN_PURPOSE_NAMES[$purpose]]);
 	return $token;
@@ -35,7 +36,7 @@ function email_token_issue($db, int $no_user_account, int $purpose, ?string $new
 // null. It lets a caller skip expensive work (a bcrypt) for a link that cannot work; email_token_use() decides, under the lock.
 function email_token_refusal($db, mixed $token, int $purpose): ?string {
 	if (!is_string($token) || $token === "" || strlen($token) > EMAIL_TOKEN_LIMIT_CHARS) return "invalid_token";
-	$account = db_select_user_account_by_email_token($db, sec_token_hash($token));
+	$account = db_querie_select_user_account_by_email_token($db, sec_token_hash($token));
 	if (is_null($account) || intval($account["email_token_purpose"]) !== $purpose) return "invalid_token";
 	return intval($account["email_token_expired"]) === 1 ? "token_expired" : null;
 }
@@ -46,19 +47,19 @@ function email_token_refusal($db, mixed $token, int $purpose): ?string {
 function email_token_use($db, mixed $token, int $purpose, callable $apply): array {
 	if (!is_string($token) || $token === "" || strlen($token) > EMAIL_TOKEN_LIMIT_CHARS) return ["error" => "invalid_token"];
 	$token_hash = sec_token_hash($token);
-	$found = db_select_user_account_by_email_token($db, $token_hash);
+	$found = db_querie_select_user_account_by_email_token($db, $token_hash);
 	if (is_null($found)) return ["error" => "invalid_token"];
 
-	return db_transaction($db, function () use ($db, $token_hash, $purpose, $apply, $found) {
+	return db_ops_transaction($db, function () use ($db, $token_hash, $purpose, $apply, $found) {
 		// read again under the lock: another request may have used or replaced the link since
-		db_select_user_account_for_update($db, $found["no_user_account"]);
-		$account = db_select_user_account_by_email_token($db, $token_hash);
+		db_querie_select_user_account_for_update($db, $found["no_user_account"]);
+		$account = db_querie_select_user_account_by_email_token($db, $token_hash);
 		if (is_null($account) || intval($account["email_token_purpose"]) !== $purpose) return ["error" => "invalid_token"];
 		if (intval($account["email_token_expired"]) === 1) return ["error" => "token_expired"];
 
 		$result = $apply($account);
 		if (isset($result["error"])) return ["error" => $result["error"]];
-		db_update_user_account_email_token_clear($db, $account["no_user_account"]);
+		db_querie_update_user_account_email_token_clear($db, $account["no_user_account"]);
 		return ["account" => $account, "result" => $result];
 	});
 }
@@ -92,11 +93,11 @@ function email_token_complete($db, array $body, array $issues = []): array {
 	$used = !is_null($refusal) ? ["error" => $refusal] : email_token_use($db, $body["token"], $purpose, function (array $account) use ($db, $purpose, $password_hash) {
 		if ($purpose === EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL) {
 			// the address was free when the link was made; it may not be now
-			if (!db_update_user_account_login_email($db, $account["no_user_account"], $account["email_token_new_email"])) return ["error" => "email_taken"];
+			if (!db_querie_update_user_account_login_email($db, $account["no_user_account"], $account["email_token_new_email"])) return ["error" => "email_taken"];
 			return ["loginEmail" => $account["email_token_new_email"]];
 		}
-		if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) db_update_password($db, $password_hash, $account["no_user_account"]);
-		db_update_user_account_email_verified($db, $account["no_user_account"]);   // whoever reads the mail has the address
+		if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) db_querie_update_password($db, $password_hash, $account["no_user_account"]);
+		db_querie_update_user_account_email_verified($db, $account["no_user_account"]);   // whoever reads the mail has the address
 		return ["loginEmail" => $account["login_email"]];
 	});
 
@@ -129,9 +130,9 @@ function email_token_complete($db, array $body, array $issues = []): array {
 // owner is told instead. Answers whether the mail was sent.
 function email_token_request_email_change($db, array $user_account, string $new_email): bool {
 	$no_user_account = intval($user_account["no_user_account"]);
-	$token = db_transaction($db, function () use ($db, $no_user_account, $new_email) {
-		db_select_user_account_for_update($db, $no_user_account);
-		if (!is_null(db_select_user_account_by_email($db, $new_email))) return null;
+	$token = db_ops_transaction($db, function () use ($db, $no_user_account, $new_email) {
+		db_querie_select_user_account_for_update($db, $no_user_account);
+		if (!is_null(db_querie_select_user_account_by_email($db, $new_email))) return null;
 		return email_token_issue($db, $no_user_account, EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL, $new_email);
 	});
 

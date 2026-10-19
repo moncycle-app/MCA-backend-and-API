@@ -64,7 +64,7 @@ if (!sec_totp_code_valid($user_account, $code)) {
 sec_token_reauth_passed($db, $user_account);
 
 $state = $enable ? TOTP_STATE_ACTIVE : TOTP_STATE_DISABLED;
-db_update_user_account_totp($db, $user_account["no_user_account"], $state, $enable ? $user_account["totp_secret"] : null);
+db_querie_update_user_account_totp($db, $user_account["no_user_account"], $state, $enable ? $user_account["totp_secret"] : null);
 if ($enable) log_event("account.totp_enabled");
 else log_event("account.totp_disabled");
 http_data(200, ["totpState" => sec_totp_state_name($state)]);

@@ -50,7 +50,7 @@ $deadline = time() + $wait;
 $db = null;
 while (is_null($db)) {
 	try {
-		$db = db_open();
+		$db = db_ops_open();
 	}
 	catch (\PDOException $e) {
 		if (time() >= $deadline) {
@@ -63,7 +63,7 @@ while (is_null($db)) {
 }
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-if (db_count_tables($db) === 0) {
+if (db_querie_count_tables($db) === 0) {
 	echo "auto_upgrade: the database has no table, nothing to upgrade (db_init.php makes the schema)." . PHP_EOL;
 	exit(0);
 }

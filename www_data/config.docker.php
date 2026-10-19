@@ -93,13 +93,13 @@ define("PASSWORD_POLICY_REGEX", env_string("PASSWORD_POLICY_REGEX", PASSWORD_POL
 
 // Login brute-force defense. A value of 0 turns the feature it sets off.
 // Failed attempts on an account older than this many minutes restart at 1 (0: they are not
-// counted at all, so there is no captcha and no lockout); db_update_login_failure() binds it too.
+// counted at all, so there is no captcha and no lockout); db_querie_update_login_failure() binds it too.
 define("LOGIN_ATTEMPTS_DECAY_MINUTES", env_int("LOGIN_ATTEMPTS_DECAY_MINUTES", 60));
 // Failed attempts on an account after which login asks for a captcha (0: never).
 define("LOGIN_CAPTCHA_THRESHOLD", env_int("LOGIN_CAPTCHA_THRESHOLD", 3));
 // ... after which a wrong password locks the account; the right one still logs in (0: never).
 define("LOGIN_LOCKOUT_THRESHOLD", env_int("LOGIN_LOCKOUT_THRESHOLD", 15));
-// Failed attempts from one IP, in the window of db_count_login_attempt_ip(), before HTTP 429 (0: no limit).
+// Failed attempts from one IP, in the window of db_querie_count_login_attempt_ip(), before HTTP 429 (0: no limit).
 define("LOGIN_IP_MAX_ATTEMPTS", env_int("LOGIN_IP_MAX_ATTEMPTS", 30));
 
 // The key that signs the captcha challenges (lib/sec_captcha.php): at least 32 characters, random, secret. Empty or shorter:

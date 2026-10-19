@@ -10,7 +10,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/../config.php";
-require_once __DIR__ . "/../lib/db.php";
+require_once __DIR__ . "/../lib/db_ops.php";
+require_once __DIR__ . "/../lib/db_querie.php";
 
 // php db_perf.php [--n=200] [--socket=/run/mysqld/mysqld.sock] [--account=ID | --largest]
 //
@@ -18,8 +19,8 @@ require_once __DIR__ . "/../lib/db.php";
 // connections it opens are the only load. Five parts:
 //   1. the server: version, the settings that matter, what the counters say since it started, the size of
 //      the data against the buffer pool;
-//   2. a connection per request, in each way: the old one (SET NAMES), db_open(false) (charset in the DSN),
-//      db_open(true) (persistent: what a web request gets, see db_open()), and a Unix socket when --socket is
+//   2. a connection per request, in each way: the old one (SET NAMES), db_ops_open(false) (charset in the DSN),
+//      db_ops_open(true) (persistent: what a web request gets, see db_ops_open()), and a Unix socket when --socket is
 //      given. "connect" = open + one SELECT 1; "request" = connect + the three reads a typical request makes
 //      (session token, account row, a month of days);
 //   3. what a query costs once the connection is open: the round trip alone (SELECT 1), then the app's own
@@ -29,7 +30,7 @@ require_once __DIR__ . "/../lib/db.php";
 //      accounts. Nothing an account holds is printed, nor its id: only its rank and its number of days. The reads
 //      do load the rows of those accounts in memory, as the app does when it serves them. Section 2's
 //      "request" reads are on the first of these accounts;
-//   4. emulated prepares (PDO's default, what db_open() uses) against native ones;
+//   4. emulated prepares (PDO's default, what db_ops_open() uses) against native ones;
 //   5. whether a persistent connection is safe: it is reused, a dead one is replaced, a request that died inside
 //      a transaction leaves neither the transaction nor its locks to the next one, and the code holds no
 //      session state (SET, GET_LOCK, temporary tables...) that a kept connection would carry over.
@@ -58,20 +59,20 @@ if ($largest && isset($options["account"]) || isset($options["account"]) && $acc
 $warmup = 3;
 
 $charset = ";charset=utf8mb4";
-$tcp_dsn = str_replace($charset, "", db_dsn());   // without the charset: the old way, SET NAMES after the connect
+$tcp_dsn = str_replace($charset, "", db_ops_dsn());   // without the charset: the old way, SET NAMES after the connect
 $results = [];   // label => list of microseconds
 
 // ---------------------------------------------------------------------------
 // 1. The server
 // ---------------------------------------------------------------------------
 
-$db = db_open();
+$db = db_ops_open();
 
 echo "== 1. server ==" . PHP_EOL;
 echo "client: PHP " . PHP_VERSION . " (" . PHP_SAPI . "), pdo_mysql, host " . DB_HOST . ":" . DB_PORT . ", db " . DB_NAME . PHP_EOL;
-echo "server: " . db_value($db, "SELECT VERSION()") . PHP_EOL;
+echo "server: " . db_ops_value($db, "SELECT VERSION()") . PHP_EOL;
 
-$variables = array_column(db_rows($db,
+$variables = array_column(db_ops_rows($db,
 	"SHOW GLOBAL VARIABLES WHERE Variable_name IN ('innodb_buffer_pool_size', 'innodb_log_file_size', 'innodb_flush_log_at_trx_commit',
 	'innodb_flush_method', 'innodb_io_capacity', 'max_connections', 'skip_name_resolve', 'skip_networking', 'thread_handling',
 	'thread_cache_size', 'query_cache_type', 'log_bin', 'performance_schema', 'socket', 'port', 'slow_query_log', 'long_query_time')"
@@ -87,7 +88,7 @@ foreach ($variables as $name => $value) {
 	echo sprintf("  %-34s %s", $name, $shown) . PHP_EOL;
 }
 
-$status = array_column(db_rows($db,
+$status = array_column(db_ops_rows($db,
 	"SHOW GLOBAL STATUS WHERE Variable_name IN ('Uptime', 'Connections', 'Threads_created', 'Threads_connected', 'Max_used_connections',
 	'Aborted_connects', 'Aborted_clients', 'Slow_queries', 'Created_tmp_tables', 'Created_tmp_disk_tables', 'Innodb_buffer_pool_reads',
 	'Innodb_buffer_pool_read_requests', 'Innodb_os_log_fsyncs', 'Questions')"
@@ -104,7 +105,7 @@ foreach ($status as $name => $value) {
 	echo sprintf("  %-34s %s", $name, rtrim($shown)) . PHP_EOL;
 }
 
-$tables = db_rows($db,
+$tables = db_ops_rows($db,
 	"SELECT t.table_name AS name, t.table_rows AS nb_rows, t.data_length AS data_bytes, t.index_length AS index_bytes
 	FROM information_schema.tables AS t
 	WHERE t.table_schema = DATABASE() AND t.table_type = 'BASE TABLE'
@@ -120,7 +121,7 @@ $pool_bytes = intval($variables["innodb_buffer_pool_size"] ?? 0);
 echo sprintf("data + indexes %.2f MB, buffer pool %.0f MB", $data_bytes / 1048576, $pool_bytes / 1048576) . PHP_EOL;
 
 // how the days are spread over the accounts (the demo accounts are in it)
-$day_counts = db_select_day_counts_by_account($db);   // the biggest first
+$day_counts = db_querie_select_day_counts_by_account($db);   // the biggest first
 $sizes = array_map("intval", array_column($day_counts, "nb_days"));
 sort($sizes);
 if ($sizes) {
@@ -166,7 +167,7 @@ if ($largest) {
 	foreach (array_slice($day_counts, 0, 10) as $rank => $row) $picked[] = ["#" . ($rank + 1), intval($row["no_user_account"])];
 }
 elseif ($account_option !== null) {
-	if (db_select_user_account($db, $account_option) === null) {
+	if (db_querie_select_user_account($db, $account_option) === null) {
 		fwrite(STDERR, "--account: no such account" . PHP_EOL);
 		exit(2);
 	}
@@ -180,7 +181,7 @@ if (!$picked) {
 
 $targets = [];   // each: label, id, days, start and end of the month
 foreach ($picked as [$name, $no_user_account]) {
-	$all_days = db_select_all_day_timeline($db, $no_user_account);
+	$all_days = db_querie_select_all_day_timeline($db, $no_user_account);
 	$start = substr($all_days ? end($all_days)["date_obs"] : date("Y-m-d"), 0, 8) . "01";
 	$targets[] = [
 		"label" => "$name, " . count($all_days) . " days",
@@ -197,11 +198,11 @@ echo "reads are made on: " . implode("; ", array_column($targets, "label")) . PH
 // 2. One connection per request, in each way
 // ---------------------------------------------------------------------------
 
-// label => [dsn, PDO options, SET NAMES after the connect, db_open()'s $persistent (null: not through db_open())]
+// label => [dsn, PDO options, SET NAMES after the connect, db_ops_open()'s $persistent (null: not through db_ops_open())]
 $series = [
-	"tcp, SET NAMES (the old db_open)" => [$tcp_dsn, [], true, null],
-	"tcp, charset in DSN: db_open(false)" => [db_dsn(), [], false, false],
-	"tcp, persistent: db_open(true)" => [db_dsn(), [], false, true],
+	"tcp, SET NAMES (the old db_ops_open)" => [$tcp_dsn, [], true, null],
+	"tcp, charset in DSN: db_ops_open(false)" => [db_ops_dsn(), [], false, false],
+	"tcp, persistent: db_ops_open(true)" => [db_ops_dsn(), [], false, true],
 ];
 if ($socket !== null) {
 	$socket_dsn = "mysql:unix_socket=" . $socket . ";dbname=" . DB_NAME . $charset;
@@ -214,7 +215,7 @@ foreach ($series as $label => [$dsn, $pdo_options, $set_names, $through_db_open]
 	try {
 		for ($i = -$warmup; $i < $n; $i++) {
 			$t0 = hrtime(true);
-			$c = $through_db_open === null ? new PDO($dsn, DB_ID, DB_PASSWORD, $pdo_options) : db_open($through_db_open);
+			$c = $through_db_open === null ? new PDO($dsn, DB_ID, DB_PASSWORD, $pdo_options) : db_ops_open($through_db_open);
 			if ($set_names) $c->exec("SET NAMES utf8mb4;");
 			$c->query("SELECT 1")->fetchColumn();
 			$t1 = hrtime(true);
@@ -250,15 +251,15 @@ foreach ($series as $label => [$dsn, $pdo_options, $set_names, $through_db_open]
 // ---------------------------------------------------------------------------
 
 echo "== 3. queries on an open connection ($n runs each) ==" . PHP_EOL;
-$reads = ["round trip alone: SELECT 1", "db_select_user_account_auth_token (miss)"];
-$account_reads = ["db_select_user_account", "db_select_day_timelines_range (the last month)", "db_select_all_day_timeline (all days)"];
-$db = db_open();
+$reads = ["round trip alone: SELECT 1", "db_querie_select_user_account_auth_token (miss)"];
+$account_reads = ["db_querie_select_user_account", "db_querie_select_day_timelines_range (the last month)", "db_querie_select_all_day_timeline (all days)"];
+$db = db_ops_open();
 foreach ($reads as $label) {
 	for ($i = -$warmup; $i < $n; $i++) {
 		$t0 = hrtime(true);
 		match ($label) {
-			$reads[0] => db_value($db, "SELECT 1"),
-			$reads[1] => db_select_user_account_auth_token($db, str_repeat("0", 64)),
+			$reads[0] => db_ops_value($db, "SELECT 1"),
+			$reads[1] => db_querie_select_user_account_auth_token($db, str_repeat("0", 64)),
 		};
 		if ($i >= 0) $results["query: $label"][] = (hrtime(true) - $t0) / 1000;
 	}
@@ -271,9 +272,9 @@ foreach ($targets as $target) {
 		for ($i = -$warmup; $i < $n; $i++) {
 			$t0 = hrtime(true);
 			match ($label) {
-				$account_reads[0] => db_select_user_account($db, $target["id"]),
-				$account_reads[1] => db_select_day_timelines_range($db, $target["start"], $target["end"], $target["id"]),
-				$account_reads[2] => db_select_all_day_timeline($db, $target["id"]),
+				$account_reads[0] => db_querie_select_user_account($db, $target["id"]),
+				$account_reads[1] => db_querie_select_day_timelines_range($db, $target["start"], $target["end"], $target["id"]),
+				$account_reads[2] => db_querie_select_all_day_timeline($db, $target["id"]),
 			};
 			if ($i >= 0) $results[$key][] = (hrtime(true) - $t0) / 1000;
 		}
@@ -287,9 +288,9 @@ $db = null;
 
 echo "== 4. prepares ($n runs each, SELECT of one account row) ==" . PHP_EOL;
 $prepare_sql = "SELECT C.no_user_account, C.name, C.nfp_method FROM user_account AS C WHERE C.no_user_account = :id";
-$modes = ["prepare: emulated (PDO default, db_open)", "prepare: native, prepared every time", "prepare: native, prepared once"];
+$modes = ["prepare: emulated (PDO default, db_ops_open)", "prepare: native, prepared every time", "prepare: native, prepared once"];
 foreach ($modes as $mode) {
-	$c = new PDO(db_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_EMULATE_PREPARES => $mode === $modes[0]]);
+	$c = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_EMULATE_PREPARES => $mode === $modes[0]]);
 	$once = $c->prepare($prepare_sql);
 	for ($i = -$warmup; $i < $n; $i++) {
 		$t0 = hrtime(true);
@@ -336,31 +337,31 @@ echo "== 5. persistent connection: safety ==" . PHP_EOL;
 $failed = 0;
 $check = [];   // label => [ok, detail]; an ok of null is information, not a verdict
 
-$admin = db_open(false);   // a plain connection: it kills, it looks, it is never the one under test
+$admin = db_ops_open(false);   // a plain connection: it kills, it looks, it is never the one under test
 
 // reused: the same server connection comes back, and a plain one never does
-$handle = db_open(true);
-$id = intval(db_value($handle, "SELECT CONNECTION_ID()"));
+$handle = db_ops_open(true);
+$id = intval(db_ops_value($handle, "SELECT CONNECTION_ID()"));
 $handle = null;
-$handle = db_open(true);
-$check["a released connection is reused"] = [intval(db_value($handle, "SELECT CONNECTION_ID()")) === $id, "connection $id"];
+$handle = db_ops_open(true);
+$check["a released connection is reused"] = [intval(db_ops_value($handle, "SELECT CONNECTION_ID()")) === $id, "connection $id"];
 $handle = null;
-$plain = db_open(false);
-$plain_id = intval(db_value($plain, "SELECT CONNECTION_ID()"));
+$plain = db_ops_open(false);
+$plain_id = intval(db_ops_value($plain, "SELECT CONNECTION_ID()"));
 $plain = null;
-$plain = db_open(false);
-$check["db_open(false) opens a new one each time"] = [intval(db_value($plain, "SELECT CONNECTION_ID()")) !== $plain_id, "connections $plain_id then another"];
+$plain = db_ops_open(false);
+$check["db_ops_open(false) opens a new one each time"] = [intval(db_ops_value($plain, "SELECT CONNECTION_ID()")) !== $plain_id, "connections $plain_id then another"];
 $plain = null;
 
 // dead: the server closed it (KILL stands for a MariaDB restart or wait_timeout)
-$handle = db_open(true);
-$id = intval(db_value($handle, "SELECT CONNECTION_ID()"));
+$handle = db_ops_open(true);
+$id = intval(db_ops_value($handle, "SELECT CONNECTION_ID()"));
 $handle = null;
-db_exec($admin, "KILL $id");
+db_ops_exec($admin, "KILL $id");
 usleep(200000);
 try {
-	$handle = db_open(true);
-	$new_id = intval(db_value($handle, "SELECT CONNECTION_ID()"));
+	$handle = db_ops_open(true);
+	$new_id = intval(db_ops_value($handle, "SELECT CONNECTION_ID()"));
 	$check["a connection killed while kept is replaced"] = [$new_id !== $id, "connection $id killed, got $new_id"];
 }
 catch (\Throwable $error) {
@@ -368,17 +369,17 @@ catch (\Throwable $error) {
 }
 $handle = null;
 
-// a request that died inside db_transaction() (a fatal error, a timeout): START TRANSACTION and a row lock, never committed
-$handle = db_open(true);
-$id = intval(db_value($handle, "SELECT CONNECTION_ID()"));
+// a request that died inside db_ops_transaction() (a fatal error, a timeout): START TRANSACTION and a row lock, never committed
+$handle = db_ops_open(true);
+$id = intval(db_ops_value($handle, "SELECT CONNECTION_ID()"));
 $handle->exec("START TRANSACTION");
-db_select_user_account_for_update($handle, ACCOUNT_DEMO_ID_CERVICAL_MUCUS);
+db_querie_select_user_account_for_update($handle, ACCOUNT_DEMO_ID_CERVICAL_MUCUS);
 $handle = null;   // the request ends here, without COMMIT or ROLLBACK
-$handle = db_open(true);
-$same = intval(db_value($handle, "SELECT CONNECTION_ID()")) === $id;
-$check["a request that died in a transaction: same connection, no transaction left"] = [$same && !$handle->inTransaction() && intval(db_value($handle, "SELECT @@in_transaction")) === 0, ($same ? "same" : "another") . " connection, inTransaction " . var_export($handle->inTransaction(), true)];
+$handle = db_ops_open(true);
+$same = intval(db_ops_value($handle, "SELECT CONNECTION_ID()")) === $id;
+$check["a request that died in a transaction: same connection, no transaction left"] = [$same && !$handle->inTransaction() && intval(db_ops_value($handle, "SELECT @@in_transaction")) === 0, ($same ? "same" : "another") . " connection, inTransaction " . var_export($handle->inTransaction(), true)];
 try {
-	$locker = db_open(false);
+	$locker = db_ops_open(false);
 	$locker->exec("SET SESSION innodb_lock_wait_timeout = 2");
 	$locker->exec("START TRANSACTION");
 	$locker->query("SELECT U.no_user_account FROM user_account AS U WHERE U.no_user_account = " . intval(ACCOUNT_DEMO_ID_CERVICAL_MUCUS) . " FOR UPDATE NOWAIT")->fetchAll();
@@ -390,26 +391,26 @@ catch (\Throwable $error) {
 }
 $locker = $handle = null;
 
-// what PDO does by itself, without db_open()'s guard: information, to know whether the guard is the only defence
-$handle = new PDO(db_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => true]);
+// what PDO does by itself, without db_ops_open()'s guard: information, to know whether the guard is the only defence
+$handle = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => true]);
 $handle->exec("START TRANSACTION");
 $handle = null;
-$handle = new PDO(db_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => true]);
+$handle = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => true]);
 $by_itself = !$handle->inTransaction();
 $handle->exec("ROLLBACK");
-$check["information: PDO alone also rolls back an open transaction"] = [null, $by_itself ? "yes: db_open()'s check is a second line" : "NO: db_open()'s check is the only defence"];
+$check["information: PDO alone also rolls back an open transaction"] = [null, $by_itself ? "yes: db_ops_open()'s check is a second line" : "NO: db_ops_open()'s check is the only defence"];
 
 // information: what a kept connection does carry over (this is why the code must not set any)
-$handle = db_open(true);
+$handle = db_ops_open(true);
 $handle->exec("SET @moncycle_probe = 1");
 $handle = null;
-$handle = db_open(true);
-$leaks = db_value($handle, "SELECT @moncycle_probe") !== null;
+$handle = db_ops_open(true);
+$leaks = db_ops_value($handle, "SELECT @moncycle_probe") !== null;
 $handle->exec("SET @moncycle_probe = NULL");
 $check["information: a user variable survives on a kept connection"] = [null, $leaks ? "yes" : "no"];
 $handle = null;
 
-// the code holds no session state (comment lines are not code: db_open() names what it avoids)
+// the code holds no session state (comment lines are not code: db_ops_open() names what it avoids)
 $patterns = '/\b(GET_LOCK|RELEASE_LOCK|LOCK\s+TABLES|CREATE\s+TEMPORARY|SET\s+(SESSION|GLOBAL|@|autocommit|NAMES|CHARACTER|time_zone|sql_mode|transaction)|autocommit\s*=)/i';
 $found = [];
 foreach (array_merge(glob(__DIR__ . "/../lib/*.php"), glob(__DIR__ . "/../api/v2/*.php"), glob(__DIR__ . "/*.php")) as $file) {
@@ -418,7 +419,7 @@ foreach (array_merge(glob(__DIR__ . "/../lib/*.php"), glob(__DIR__ . "/../api/v2
 }
 $check["the code sets no session state (SET, GET_LOCK, temporary table, autocommit...)"] = [!$found, $found ? implode("; ", $found) : "lib/, api/ and script/ scanned"];
 
-$check["information: connections now"] = [null, db_value($admin, "SELECT COUNT(*) FROM information_schema.processlist AS P WHERE P.user = :user", ["user" => DB_ID]) . " connections open for this user, max_connections is " . ($variables["max_connections"] ?? "?") . " connections (each Apache worker keeps one)"];
+$check["information: connections now"] = [null, db_ops_value($admin, "SELECT COUNT(*) FROM information_schema.processlist AS P WHERE P.user = :user", ["user" => DB_ID]) . " connections open for this user, max_connections is " . ($variables["max_connections"] ?? "?") . " connections (each Apache worker keeps one)"];
 
 foreach ($check as $label => [$ok, $detail]) {
 	if ($ok === false) $failed++;

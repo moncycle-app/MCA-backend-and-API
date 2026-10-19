@@ -11,7 +11,7 @@ declare(strict_types=1);
 
 // The start of every JSON endpoint, and so the lib files every endpoint can count on.
 
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_ops.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/sec.php";
@@ -36,7 +36,7 @@ function api_start(bool $login_required = true, bool $read_only_ok = false): arr
 	api_start_open();
 	http_exit_if_maintenance();
 	sec_exit_if_cross_origin();
-	$db = db_open();
+	$db = db_ops_open();
 	server_exit_if_schema_mismatch($db);
 	$user_account = sec_token_authenticate($db);
 	if ($login_required) {

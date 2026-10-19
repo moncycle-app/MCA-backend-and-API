@@ -15,7 +15,8 @@ declare(strict_types=1);
 // DELETE /api/v2/token/{prefix}.
 
 require_once __DIR__ . "/day_format.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_ops.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
 require_once __DIR__ . "/log.php";
@@ -59,9 +60,9 @@ function sec_token_authenticate($db): ?array {
 	if (is_string($authorization) && str_contains($authorization, "Bearer ")) $token = explode(' ', trim($authorization), 2)[1] ?? "";
 	if ($token === "") return null;
 
-	$user_account = db_select_user_account_auth_token($db, sec_token_hash($token));
+	$user_account = db_querie_select_user_account_auth_token($db, sec_token_hash($token));
 	if (!is_null($user_account) && !boolval($user_account["expired_auth_token"]) && sec_account_enabled($user_account)) {
-		db_update_auth_token_use($db, $user_account["no_auth_token"], sec_client_ip(), sec_token_user_agent());
+		db_querie_update_auth_token_use($db, $user_account["no_auth_token"], sec_client_ip(), sec_token_user_agent());
 		log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($user_account["no_auth_token"])]);
 		return $user_account;
 	}
@@ -94,13 +95,13 @@ function sec_token_create($db, array $user_account, array $options): array {
 		if ($try++ === AUTH_TOKEN_PREFIX_TRIES) throw new \RuntimeException("no free token prefix after " . AUTH_TOKEN_PREFIX_TRIES . " tries");
 		$token = sec_token_random();
 		$prefix = substr($token, 0, AUTH_TOKEN_PREFIX_CHARS);
-		$no_auth_token = db_insert_auth_token($db, $user_account["no_user_account"], $options["name"], $options["scope"], $options["expires_in_days"],
+		$no_auth_token = db_querie_insert_auth_token($db, $user_account["no_user_account"], $options["name"], $options["scope"], $options["expires_in_days"],
 			sec_token_user_agent(), sec_client_ip(), sec_token_hash($token), $prefix);
 	} while (is_null($no_auth_token));
 	log_context(["uid" => intval($user_account["no_user_account"]), "sid" => intval($no_auth_token)]);
-	db_update_user_account_logged_in($db, $user_account["no_user_account"]);
+	db_querie_update_user_account_logged_in($db, $user_account["no_user_account"]);
 	if ($options["cookie"]) {
-		if (sec_token_from_cookie() !== "") log_context(["rev" => db_delete_auth_token_by_str($db, sec_token_hash(sec_token_from_cookie())) ?: null]);
+		if (sec_token_from_cookie() !== "") log_context(["rev" => db_querie_delete_auth_token_by_str($db, sec_token_hash(sec_token_from_cookie())) ?: null]);
 		sec_token_cookie(COOKIE_AUTH_TOKEN, $token, strtotime(is_null($options["expires_in_days"]) ? '+5 years' : "+{$options["expires_in_days"]} days"));
 	}
 	return ["token" => $token, "prefix" => $prefix];
@@ -164,11 +165,11 @@ function sec_token_reauth_exit_if_locked(array $user_account): void {
 }
 
 function sec_token_reauth_failed($db, array $user_account): void {
-	db_update_login_failure($db, $user_account["login_email"]);
+	db_querie_update_login_failure($db, $user_account["login_email"]);
 }
 
 function sec_token_reauth_passed($db, array $user_account): void {
-	if (intval($user_account["nb_connection_attempts"] ?? 0) > 0) db_update_login_failures_clear($db, $user_account["no_user_account"]);
+	if (intval($user_account["nb_connection_attempts"] ?? 0) > 0) db_querie_update_login_failures_clear($db, $user_account["no_user_account"]);
 }
 
 // A sign-in. $body has been checked by the endpoint (email normalised, password a non-empty string, the types of code, captcha and
@@ -180,7 +181,7 @@ function sec_token_reauth_passed($db, array $user_account): void {
 // account's counters, which every outcome moves, so of the requests that come together with one captcha only the first tries a password.
 function sec_token_login($db, array $body, array $token_options): array {
 	$client_ip = sec_client_ip();
-	$user_account = db_select_user_account_by_email($db, $body["email"]) ?? [];
+	$user_account = db_querie_select_user_account_by_email($db, $body["email"]) ?? [];
 	$account_locked = sec_token_login_over($user_account, LOGIN_LOCKOUT_THRESHOLD);
 	$captcha_required = sec_token_login_over($user_account, LOGIN_CAPTCHA_THRESHOLD);
 	$meta = $captcha_required ? ["captchaRequired" => true] : [];   // a hint for the next attempt, on every outcome
@@ -196,8 +197,8 @@ function sec_token_login($db, array $body, array $token_options): array {
 		return ["status" => $status, "code" => $code, "message" => $message, "meta" => $meta];
 	};
 	$counted = function (int $status, string $code, string $message, bool $wrong_credential = false) use ($db, $client_ip, $body, $refuse, &$attempt) {
-		if ($wrong_credential) db_update_login_failure($db, $body["email"]);
-		if ($attempt === 0) db_insert_login_attempt_ip($db, $client_ip);
+		if ($wrong_credential) db_querie_update_login_failure($db, $body["email"]);
+		if ($attempt === 0) db_querie_insert_login_attempt_ip($db, $client_ip);
 		return $refuse($status, $code, $message, $wrong_credential);
 	};
 	$locked = fn() => $counted(403, "account_locked", "Account temporarily locked after too many failed attempts.", true);
@@ -257,10 +258,10 @@ function sec_token_login($db, array $body, array $token_options): array {
 	$verdict = $captcha_verdict();
 	if ($verdict !== "ok") return $captcha_refused($verdict);
 
-	return db_transaction($db, function () use ($db, $captcha_verdict, $captcha_refused, $check_credentials, &$user_account, &$account_locked) {
+	return db_ops_transaction($db, function () use ($db, $captcha_verdict, $captcha_refused, $check_credentials, &$user_account, &$account_locked) {
 		// held until the end, bcrypt included, and read again: a request that came with the same captcha has moved the counters
 		$no_user_account = $user_account["no_user_account"];
-		$user_account = db_select_user_account_for_update($db, $no_user_account) ? (db_select_user_account($db, $no_user_account) ?? []) : [];
+		$user_account = db_querie_select_user_account_for_update($db, $no_user_account) ? (db_querie_select_user_account($db, $no_user_account) ?? []) : [];
 		$account_locked = sec_token_login_over($user_account, LOGIN_LOCKOUT_THRESHOLD);
 
 		$verdict = $captcha_verdict();
@@ -277,7 +278,7 @@ function sec_token_ip_network(?string $ip): ?string {
 	return sec_ip_network($ip, AUTH_TOKEN_IP_PREFIX_V4, AUTH_TOKEN_IP_PREFIX_V6);
 }
 
-// One row of db_select_auth_tokens_listing() as the API shows it: no hash, no database id. A token without an expiry date dies a year
+// One row of db_querie_select_auth_tokens_listing() as the API shows it: no hash, no database id. A token without an expiry date dies a year
 // after its creation (or after AUTH_TOKEN_IDLE_DAYS unused, which is no date); one the operator made to last (expire 0) never.
 function sec_token_to_json(array $row, int $current_no_auth_token): array {
 	$expires_at = $row["date_expire"];
@@ -302,12 +303,12 @@ function sec_token_to_json(array $row, int $current_no_auth_token): array {
 // The account's tokens, the newest first, the caller's own "current".
 function sec_token_list($db, array $user_account): array {
 	$current = intval($user_account["no_auth_token"]);
-	return array_map(fn($row) => sec_token_to_json($row, $current), db_select_auth_tokens_listing($db, $user_account["no_user_account"]));
+	return array_map(fn($row) => sec_token_to_json($row, $current), db_querie_select_auth_tokens_listing($db, $user_account["no_user_account"]));
 }
 
 // The token just made, as the list shows it, null when it is not there.
 function sec_token_find($db, int $no_user_account, string $prefix): ?array {
-	foreach (db_select_auth_tokens_listing($db, $no_user_account) as $row) {
+	foreach (db_querie_select_auth_tokens_listing($db, $no_user_account) as $row) {
 		if ($row["auth_token_prefix"] === $prefix) return sec_token_to_json($row, intval($row["no_auth_token"]));
 	}
 	return null;
@@ -327,9 +328,9 @@ function sec_token_revoke($db, array $user_account, ?string $prefix): array {
 		sec_token_exit_if_read_only($user_account);
 		sec_token_exit_if_demo($user_account);
 	}
-	if (is_null($prefix)) return db_delete_auth_tokens_other($db, $no_user_account, intval($user_account["no_auth_token"]));
+	if (is_null($prefix)) return db_querie_delete_auth_tokens_other($db, $no_user_account, intval($user_account["no_auth_token"]));
 
-	$revoked = db_delete_auth_token_by_prefix($db, $no_user_account, $prefix);
+	$revoked = db_querie_delete_auth_token_by_prefix($db, $no_user_account, $prefix);
 	if (!$revoked) http_error(404, "not_found", "No token of this account starts with these characters.");
 	if ($own) sec_token_clear_cookie();
 	return $revoked;

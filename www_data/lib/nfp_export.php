@@ -15,7 +15,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/user_account.php";
 
 // One JSON day as an NFP day, with only what the format defines and nothing empty ([] is a day with nothing, "{}" in the file). Every
@@ -63,9 +63,9 @@ function nfp_export_day(array $day): array {
 function nfp_export_cycles($db, string $start_date, string $end_date, array $user_account, ?int &$rows_read = null): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$method = user_account_method_name(intval($user_account["nfp_method"]));
-	$cycle_start_date = db_select_cycle($db, $start_date, $no_user_account);
+	$cycle_start_date = db_querie_select_cycle($db, $start_date, $no_user_account);
 
-	$rows = db_select_day_timelines_range($db, $cycle_start_date ?? $start_date, date_next_day($end_date), $no_user_account);
+	$rows = db_querie_select_day_timelines_range($db, $cycle_start_date ?? $start_date, date_next_day($end_date), $no_user_account);
 	// no cycle starts before the period: it begins at its first day, not at the date asked, or the file opens on a run of empty days
 	if (is_null($cycle_start_date)) $cycle_start_date = $rows[0]["date_obs"] ?? $start_date;
 	$descriptions = data_descriptions_by_day($db, $rows, $no_user_account);
@@ -110,9 +110,8 @@ function nfp_export_file($db, string $start_date, string $end_date, array $user_
 	return $file;
 }
 
-// The file as text: accents and the timestamp readable, a round 37.0 kept a number; $pretty to read it in the browser.
-function nfp_export_json($db, string $start_date, string $end_date, array $user_account, bool $anonymous, bool $pretty = false, ?int &$rows_read = null): string {
+// The file as text (NFP_JSON_FLAGS).
+function nfp_export_json($db, string $start_date, string $end_date, array $user_account, bool $anonymous, ?int &$rows_read = null): string {
 	$file = nfp_export_file($db, $start_date, $end_date, $user_account, $anonymous, $rows_read);
-	$flags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION;
-	return json_encode($file, $pretty ? ($flags | JSON_PRETTY_PRINT) : $flags);
+	return json_encode($file, NFP_JSON_FLAGS);
 }

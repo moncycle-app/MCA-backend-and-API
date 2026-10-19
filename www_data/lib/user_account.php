@@ -12,7 +12,8 @@ declare(strict_types=1);
 // The account: its method, the sign-up and the password recovery, GET and POST /api/v2/account.
 
 require_once __DIR__ . "/day_format.php";
-require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/db_ops.php";
+require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/email_token.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
@@ -69,7 +70,7 @@ function user_account_birth_year(array $body, array &$issues): ?int {
 // The session's row holds no hash: it is read again.
 function user_account_password_matches($db, array $user_account, mixed $password): bool {
 	if (!is_string($password) || $password === "") return false;
-	$hash = db_select_user_account_by_email($db, $user_account["login_email"])["password"] ?? null;
+	$hash = db_querie_select_user_account_by_email($db, $user_account["login_email"])["password"] ?? null;
 	return is_string($hash) && password_verify($password, $hash);
 }
 
@@ -113,11 +114,11 @@ function user_account_register($db, array $new, mixed $captcha_token, mixed $cap
 	// request goes round once more, as one for an address that has an account, which locks the row by its id.
 	for ($round = 0; $round < 2; $round++) {
 		// read before the transaction: its plain reads would show the rows as they were at its first one
-		$existing = db_select_user_account_by_email($db, $new["email"]);
+		$existing = db_querie_select_user_account_by_email($db, $new["email"]);
 
-		$registered = db_transaction($db, function () use ($db, $new, $password_hash, $captcha_token, $captcha_answer, $ip, $existing) {
+		$registered = db_ops_transaction($db, function () use ($db, $new, $password_hash, $captcha_token, $captcha_answer, $ip, $existing) {
 			if (is_null($existing)) {
-				$no_user_account = db_insert_user_account($db, $new["nickname"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"], $new["language"]);
+				$no_user_account = db_querie_insert_user_account($db, $new["nickname"], $new["nfp_method"], $new["birth_year"], $new["email"], $password_hash, $new["comment"], $new["research"], $new["language"]);
 				if (is_null($no_user_account)) return null;   // taken since the read
 
 				log_context(["uid" => intval($no_user_account)]);
@@ -128,7 +129,7 @@ function user_account_register($db, array $new, mixed $captcha_token, mixed $cap
 				];
 			}
 
-			db_select_user_account_for_update($db, $existing["no_user_account"]);
+			db_querie_select_user_account_for_update($db, $existing["no_user_account"]);
 			$verdict = sec_captcha_verify($db, "register", $new["email"], $captcha_token, $captcha_answer, $ip);
 			if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $existing, "token" => null, "created" => false];
 
@@ -150,11 +151,11 @@ function user_account_register($db, array $new, mixed $captcha_token, mixed $cap
 // the pending link and checked under the account's lock, so of requests that come together with one captcha, one mail. An address with
 // no account is only checked: the same verdict, nothing to tell from outside.
 function user_account_recover_password($db, string $email, mixed $token, mixed $answer, string $ip): array {
-	$account = db_select_user_account_by_email($db, $email);
+	$account = db_querie_select_user_account_by_email($db, $email);
 	if (is_null($account)) return ["captcha" => sec_captcha_verify($db, "recover", $email, $token, $answer, $ip), "account" => null, "token" => null];
 
-	return db_transaction($db, function () use ($db, $email, $token, $answer, $ip, $account) {
-		db_select_user_account_for_update($db, $account["no_user_account"]);
+	return db_ops_transaction($db, function () use ($db, $email, $token, $answer, $ip, $account) {
+		db_querie_select_user_account_for_update($db, $account["no_user_account"]);
 		$verdict = sec_captcha_verify($db, "recover", $email, $token, $answer, $ip);
 		if ($verdict !== "ok") return ["captcha" => $verdict, "account" => $account, "token" => null];
 		return ["captcha" => $verdict, "account" => $account, "token" => email_token_issue($db, intval($account["no_user_account"]), EMAIL_TOKEN_PURPOSE_RESET_PASSWORD)];
@@ -165,7 +166,7 @@ function user_account_recover_password($db, string $email, mixed $token, mixed $
 // GET /api/v2/account, POST /api/v2/account
 // ---------------------------------------------------------------------------
 
-// The settings of a POST /api/v2/account body that need no password: [the values db_update_user_account_settings() takes, the JSON names
+// The settings of a POST /api/v2/account body that need no password: [the values db_querie_update_user_account_settings() takes, the JSON names
 // of those that change]. A field absent keeps its value.
 function user_account_check_settings(array $account, array $body, array &$issues): array {
 	$new = [
@@ -287,14 +288,14 @@ function user_account_update($db, array $user_account, array $body, array $issue
 		$new["notification_emails"] = $new_notification_emails;
 		$changed[] = "notificationEmails";
 	}
-	$closed_sessions = db_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $last_write_client_UTC, $new_password, $logout_other_devices) {
-		if (!empty($changed)) db_update_user_account_settings($db, $no_user_account, $new, $last_write_client_UTC);
+	$closed_sessions = db_ops_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $last_write_client_UTC, $new_password, $logout_other_devices) {
+		if (!empty($changed)) db_querie_update_user_account_settings($db, $no_user_account, $new, $last_write_client_UTC);
 		if (is_null($new_password)) return null;
 
-		db_update_password($db, sec_hash($new_password), $no_user_account);
+		db_querie_update_password($db, sec_hash($new_password), $no_user_account);
 		// a reset link still in the mailbox is no use any more; a pending change of address is left alone
-		db_update_user_account_email_token_clear($db, $no_user_account, EMAIL_TOKEN_PURPOSE_RESET_PASSWORD);
-		return $logout_other_devices === true ? db_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : [];
+		db_querie_update_user_account_email_token_clear($db, $no_user_account, EMAIL_TOKEN_PURPOSE_RESET_PASSWORD);
+		return $logout_other_devices === true ? db_querie_delete_auth_tokens_other($db, $no_user_account, $user_account["no_auth_token"]) : [];
 	});
 	$logged_out_devices = is_null($closed_sessions) ? null : count($closed_sessions);
 
@@ -310,7 +311,7 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	// the account as it is now: the row the request started from, with what was written
 	$after = array_merge($user_account, $new, ["name_user_account" => $new["name"]]);
 	if (!empty($changed)) $after["last_write_client_UTC"] = $last_write_client_UTC;
-	return ["status" => 200, "data" => user_account_to_json($after, db_select_day_timeline_oldest_date($db, $user_account["no_user_account"])), "meta" => $meta];
+	return ["status" => 200, "data" => user_account_to_json($after, db_querie_select_day_timeline_oldest_date($db, $user_account["no_user_account"])), "meta" => $meta];
 }
 
 // The account as a client starts from it ($user_account: the row of sec_token_authenticate()). Nothing secret. The cycles are in the

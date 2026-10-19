@@ -263,7 +263,7 @@ function day_format_stamp_encode(?string $color, bool $baby): string {
 	return (DAY_STAMP_COLOR_CODES[$color] ?? '') . ($baby ? 'BB' : '');
 }
 
-// The fields db_update_day_timeline() takes. A day is its full state, not a patch: a field left out is written empty. The descriptions
+// The fields db_querie_update_day_timeline() takes. A day is its full state, not a patch: a field left out is written empty. The descriptions
 // are names, resolved to ids by lib/data.php.
 function day_format_from_json(array $json): array {
 	$fc_score = day_format_fc_score_encode($json);

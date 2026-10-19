@@ -51,7 +51,7 @@ $nfp_method = intval($user_account["nfp_method"]);
 // csv and pdf read exactly the period; the nfp export reads its own, widened back to the cycle start
 if ($type === EXPORT_TYPE_NFP) {
 	$days = [];
-	$has_data = !empty(db_select_day_timeline_dates_frame($db, $start_date, $end_date, $user_account["no_user_account"]));
+	$has_data = !empty(db_querie_select_day_timeline_dates_frame($db, $start_date, $end_date, $user_account["no_user_account"]));
 }
 else {
 	$days = doc_export_days($db, $start_date, $end_date, $user_account);
@@ -64,7 +64,7 @@ if (!$has_data) {
 
 // the NFP file is made before the log line, for the rows it read
 $rows_read = null;
-$nfp_json = $type === EXPORT_TYPE_NFP ? nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $inline, $rows_read) : null;
+$nfp_json = $type === EXPORT_TYPE_NFP ? nfp_export_json($db, $start_date, $end_date, $user_account, $anonymous, $rows_read) : null;
 
 // only the length of the period and the number of days read are logged, not the dates
 log_event("export.file", [

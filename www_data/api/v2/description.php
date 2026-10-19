@@ -32,7 +32,7 @@ $id = $path === [] ? null : input_path_id($path[0], $issues);
 if ($method === "GET") {
 	input_exit_unless_none($issues);
 
-	$descriptions = array_map('data_description_to_json', db_select_description_with_count($db, $no_user_account));
+	$descriptions = array_map('data_description_to_json', db_querie_select_description_with_count($db, $no_user_account));
 	log_note(["n" => count($descriptions)]);
 	http_data(200, $descriptions);
 }
@@ -41,7 +41,7 @@ if ($method === "GET") {
 elseif ($method === "DELETE") {
 	input_exit_unless_none($issues);
 
-	if (is_null(db_select_description($db, $id, $no_user_account))) {
+	if (is_null(db_querie_select_description($db, $id, $no_user_account))) {
 		http_error(404, "not_found", "No description of this account has this id.");
 	}
 
