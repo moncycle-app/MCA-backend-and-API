@@ -12,43 +12,39 @@ from where**, and never the content. "Account 21 wrote day 4412 (2026-09-20)" is
 
 ## Where, what and how much
 
-- **Where.** `stdout` by default (`docker logs`; PHP-FPM drops it, use `stderr` with `catch_workers_output = yes`, or a file); `stderr` or a file are options (`LOG_OUTPUT`). Nothing
-  goes to the database: it would copy the users' history into it. Rotation, shipping and retention are yours.
-- **What.** Everything that authenticates, changes, deletes, discloses or mails, and every request that reaches the app
-  (`http.request`, which stands in for Apache's access log). Static files (pages, scripts, images) do not reach the app and are not
-  logged.
-- **How much.** `LOG_LEVEL` is the least severe level written: `error` (the app failed), `warning` (a refusal or odd behaviour a
-  person should review: a failed login, a wrong password from a logged-in user, a password reset for an unknown address), `info`
-  (normal activity, the audit trail) or `debug` (troubleshooting: a captcha issued, a token rejected). `LOG_CATEGORIES` keeps only
-  some of the categories (the part of the event name before the dot).
-- **It never breaks a request.** Logging does not throw, does not write to the response and adds no SQL query of its own (the two
-  counts of `account.deleted` are the one exception; the ids of the sessions a request closes come back with the `DELETE` itself,
-  `RETURNING`). An unwritable file or a bad setting is swallowed: a line that cannot go to the file goes to `stdout`, and
-  `system.log_sink_failed` says so. A `LOG_*` value that is not one of the allowed ones takes its default, so a typo never turns the
-  log off.
+- **Where.** `stdout` by default (`docker logs`). `LOG_OUTPUT` can send it to `stderr` or a file ([To a file](#to-a-file)). PHP-FPM
+  drops `stdout`: use `stderr` with `catch_workers_output = yes`, or a file. Nothing goes to the database. Rotation, shipping and
+  retention are yours.
+- **What.** Everything that authenticates, changes, deletes, discloses or mails, plus one `http.request` line per request that
+  reaches the app (it replaces Apache's access log). Static files are not logged.
+- **How much.** `LOG_LEVEL` is the least severe level written:
+  - `error`: the app failed;
+  - `warning`: a refusal or odd behaviour worth a look (failed login, wrong password from a signed-in user, reset for an unknown address);
+  - `info`: normal activity, the audit trail;
+  - `debug`: troubleshooting (a captcha issued, a token rejected).
+
+  `LOG_CATEGORIES` keeps only some categories (the part of the event name before the dot).
+- **It never breaks a request.** Logging does not throw and adds no SQL query of its own. An unwritable file goes to `stdout` and
+  `system.log_sink_failed` says so. A `LOG_*` value that is not allowed takes its default, so a typo never turns the log off.
 
 ## Never in a log
 
-- passwords (given, old, new);
-- session tokens and their first characters (`prefix`), cookies and their hashes;
-- TOTP secrets, codes and provisioning URIs;
-- captcha phrases, answers, tokens and macs;
-- request or response bodies, and the contents of an NFP file;
-- what a day or a description contains (stamp, comment, temperature, sensations, the text of a description);
-- the subject and body of a mail;
+- passwords, session tokens and their first characters (`prefix`), cookies;
+- TOTP secrets, codes and URIs; captcha phrases, answers and tokens;
+- request or response bodies, NFP file contents, mail subjects and bodies;
+- what a day or description contains (stamp, comment, temperature, labels);
 - e-mail addresses and nicknames (an account is its `uid`);
-- SQL text and parameters, and SMTP and database credentials;
-- the query string of a URL, and the User-Agent.
+- SQL text and parameters, SMTP and database credentials;
+- query strings and the User-Agent.
 
-What **is** logged about data, on purpose: the database id of the row concerned and, for a day, its date (`day`, `dt`, `dsc`). The ids
-of the descriptions a day *carries* are not: one join with the `description` table would give back what the day holds (a save logs
-only the descriptions it *created*, `dsc`). Exception messages and the mailer's error text can embed an address or an SQL fragment:
-they are masked, stripped of control characters and clipped to 200 characters, and a database exception is logged by its SQLSTATE only.
+What **is** logged about data: the id of the row concerned and, for a day, its date (`day`, `dt`, `dsc`). The ids of the descriptions
+a day *carries* are not logged, since a join would give back what the day holds. Exception messages and mailer errors can embed an
+address or SQL, so they are masked, stripped of control characters and clipped to 200 characters; a database exception is logged by
+its SQLSTATE only.
 
 ## A line
 
-One flat JSON object per line, in UTC; the common keys come first, then the event's own. A key whose value is unknown is left out,
-never `null`.
+One flat JSON object per line, in UTC; common keys first, then the event's own. A key with no known value is left out, never `null`.
 
 ```
 {"ts":"2026-10-05T14:03:22.123Z","lv":"info","ev":"auth.login_succeeded","rid":"9f3a1c0b7d42","uid":21,"sid":118,"ip":"203.0.113.7","att":0,"totp":true,"scope":"readWrite","cookie":true}
@@ -58,29 +54,19 @@ never `null`.
 ```
 
 With `LOG_FORMAT=text`: `2026-10-05T14:10:05.210Z info data.day_saved rid=7be0f2a64c18 uid=21 sid=118 ip=203.0.113.7 day=4412 dt=2026-09-20 new=true`.
-A value with a space, a quote or a control character is quoted as JSON. A newline can never split a line, in either format.
+A newline can never split a line. A string is clipped to 200 characters and a list to 20 items; a line stays under 4000 bytes
+(workers never interleave), and a longer one loses its last keys and gets `"cut":true`.
 
-A string is clipped to 200 characters and a list to 20 items. A line stays under 4000 bytes (below `PIPE_BUF`, so the workers of the server
-never interleave their lines): when it would be longer, its last keys are dropped and `"cut":true` is added.
-
-**The request id** (`rid`) is shared by every line of a request, and is sent back in the `X-Request-Id` response header. If the request
-carries the header named by `LOG_REQUEST_ID_HEADER` and its value is plain, that value is used (so a reverse proxy can hand its own id
-down: `proxy_set_header X-Request-Id $request_id;` with nginx); otherwise 12 hexadecimal characters are made. It is client-controlled,
-so it only serves correlation. A cron run has one id for the whole run.
-
-**The address** (`ip`) is the peer of the connection (`REMOTE_ADDR`), or, when that peer is one of `TRUSTED_PROXIES`, the client address
-it forwarded (`X-Forwarded-For`): behind a reverse proxy set `TRUSTED_PROXIES`, or it is the proxy. `LOG_IP=truncate` keeps the network
-only, `none` drops it. There is no `ip` in a cron line.
-
-**Traceability.** Every line of a request names the rows the request handles, so that one `rid` (or one id) finds everything that touched
-a row. `uid` and `sid` are the account and the session; as soon as the code knows the row, `day` (a day), `dsc` (a description) and `rev`
-(the sessions a request closed) join them, on **every** line of the request: its events, its `http.request` line, and a
-`system.exception` that cuts it short. A refused write names the row too (a `409 stale_write` carries the `day` it was refused for).
-A read says **how many** rows it returned (`n`, `nds`, `ntk`), never which: they are all the account's own (`uid`), and the id of a row
-is given when the request is about one row (`GET /api/v2/day/{date}`). A change that touches many rows as a side effect says how many
-(`tch`: days re-stamped by a description change), and an import gives the bounds of what it wrote (`day0`/`day1`, `dsc0`/`dsc1`), not a
-list. None of this costs a query: an id is logged only where the code already holds it (a row it read, the id of an insert, the
-`RETURNING` of a `DELETE`), and a count is a `count()` of what the endpoint built.
+- **Request id (`rid`)**: shared by every line of a request and sent back in the `X-Request-Id` response header. If the request carries
+  the header named by `LOG_REQUEST_ID_HEADER` with a plain value, it is used (a reverse proxy can hand down its own id); otherwise 12
+  hexadecimal characters are made. It only serves correlation. A cron run has one id for the whole run.
+- **Address (`ip`)**: `REMOTE_ADDR`, or the forwarded client address when the peer is in `TRUSTED_PROXIES` (set it behind a reverse
+  proxy, or `ip` is the proxy). `LOG_IP=truncate` keeps the network only, `none` drops it. A cron line has no `ip`.
+- **Traceability.** Every line of a request names the rows it handles, so one `rid` or one id finds everything that touched a row:
+  `uid` and `sid` (account, session), and as soon as the code knows it, `day`, `dsc` and `rev` (sessions the request closed), on every
+  line of the request, a refused write and a `system.exception` included. A read says **how many** rows it returned (`n`, `nds`, `ntk`),
+  not which. A side effect on many rows gives a count (`tch`), an import gives bounds (`day0`/`day1`, `dsc0`/`dsc1`). An id is logged
+  only where the code already holds it.
 
 ## Keys
 
@@ -196,18 +182,16 @@ calls `/api/v2/health_check` every 30 s; it is not logged unless it fails.
 
 ## To a file
 
-`LOG_OUTPUT=/var/log/moncycle/app.log` appends to a file instead. The file is opened once per request, written with one `write` per line
-and never locked, so lines stay whole between workers; and a rename-based `logrotate` needs no signal and no `copytruncate`.
+`LOG_OUTPUT=/var/log/moncycle/app.log` appends to a file instead. It is opened once per request, written with one `write` per line and
+never locked, so lines stay whole between workers and a rename-based `logrotate` needs no signal and no `copytruncate`.
 
-- In the Docker image `open_basedir` allows `/var/log/moncycle` and nothing else outside the code: the file must be named inside that
-  directory, and a volume mounted there. The directory belongs to `www-data` (uid 33) in the image, so a **named volume** inherits it; a
-  **bind mount** takes the host directory's owner: `chown 33:33 /host/dir`. Without Docker, any path the web user can append to works.
+- In the Docker image `open_basedir` allows `/var/log/moncycle` and nothing else outside the code: name the file there and mount a
+  volume on it. The directory belongs to `www-data` (uid 33): a **named volume** inherits that, a **bind mount** needs
+  `chown 33:33 /host/dir`. Without Docker, any path the web user can append to works.
 - `docker exec` runs as root, and a file first created by root cannot be appended to by the web server: run the cron as `www-data`
   (`docker exec -u www-data <container> php /var/www/html/script/cron.php`).
-- With `read_only: true` the directory is not writable without a volume; the app then logs to `stdout` and says why in
-  `system.log_sink_failed`.
-- Cron lines go where the cron's own output goes: with `stdout`, the output of the `docker exec` and not `docker logs`. A file gathers the
-  web and the cron lines in one place.
+- With `read_only: true` the directory is not writable without a volume; the app then logs to `stdout` and says why in `system.log_sink_failed`.
+- With `stdout`, cron lines go to the output of the `docker exec`, not `docker logs`. A file gathers web and cron lines in one place.
 
 ```yaml
     volumes:
@@ -219,7 +203,7 @@ volumes:
 ```
 
 ```
-# /etc/logrotate.d/moncycle: on the host, the file is in the volume (docker volume inspect moncycle_logs)
+# /etc/logrotate.d/moncycle (on the host; find the path with: docker volume inspect moncycle_logs)
 /var/lib/docker/volumes/moncycle_logs/_data/app.log {
     daily
     rotate 14
@@ -231,5 +215,5 @@ volumes:
 }
 ```
 
-The lines hold IP addresses and account ids with the time of their activity: keep them only as long as you need them. A deleted account's
-old lines stay until they rotate out.
+Lines hold IP addresses and account ids with the time of activity: keep them only as long as you need them. A deleted account's old
+lines stay until they rotate out.

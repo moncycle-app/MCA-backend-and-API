@@ -1,7 +1,7 @@
 # Security
 
-How the app protects its users' data, and what the operator has to do. For the setup around the app (reverse proxy, limits,
-other origins) see [deployment.md](deployment.md); for what the app writes in its log, [logs.md](logs.md).
+How the app protects its users' data, and what the operator has to do. For the setup around the app (reverse proxy, limits, other
+origins) see [deployment.md](deployment.md); for what the app writes in its log, [logs.md](logs.md).
 
 - [Tokens and sessions](#tokens-and-sessions)
 - [Sign-up, passwords and links by e-mail](#sign-up-passwords-and-links-by-e-mail)
@@ -14,206 +14,163 @@ other origins) see [deployment.md](deployment.md); for what the app writes in it
 
 ## Tokens and sessions
 
-The only credential is a **token**: a random 256-character string, stored by the server as its SHA-256. The web app keeps it in an
-`HttpOnly` cookie; a script or a mobile app sends it as `Authorization: Bearer <token>`.
+The only credential is a **token**: a random 256-character string, stored as its SHA-256. The web app keeps it in an `HttpOnly`
+cookie; a script or mobile app sends it as `Authorization: Bearer <token>`.
 
-`POST /api/v2/token` is the sign-in. It always takes the credentials (password, TOTP code, and a captcha once the account asks for
-one), so a stolen session cannot make itself another token without the password. It also takes:
+`POST /api/v2/token` is the sign-in. It always checks the credentials (password, TOTP code, captcha once the account asks for one), so
+a stolen session cannot make itself another token without the password. Options:
 
 | Field | Meaning |
 |---|---|
-| `name` | The client's own word for itself (256 characters at most, shown as text). Helps the owner find a device, proves nothing. |
-| `scope` | `readWrite` (default) or `readOnly`. A read-only token gets `403 read_only_token` on any method but `GET`, `HEAD` and `OPTIONS`; it may still end its own session. |
-| `expiresInDays` | 1 to 365. The token dies on that day whatever its use and opens nothing from then on; the cron only erases it. Without it, a token is erased after 40 days unused or a year after its creation. |
-| `cookie` | `true`: the session is also set as the `HttpOnly` cookie. Otherwise no cookie is set, so a token made on the settings page cannot replace the session it was made from. |
+| `name` | The client's own word for the token (256 characters, shown as text). Helps the owner find a device, proves nothing. |
+| `scope` | `readWrite` (default) or `readOnly`. A read-only token gets `403 read_only_token` on any method but `GET`, `HEAD`, `OPTIONS`; it may still end its own session. |
+| `expiresInDays` | 1 to 365. The token dies that day whatever its use. Without it: erased after 40 days unused or a year after creation. |
+| `cookie` | `true` also sets the `HttpOnly` cookie. Otherwise none, so a token made on the settings page cannot replace its own session. |
 
-The token is always in the answer, the web app's included, so a script injected into the page could read it: the
-`script-src 'self'` policy (see [Stored text and scripts](#stored-text-and-scripts)) is what stands in the way.
+The token is always in the answer, so a script injected into the page could read it: the `script-src 'self'` policy
+([Stored text and scripts](#stored-text-and-scripts)) is what stands in the way.
 
-`GET /api/v2/token` lists the account's tokens: the `prefix` (the first 5 characters, kept in the clear and unique per account; the
-other 251 characters are known only as a SHA-256), name, scope, creation, last use (written at most every 5 minutes), expiry, and
-the user agent and network of the address (`a.b.c.0`, or the first 48 bits of an IPv6 address) at creation and last use.
+- `GET /api/v2/token` lists the account's tokens: `prefix` (first 5 characters, unique per account), name, scope, creation, last use
+  (written at most every 5 minutes), expiry, and the user agent and network of the address (`a.b.c.0`, or the first 48 bits of IPv6).
+- `DELETE /api/v2/token` ends the caller's own session. `DELETE /api/v2/token/{prefix}` revokes one token of the caller's account.
+  `DELETE /api/v2/token?others=true` revokes all the others. No body.
+- The two demo accounts (a shared account with a public password) can neither list nor revoke other tokens.
 
-- `DELETE /api/v2/token` (no body) ends the caller's own session, whatever state its token is in, and clears the cookie.
-- `DELETE /api/v2/token/{prefix}` revokes the token that starts with these 5 characters (looked up in the caller's account only: no
-  database id is in the API). `DELETE /api/v2/token?others=true` revokes all the others.
-- The two demo accounts (a shared account whose password is public) can neither list nor revoke other tokens.
+**Every sign-in is announced by mail** to the account's address (demo accounts excepted): token name, `prefix`, scope, expiry, user
+agent, no IP address. A slow SMTP server slows the sign-in (10 s at most); a mail that cannot be sent never fails it.
 
-**Every sign-in is announced by mail** to the account's address (the demo accounts excepted): token name, `prefix`, scope,
-expiry and user agent, no IP address. The mail is sent before the answer, so a slow SMTP server slows the sign-in down (10 s at
-most); a mail that cannot be sent never fails it.
-
-The database keeps the user agent and the address **whole** for as long as the token lives. They are personal data: say so in your
-privacy policy. They go with the token when it is revoked, expires, or the account is deleted.
+The database keeps the user agent and the address **whole** while the token lives. They are personal data: say so in your privacy
+policy. They go with the token when it is revoked, expires, or the account is deleted.
 
 ## Sign-up, passwords and links by e-mail
 
-The password is chosen at sign-up: 10 to 128 characters by default (the policy, `PASSWORD_POLICY_REGEX`, sets the least; 128 is the
-most whatever it says). Lengths count **Unicode characters, not bytes**: an accented letter or an emoji is one character, and the
-server (`mb_strlen`, the regex read as UTF-8), the web app and the API documentation count the same way. A password typed to sign in
-or to confirm an action is not held to the policy (it may have been chosen under an older one) and may be up to 1024 characters;
-longer is `400 validation_failed`, before anything is looked up. The body itself stays capped at 256 KB (Apache, `post_max_size`).
+**Passwords** are chosen at sign-up: 10 to 128 characters by default (`PASSWORD_POLICY_REGEX` sets the least; 128 is the most). Lengths
+count Unicode characters, not bytes. A password typed to sign in or to confirm an action is not held to the policy and may be up to
+1024 characters. The request body is capped at 256 KB.
 
-**Hashing.** Every hash made is Argon2id (`password_hash(PASSWORD_ARGON2ID)`, `PASSWORD_HASH_OPTIONS` in `constants.php`: 46 MiB,
-4 passes, 1 thread, 238 ms on the production VPS), from `sec_password_hash()` alone. Accounts made before keep their bcrypt hash
-(cost 10 or 12), which still signs in; once a sign-in or a password asked again has fully passed (the TOTP code included), the hash is
-made again as Argon2id from the password just typed, so nobody is asked to change a password. That rewrite:
+**Hashing.** Every new hash is Argon2id (`sec_password_hash()`, options `PASSWORD_HASH_OPTIONS`: 46 MiB, 4 passes, about 238 ms on the
+production VPS). Accounts with an older bcrypt hash keep signing in; once a sign-in has fully passed (TOTP included), the hash is
+made again as Argon2id, so nobody has to change a password. That upgrade writes nothing on a refused sign-in, only replaces the hash
+that was checked, leaves sessions and TOTP alone, and is skipped for a bcrypt password longer than 72 bytes (bcrypt ignores the rest,
+so rehashing could lock the owner out).
 
-- happens only after the whole check passed: a wrong password, a missing or wrong code, a captcha refused, a lockout or a throttled
-  request write nothing;
-- writes only where the row still holds the hash that was checked, so a password changed meanwhile on another device is kept;
-- is not a change of password: the sessions, the TOTP and `last_password_change` are left alone;
-- **skips a bcrypt hash when the password typed is longer than 72 bytes.** bcrypt reads the first 72 bytes and no more, so such a
-  password matches whatever follows them: hashing what was typed could store something other than the owner's password and lock
-  them out. Those accounts (older versions took any length) keep bcrypt until their password is changed.
+**A refused sign-in tells nothing by its time.** Hash checks take different times (bcrypt 10: 85 ms, bcrypt 12: 324 ms, Argon2id:
+238 ms), and an unknown address is checked against a dummy hash. To keep the time from telling whether an account exists, every
+refusal that looked at the account (wrong password, unknown address, locked, disabled, not verified, TOTP missing or wrong) is
+answered no sooner than `AUTH_LOGIN_REFUSAL_MIN_MS` (400 ms) after the request began. A success is not held. Refusals that do not
+look at the account (throttling, captcha, sign-in off) answer at once, so a flood of them holds no worker. If you change the hash
+options, measure on your server, raise the floor above the slowest check, and make the dummy hash and the `demo.sql` hashes again.
+Each check holds its 46 MiB for its time: up to 30 at once is about 1.4 GiB, so rate-limit the sign-in at the edge.
 
-**A refused sign-in tells nothing by its time.** How long a password check takes depends on the hash stored: on the production
-VPS, bcrypt of cost 10 (PHP's default before 8.4) takes 85 ms, cost 12 324 ms, Argon2id 238 ms, and an address with no account is
-checked against an Argon2id hash nobody knows (`AUTH_DUMMY_PASSWORD_HASH`). Left as it is, the time of a wrong password would tell
-whether the address has an account, for as long as that account keeps its bcrypt hash: until its owner signs in, and for an inactive
-account until the cron erases it. So every refusal of `POST /api/v2/token` that comes from looking at the account (wrong password,
-unknown address, locked, disabled, not verified, TOTP code missing or wrong: `AUTH_LOGIN_REFUSALS_HELD`) is answered no sooner than
-`AUTH_LOGIN_REFUSAL_MIN_MS` (400 ms) after the request began, above the slowest check. A success is not held: whoever has the password
-knows the account. The refusals that do not look at the account (throttling, captcha, sign-in off) are answered at once, so that a
-flood of them holds no worker. Measured over HTTP after the change: 406–412 ms for an unknown address, Argon2id, bcrypt 10 and 12
-alike. If a check ever takes longer than the floor (a slower server, other options), raise the floor with it.
+**A new account cannot sign in until its address is proved**: `403 email_not_verified`, said only to someone who gave the right
+password (a wrong one still gets `401 invalid_credentials`), and counted as no failed attempt.
 
-Change the options only after measuring on the server that runs the app (and make the dummy hash and the demo hashes of `demo.sql`
-again). Each check holds its 46 MiB for its time: at most `MaxRequestWorkers` (30) of them at once, about 1.4 GiB; rate-limit the
-sign-in at the edge (deployment.md).
+**One kind of link** proves the address, chooses a password again and changes the login address. It is mailed and used at
+`POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
+(`newPassword` for `resetPassword` only).
 
-A new account
-cannot sign in until its address is proved: `POST /api/v2/token` answers `403 email_not_verified`, but only to someone who gave the
-right password (a wrong one, or an unknown address, gets the usual `401 invalid_credentials`, so a sign-in tells nothing about an
-account it cannot open), and that refusal counts as no failed attempt.
+- The link is a page of the app with the purpose and token in its **fragment** (`APP_URL` + `verify_email#purpose=...&t=...`). A
+  fragment reaches no server, log or `Referer`, and a mail scanner that only fetches the link runs no script, so it uses nothing up.
+- The token is 32 random bytes; the database keeps its SHA-256, its purpose, its expiry (3 days to verify, 5 hours to reset a
+  password, 1 day to change the address) and, for a change of address, the new address.
+- **An account has one slot**: a new link replaces the previous one whatever it was for. A link works once and only for its purpose.
+- Consequence: anyone who can ask for a password reset can cancel a pending link, with no cooldown. Accepted: the owner gets a new
+  link by mail, and a reset link proves the address too. The captcha (good for one mail) and the per-IP throttling stop floods.
 
-**One kind of link** proves the address, chooses a password again and changes the login address. It is mailed to the address and
-used at `POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
-(`newPassword` goes with `resetPassword` only).
+`POST /api/v2/register` answers the same `202` whether the address is new or has an account, and never touches an existing
+account: its owner gets a mail with a reset link instead. Every mistake in the request is reported before the address is looked up,
+and the password is hashed either way.
 
-- The link is a page of the app with the purpose and the token in its **fragment** (`APP_URL` + `verify_email#purpose=...&t=...`).
-  A fragment reaches no server, log or `Referer`, and a mail scanner that only fetches the link runs no script, so it uses nothing up.
-- The token is 32 random bytes; the database keeps its SHA-256 only, with what it is for, when it dies (3 days to verify, 5 hours to
-  choose a password, 1 day to change the address) and, for a change of address, the address it leads to.
-- **An account has one slot.** A new link replaces the one before it, whatever that one was for. A link is single use and checked
-  against its purpose: the link of one action does not do another.
-- **Consequence:** anyone who can ask for a password reset can cancel a link that is waiting (a verification, a change of
-  address); there is no cooldown. That is accepted: the person asked for a new link gets a mail with one, and a reset link proves
-  the address as well. What keeps it from being a flood is the captcha, which is tied to the pending link and so is good for one
-  mail, and the throttling per IP address.
+`POST /api/v2/recover_password` only mails a reset link: **the password stays as it is until the link is used**. Using it sets the
+password and proves the address; it does not close open sessions or touch the TOTP (a mail tells the owner, who can close sessions
+from the settings page). It sleeps 1 to 5 s on purpose, holding a worker: rate-limit it at the edge.
 
-`POST /api/v2/register` answers the same `202 {"sent": ...}` whether the address is new or already has an account (verified or not).
-It never touches an existing account, whatever the request says; it mails the owner a link to choose a new password instead of the
-one to verify. Everything the request can get wrong (a field, the password) is said before the address is looked up, and the
-password hash is made either way.
+**Account settings.** `POST /api/v2/account` changes every setting. Three want the current password again as `password`:
 
-`POST /api/v2/recover_password` only mails a reset link: **the password stays what it is until the link is used**, so asking for one
-locks nobody out. Using a reset link sets the password, proves the address and empties the slot. It does not close the sessions
-that are open nor touch the TOTP: a mail tells the owner that the password changed, and they can close the other sessions from the
-settings page. `POST /api/v2/recover_password` sleeps 1 to 5 s on purpose (so that its timing does not tell whether the address has an
-account) and holds a worker meanwhile: rate-limit it at the edge.
+- `newPassword`: set at once (`logoutOtherDevices` closes the other sessions). It cancels a waiting reset link, not a waiting change of address.
+- `notificationEmails`: addresses that also receive cycles, reminders and warnings (`;` between, 5 at most). Effective at once; a notice goes to the login address.
+- `loginEmail`: the address every recovery rests on; also wants the TOTP `code` if set. It only *asks*: a link goes to the **new**
+  address and the change happens when it is used. The current address is told; an address another account has gets a mail saying so
+  (same answer); sessions stay open.
 
-**Account settings.** `POST /api/v2/account` changes every setting. Three of them hand the account or its cycles over, and want the
-current password again as `password`:
-
-- `newPassword` is set at once (`logoutOtherDevices` closes the other sessions). It ends a reset link that is waiting and leaves a
-  change of address alone.
-- `notificationEmails` are the addresses that receive the cycles, reminders and warnings besides the login address (`;` between
-  two, 5 at most). It takes effect at once, and a notice goes to the login address.
-- `loginEmail` is the login address, which every recovery rests on. It also wants the TOTP `code` when there is one. It only
-  *asks*: a link goes to the **new** address and the change happens when it is used. The current address is told; an address that
-  another account has gets a mail saying so, no link, and the same answer; the sessions stay open.
-
-The request is checked whole before anything is written, so a refused one changes nothing. A wrong password or code here is not
-counted as a failed login. The two demo accounts cannot change these three (`403 demo_account`).
+A request is checked whole before anything is written. The two demo accounts cannot change these three (`403 demo_account`).
 
 ## Login protection
 
-Failed logins are counted per account and decay after `LOGIN_ATTEMPTS_DECAY_MINUTES` (60) without a failure.
+Failed logins are counted per account and forgotten after `LOGIN_ATTEMPTS_DECAY_MINUTES` (60) without a failure.
 
-| Failures on the account | What happens | Setting |
+| Failures | What happens | Answer |
 |---|---|---|
-| `LOGIN_CAPTCHA_THRESHOLD` (3) | A captcha is required | `403 captcha_required` |
-| `LOGIN_LOCKOUT_THRESHOLD` (15) | A wrong password locks the account; the right one still signs in | `403 account_locked` |
+| `LOGIN_CAPTCHA_THRESHOLD` (3) on the account | A captcha is required | `403 captcha_required` |
+| `LOGIN_LOCKOUT_THRESHOLD` (15) on the account | A wrong password locks the account; the right one still signs in | `403 account_locked` |
 | `LOGIN_IP_MAX_ATTEMPTS` (30) from one IP | Failed logins, and failed captchas of register and recover_password | `429 rate_limited` |
 
-`0` turns a feature off. Behind a reverse proxy, the per-IP limit only works if the app knows the visitors' addresses: set
+`0` turns a feature off. Behind a reverse proxy the per-IP limit works only if the app knows visitors' addresses: set
 `TRUSTED_PROXIES` ([deployment.md](deployment.md#reverse-proxy)).
 
-**Two-factor authentication.** Once the password is known, the one-time code is all that is left to guess, so a wrong TOTP code
-after a right password counts like a wrong password. Past the lockout threshold an account with a TOTP code refuses even the right
-password and code until the failures decay. Whoever knows the password can therefore keep such an account locked while they keep
-trying.
+**Two-factor authentication.** Once the password is known only the code is left to guess, so a wrong code counts like a wrong
+password, and past the lockout threshold such an account refuses even the right password and code until the failures fade. Whoever
+knows the password can therefore keep it locked by trying.
 
-A password or TOTP code asked again on an open session (`POST /api/v2/account`, `POST /api/v2/account/deletion`,
-`POST /api/v2/totp/confirm`, `POST /api/v2/totp/disable`) counts against the same account counters as a sign-in
-(`nb_connection_attempts`, `LOGIN_LOCKOUT_THRESHOLD`, `LOGIN_ATTEMPTS_DECAY_MINUTES`): past the threshold these checks answer
-`403 account_locked`, even for the right secret, and the session stays valid. A stolen session can therefore not guess the
-password or the code at will. The price is shared with the sign-in: whoever holds the session can also push the owner's next
-sign-in towards the captcha, and, with TOTP on, towards the lockout. Turning TOTP on asks for the password
-(`POST /api/v2/totp/confirm`), so a session that is not the owner's cannot lock the owner out of the next sign-in.
+A password or code asked again on an open session (`POST /api/v2/account`, `account/deletion`, `totp/confirm`, `totp/disable`) counts
+against the same counters: past the threshold these checks answer `403 account_locked`, even for the right secret, and the session
+stays valid. So a stolen session cannot guess the password or code at will; the price is that it can also push the owner's next
+sign-in towards the captcha or the lockout. Turning TOTP on asks for the password, so a foreign session cannot lock the owner out.
 
 ## The captcha
 
-`POST /api/v2/captcha` gives a picture and a token `<exp>.<mac>`. **The server keeps nothing:** no row, no column, no cookie. The mac
-is an HMAC-SHA256, keyed with `CAPTCHA_SECRET`, of:
+`POST /api/v2/captcha` gives a picture and a token `<exp>.<mac>`. **The server keeps nothing**: no row, no cookie. The mac is an
+HMAC-SHA256 keyed with `CAPTCHA_SECRET` over:
 
-- the purpose (`register`, `recover` or `login`), the address, the expiry (5 minutes) and the answer;
-- the caller's network (the IP cut to /24, or /64 for IPv6);
-- a state of the account that its own use changes: for `register` and `recover`, the stored password and the link pending in the
-  account's slot (a link made, used or replaced ends the token: one mail per captcha, whether the address has an account or not);
-  for `login`, the failure counters (a refused attempt ends it).
+- the purpose (`register`, `recover`, `login`), the address, the expiry (5 minutes) and the answer;
+- the caller's network (IP cut to /24, or /64 for IPv6);
+- a state of the account that its own use changes: for `register` and `recover`, the stored password and the pending link (a link
+  made, used or replaced ends the token: one mail per captcha); for `login`, the failure counters (a refused attempt ends it).
 
-A token that is wrong in any way answers one `captcha_invalid`, and the same 403 whether the account exists or not. Of the requests
-that arrive together with one token, one passes, so one password is tried per solved captcha. A login that succeeds ends the
-failures; a request that reads the account after it finds one that asks for no captcha.
+Any wrong token answers `captcha_invalid`, whether the account exists or not. Of requests that arrive together with one token, one
+passes, so one password is tried per solved captcha.
 
-- **Closed by default.** `CAPTCHA_SECRET` empty or under 32 characters answers `503 captcha_unavailable` to everything that needs
-  a captcha. Make one with `openssl rand -base64 48`.
-- The Docker image makes a random one at start-up when none is given: a restart then voids the challenges in flight and nothing
-  else. **Several instances behind one address must share the same `CAPTCHA_SECRET`**, or a token made by one is refused by the other.
-- A captcha that fails counts as an attempt against the caller's IP like a failed login (`LOGIN_IP_MAX_ATTEMPTS`); one that
-  passes gives its attempt back.
+- **Closed by default.** A `CAPTCHA_SECRET` empty or under 32 characters answers `503 captcha_unavailable` to everything that needs a
+  captcha. Make one with `openssl rand -base64 48`.
+- The Docker image makes a random one at start-up when none is given: a restart voids the challenges in flight, nothing else.
+  **Several instances behind one address must share the same `CAPTCHA_SECRET`.**
+- A failed captcha counts as an attempt against the caller's IP (`LOGIN_IP_MAX_ATTEMPTS`); a passed one gives it back.
 
 ## Writes from other sites
 
-The session cookie is `HttpOnly` and `SameSite=Strict` (`COOKIE_SAMESITE`). On top of that, every write (`POST`,
-`DELETE`) that a browser sends is checked against its `Origin` header (or `Sec-Fetch-Site` when there is none): the server's own
-host, `APP_URL` and `WEB_APP_ORIGINS` pass; any other page gets `403 cross_origin_refused`, sign-in and password recovery
-included. Bodies must be `Content-Type: application/json` (a 415 otherwise), which a form of another site cannot send.
-
-A request with none of these headers (curl, a script, a mobile app) is not a browser's and is not refused.
+The session cookie is `HttpOnly` and `SameSite=Strict` (`COOKIE_SAMESITE`). Every write (`POST`, `DELETE`) a browser sends is also
+checked against its `Origin` header (or `Sec-Fetch-Site` when there is none): the server's own host, `APP_URL` and `WEB_APP_ORIGINS`
+pass; any other page gets `403 cross_origin_refused`, sign-in and password recovery included. Bodies must be
+`Content-Type: application/json` (else 415), which a form of another site cannot send. A request with none of these headers (curl,
+script, mobile app) is not a browser's and is not refused.
 
 ## Stored text and scripts
 
-What a user can store (the account nickname, a comment, a label, whether typed or imported from a file) is written into the page
-as text, never as HTML. The pages are served with a Content-Security-Policy whose `script-src` is `'self'`: no inline script runs.
-The terms of service (`TERMS_OF_SERVICE_URL`) are the only page from outside: it is shown in an iframe with `sandbox` (no script, no
-same origin; links open in a new tab) and `referrerpolicy="no-referrer"`, and the CSP's `frame-src` allows its origin and no other.
+What a user can store (nickname, comment, label, typed or imported) is written into the page as text, never as HTML. The
+Content-Security-Policy has `script-src 'self'`: no inline script runs.
 
-The news banner (`NEWS_URL`) is data, not a page. The browser fetches the JSON (no cookie, no referrer, the CSP's `connect-src` allows
-that origin only), refuses anything but a JSON answer under 16 KB, keeps only the strings it expects with a length cap, and draws them as
-text. The link must be an https URL; it opens in a new tab with `noopener noreferrer`. Any failure hides the banner and is written to the
-browser console.
+- The terms of service (`TERMS_OF_SERVICE_URL`) are the one page from outside: shown in an iframe with `sandbox` (no script, no same
+  origin; links open in a new tab) and `referrerpolicy="no-referrer"`; the CSP's `frame-src` allows its origin only.
+- The news banner (`NEWS_URL`) is data: the browser fetches the JSON (no cookie, no referrer; `connect-src` allows that origin only),
+  refuses anything but JSON under 16 KB, keeps only the strings it expects with a length cap, and draws them as text. The link must
+  be https and opens with `noopener noreferrer`. Any failure hides the banner and goes to the browser console.
 
 ## What is not public
 
-- Apache refuses (403) `config*.php`, `constants.php`, `lib/`, `vendor/` (except the three libraries the pages load),
-  `composer.*`, `*.sql` and `*.md`.
-- `script/` (cron, stats, migrations) answers only to the machine itself: `APP_SCRIPT_ALLOW` (default `127.0.0.1 ::1`) lists the
-  IPs allowed in, everyone else gets a 403. Behind a reverse proxy Apache sees the proxy's address, not the caller's, so do not open
-  it to an IP unless Apache gets the real client address.
-- `disable_functions` and `open_basedir` in [`server_conf/moncycleapp_php.ini`](../server_conf/moncycleapp_php.ini) are defence
-  in depth, not a sandbox.
-- The app does not write to its disk, but for its log file when you ask for one.
+- Apache refuses (403) `config*.php`, `constants.php`, `lib/`, `vendor/` (except the three libraries the pages load), `composer.*`,
+  `*.sql` and `*.md`.
+- `script/` (cron, stats, migrations) answers only to the machine itself: `APP_SCRIPT_ALLOW` (default `127.0.0.1 ::1`). Behind a
+  reverse proxy Apache sees the proxy's address, so do not open it to an IP unless Apache gets the real client address.
+- `disable_functions` and `open_basedir` in [`server_conf/moncycleapp_php.ini`](../server_conf/moncycleapp_php.ini) are defence in
+  depth, not a sandbox.
+- The app writes nothing to its disk, except its log file if you ask for one.
 
 ## Personal data and retention
 
 - An account with no activity for `ACCOUNT_INACTIVITY_DELETE_YEARS` (4) years is deleted by the daily cron, after a warning by mail.
-  An account whose address was never proved is deleted after `ACCOUNT_UNVERIFIED_DELETE_DAYS` (7) days. Both are in
-  [`constants.php`](../www_data/constants.php).
-- `POST /api/v2/account/deletion` deletes an account at its owner's request; every other table follows by database cascade.
-- `GET /api/v2/all_of_my_data_plz` gives the owner a CSV dump of everything stored about them (passwords, TOTP secrets and tokens are
-  masked).
-- The log says what happened, to which account and to which row, never the content ([logs.md](logs.md)). It holds IP addresses and
-  account ids: keep it only as long as you need it.
+  An account whose address was never proved is deleted after `ACCOUNT_UNVERIFIED_DELETE_DAYS` (7) days
+  ([`constants.php`](../www_data/constants.php)).
+- `POST /api/v2/account/deletion` deletes an account at its owner's request, with everything it owns.
+- `GET /api/v2/all_of_my_data_plz` gives the owner a CSV of everything stored about them (passwords, TOTP secrets and tokens masked).
+- The log says what happened, to which account and row, never the content ([logs.md](logs.md)). It holds IP addresses and account
+  ids: keep it only as long as you need it.

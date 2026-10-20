@@ -134,8 +134,8 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | `LOGIN_ENABLED` | `true` | Allow sign-in. |
 | `DEMO_ENABLED` | `false` | The two public demo accounts. See [Demo accounts](#demo-accounts). |
 | `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
-| `NEWS_URL` | `https://tech4fertility.org/latest-news.json` | The JSON file of the news banner (`{"fr": {"title", "description", "url", "pubDate"}, ...}`): the browser fetches it, checks it and draws the French item as text, hidden when older than a month. https, or `http://localhost:PORT/...` for a dev server. **Empty: no banner.** |
-| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | The https page of your terms of service. The sign-up page shows it in an iframe above the box to tick (`termsAccepted`, required by `POST /api/v2/register`), the settings page links to it, and `GET /api/v2/server_info` tells it (`termsOfServiceUrl`). Empty: no page to show or link, and the box stays. The OpenAPI file (`info.termsOfService`) carries the official instance's address: change it there too if your terms are elsewhere. A page that sends `X-Frame-Options` or a `frame-ancestors` policy that excludes your instance cannot be shown. |
+| `NEWS_URL` | `https://tech4fertility.org/latest-news.json` | JSON file of the news banner (`{"fr": {"title", "description", "url", "pubDate"}, ...}`), fetched by the browser. https, or `http://localhost:PORT/...` for development. **Empty: no banner.** |
+| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | https page of your terms of service, shown in an iframe on the sign-up page (the box to tick is required by `POST /api/v2/register`), linked from the settings page and told by `GET /api/v2/server_info`. Empty: nothing to show. Change `info.termsOfService` in the OpenAPI file too. A page that forbids framing cannot be shown. |
 | `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
 
 **Database and mail**
@@ -168,8 +168,8 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 
 | Setting | Default | Description |
 |---|---|---|
-| `CAPTCHA_SECRET` | made at start-up (Docker) | The key that signs the captcha challenges: random, **32 characters or more**. Empty or shorter: the captcha is closed, and sign-up, password recovery and the sign-in of an account that must answer a captcha answer `503 captcha_unavailable`. Instances behind one address must share it. |
-| `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients by `GET /api/v2/server_info` (`passwordPolicyRegex`); the API answers `400` `password_too_weak` otherwise. A new password is 128 characters at most whatever it says (Unicode characters, not bytes). |
+| `CAPTCHA_SECRET` | made at start-up (Docker) | Random key that signs captcha challenges, **32 characters or more**. Without it sign-up, password recovery and some sign-ins answer `503 captcha_unavailable`. Instances behind one address must share it. |
+| `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients as `passwordPolicyRegex` in `GET /api/v2/server_info`. A password is 128 characters at most whatever it says. |
 | `LOGIN_ATTEMPTS_DECAY_MINUTES` | `60` | Failed logins on an account older than this restart the count; `0` counts nothing, so no captcha and no lockout. |
 | `LOGIN_CAPTCHA_THRESHOLD` | `3` | Failed logins after which a captcha is asked; `0` never asks. |
 | `LOGIN_LOCKOUT_THRESHOLD` | `15` | Failed logins after which a wrong password locks the account; `0` never locks. |
@@ -208,10 +208,9 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 
 ### Cron
 
-`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers `/api/v2/pub_stat` answers,
-sends the cycle mails, the reminders to accounts that went quiet and the deletion warnings, and **deletes** the accounts that have been
-inactive for 4 years and those whose address was never verified after 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`,
-`ACCOUNT_UNVERIFIED_DELETE_DAYS` in [`constants.php`](www_data/constants.php)).
+`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers of `/api/v2/pub_stat`,
+sends the cycle mails, reminders and deletion warnings, and **deletes** accounts inactive for 4 years and accounts whose address was
+not verified within 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`, `ACCOUNT_UNVERIFIED_DELETE_DAYS` in [`constants.php`](www_data/constants.php)).
 
 - **With Docker** the container runs it at 3:30 in its time zone (`TZ`, UTC when unset); its output goes to `docker logs`.
   `CRON_ENABLED=false` schedules nothing: do that if you run it from the host, or it runs twice a day and sends every mail twice.
@@ -223,16 +222,14 @@ inactive for 4 years and those whose address was never verified after 7 days (`A
   ```
 
   A cron entry of the host does the same: `30 3 * * * php /path/to/www_data/script/cron.php`.
-- **`php cron.php --dry-run`** reads and prints what a run would do (who would be mailed, which accounts and how many tokens would be
-  deleted) and sends, deletes and writes nothing. Any other argument is refused with exit status 2. Do not run the real thing on a
-  database you have not backed up.
-- Not once a day is a problem: more often sends duplicate mails, less often leaves expired tokens and misses mails. It has no time
-  limit on the command line. It refuses to run in [maintenance mode](#maintenance-mode).
-- **`script/terms_notice.php`** tells every user (verified accounts, login address and notification list, demo accounts excepted) that the
-  terms of service change, from which date, and that using the app after it means accepting them. `--url=https://...` and
-  `--date=YYYY-MM-DD` are required; `--test-email=ADDRESS` sends ONE trial mail to that address only, `--send` mails everyone (one of the
-  two, never both). From a browser on the machine: `terms_notice.php?url=...&date=...&test_email=...` or `&send=1`. Nothing is remembered:
-  do not run `--send` twice.
+- **`php cron.php --dry-run`** prints what a run would do (who would be mailed, which accounts and tokens deleted) and changes nothing.
+  Back up the database before a real run.
+- Run it exactly once a day: more often sends duplicate mails, less often leaves expired tokens and misses mails. It refuses to run in
+  [maintenance mode](#maintenance-mode).
+- **`script/terms_notice.php`** mails every user (verified accounts, login address and notification list, demo accounts excepted) that
+  the terms of service change, from which date, and that using the app afterwards means accepting them. `--url=https://...` and
+  `--date=YYYY-MM-DD` are required, then either `--test-email=ADDRESS` (ONE trial mail to that address) or `--send` (everyone). Nothing
+  is remembered: do not run `--send` twice.
 
 ### Demo accounts
 
@@ -240,59 +237,52 @@ Accounts 2 (`demo.mucus.self.obs@moncycle.app`, cervical mucus self-observation)
 the sign-in page has a button for each. They are made by [`demo.sql`](www_data/script/db/demo.sql). `DEMO_ENABLED` (off by default) is
 their switch:
 
-- **On.** They can sign in. Every hour, on the hour, `script/demo_reset.php` deletes the two accounts and makes them again in one
-  transaction, with days dated from the day of the run: whatever a visitor wrote is gone, and **a visitor is signed out at the next
-  hour**. The Docker image schedules it unless `CRON_ENABLED=false`; if you run the cron from the host, add
-  `0 * * * * docker exec -u www-data <container> php /var/www/html/script/demo_reset.php`. `php demo_reset.php --dry-run` says what
-  it would do and writes nothing.
-- **Off.** Signing in to them is refused (`403 account_disabled`), a session that is open on one stops working at once, and nothing
-  resets them. The accounts stay in the database.
+- **On.** They can sign in. Every hour `script/demo_reset.php` deletes and recreates both accounts, with days dated from the day of
+  the run: whatever a visitor wrote is gone and **a visitor is signed out at the next hour**. The Docker image schedules it unless
+  `CRON_ENABLED=false`; if you run the cron from the host, add
+  `0 * * * * docker exec -u www-data <container> php /var/www/html/script/demo_reset.php`. `php demo_reset.php --dry-run` changes nothing.
+- **Off.** Signing in is refused (`403 account_disabled`), open sessions stop working, nothing resets them. The accounts stay in the database.
 
-The schema does not contain them: with `DEMO_ENABLED` on they are made when the container first fills an empty database (or
-`db_init.php` does), and again at every reset. Turning it on later, on a database that already has tables, makes them at the next
-full hour.
+They are made when the container first fills an empty database (or `db_init.php` does) and at every reset. Turning `DEMO_ENABLED` on
+later makes them at the next full hour.
 
 ### Maintenance mode
 
 `MAINTENANCE_MODE=true` (restart the container to change it) puts the back end in maintenance:
 
-- **The API.** Every endpoint answers `503` with `{"error": {"code": "maintenance", ...}}` before it opens the database: nothing can
-  be read or written, whoever is signed in, and the downloads included. The one exception is `GET /api/v2/server_info`, which answers
-  `200` with `"maintenanceMode": true` so that a client can tell its user. The static pages stay up. **A container healthcheck must
-  accept the 503 of `health_check` as alive**, or a server in maintenance is restarted as dead: the one in
-  [`docker-compose.exemple.yml`](docker-compose.exemple.yml) does.
+- **The API** answers `503 maintenance` on every endpoint before opening the database, downloads included. The exception is
+  `GET /api/v2/server_info`, which answers `200` with `"maintenanceMode": true` so a client can tell its user. Static pages stay up.
+  **A container healthcheck must accept the 503 of `health_check` as alive**, or the server is restarted as dead (the one in
+  [`docker-compose.exemple.yml`](docker-compose.exemple.yml) does).
 - **The cron** refuses to run, dry run included, and exits with status 1.
-- **Not affected:** the migrations (what you run in maintenance) and `script/stat.php`.
+- **Not affected:** the migrations and `script/stat.php`.
 
 ### Upgrading
 
-Dump the database, try the migration on a copy, then start the new image: at every start it compares the `schema_version` of the database
-with `APP_VERSION` and runs the migrations it lacks (`script/auto_upgrade.php`, output in `docker logs`; without Docker, run it yourself). The
-steps, and what the v14 to v15 migration does to your data, are in [docs/upgrading.md](docs/upgrading.md).
+Dump the database, try the migration on a copy, then start the new image: at every start it runs the migrations the database lacks
+(`script/auto_upgrade.php`, output in `docker logs`; without Docker, run it yourself). Steps and the v14 to v15 details:
+[docs/upgrading.md](docs/upgrading.md).
 
 ### Logs
 
-The app writes its own structured log, to `stdout` by default (`docker logs`). A line says what happened, to which account and which
-row, and never the content: no password, token, address, text or query string. Rotation and retention are yours. The format, every
-key and every event are in [docs/logs.md](docs/logs.md).
+The app writes its own structured log to `stdout` by default (`docker logs`): what happened, to which account and row, never the
+content. Rotation and retention are yours. Format, keys and events: [docs/logs.md](docs/logs.md).
 
 ### Monitoring
 
-`script/stat.php` answers the Prometheus text format: accounts and usage, the cron's last run, MariaDB connections, locks and sizes, and
-OPcache. It is behind `APP_SCRIPT_ALLOW` like the rest of `script/`. Every metric, how to read it and alerts to start from are in
-[docs/monitoring.md](docs/monitoring.md).
+`script/stat.php` answers in the Prometheus text format (usage, the cron's last run, MariaDB, OPcache), behind `APP_SCRIPT_ALLOW`.
+Metrics and alerts: [docs/monitoring.md](docs/monitoring.md).
 
 ## Security
 
-The short version: a token is the only credential and the server keeps only its hash; writes from other sites are refused; stored
-text is never rendered as HTML and no inline script runs; the captcha is signed and kept nowhere; failed logins are throttled per
-account and per address; no password is ever stored in the clear. The details, and what an operator has to do, are in
-[docs/security.md](docs/security.md) and [docs/deployment.md](docs/deployment.md).
+A token is the only credential and only its hash is stored; writes from other sites are refused; stored text is never rendered as
+HTML; the captcha is signed and kept nowhere; failed logins are throttled; passwords are hashed with Argon2id. Details and operator
+tasks: [docs/security.md](docs/security.md) and [docs/deployment.md](docs/deployment.md).
 
 ## API
 
 The HTTP API is described in OpenAPI 3.0: [`www_data/api/moncycle_app_open_api.yaml`](www_data/api/moncycle_app_open_api.yaml). **The
-spec is the contract:** a change to an endpoint and its YAML go in the same commit.
+spec is the contract:** change an endpoint and its YAML together.
 
 - **Interactive:** Swagger UI, served by the API itself at `<APP_URL>api/`; for the official instance,
   [tableau.moncycle.app/api/](https://tableau.moncycle.app/api/). "Try it out" uses your session: sign in on the same instance first.
@@ -300,8 +290,7 @@ spec is the contract:** a change to an endpoint and its YAML go in the same comm
 
 In four lines:
 
-0. `GET /api/v2/server_info` (public) first: the `appVersion` of the server, whether it is in maintenance (`maintenanceMode`), and the limits to
-   check a form with. The version of the API is the `v2` of the address.
+0. `GET /api/v2/server_info` (public) first: server version, maintenance flag and the limits to check a form with.
 1. `POST /api/v2/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
    token is shown once.
 2. Send it on every other call as `Authorization: Bearer <token>`.
@@ -317,12 +306,10 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X
 
 - **Without Docker:** your own Apache or PHP-FPM on `www_data/` ([deployment](docs/deployment.md#without-docker-in-production)). Set
   `PHP_SECURE_COOKIES` to `false` on plain HTTP, and `DEMO_ENABLED` to `true` to sign in without a mail server.
-- **With Docker:** the image is production by default, so forgetting a setting never turns debugging on. Development is opt-in with
-  one env file: copy [`dev.env.example`](dev.env.example) to `dev.env` and give it to the container (`docker run --env-file dev.env`,
-  or `env_file: ./dev.env` in compose). It shows PHP errors, reports everything, enables assertions, turns off OPcache and every
-  HTTP cache, lets cookies travel over plain HTTP and logs at `debug` level in the readable `text` format. The code is baked into the
-  image, so a deploy is a rebuild (`composer install` honours `composer.lock`; update the dependencies on purpose with
-  `composer update`, and commit the lock); for development, bind-mount `www_data`.
+- **With Docker:** the image is production by default. For development copy [`dev.env.example`](dev.env.example) to `dev.env` and give
+  it to the container (`docker run --env-file dev.env`, or `env_file: ./dev.env` in compose): PHP errors shown, assertions on, no
+  cache, cookies over plain HTTP, `debug` logs in `text` format. The code is baked into the image, so a deploy is a rebuild; for
+  development, bind-mount `www_data`. Update dependencies on purpose with `composer update` and commit the lock.
 - **Conventions and layout:** [AGENT.md](AGENT.md) describes where code goes and the rules the codebase keeps, for people as much as
   for coding agents.
 - There is no automated test suite in this repository: check a change by calling the endpoints.

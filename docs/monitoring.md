@@ -1,13 +1,8 @@
 # Monitoring
 
-moncycle.app is a web application and API for tracking a menstrual cycle (the user records daily observations and the app draws a
-chart). This page explains the numbers the server publishes about itself, for whoever watches the service: you do not need to know the
-app, PHP or HTTP to use it.
-
 `script/stat.php` is a web page that answers in the [Prometheus](https://prometheus.io) text format, one line per metric:
-`moncycle_app_<name> <value>`. Some lines carry a label in braces, such as
-`moncycle_app_db_table_rows{table="day_timeline"} 99`. It is the only place where the app is measured; what happened to whom is in the
-[log](logs.md).
+`moncycle_app_<name> <value>`. Some lines carry a label, such as `moncycle_app_db_table_rows{table="day_timeline"} 99`. It is the only
+place where the app is measured; what happened to whom is in the [log](logs.md).
 
 - [Words used on this page](#words-used-on-this-page)
 - [Scraping it](#scraping-it)
@@ -20,25 +15,20 @@ app, PHP or HTTP to use it.
 
 | Word | Meaning |
 |---|---|
-| Account | A person's sign-in. It holds a nickname, an e-mail address (the login) and the daily observations. |
-| Verified account | An account whose owner clicked the link sent by e-mail at sign-up. An unverified one cannot sign in and is erased after a few days. |
-| Demo accounts | Two public accounts with made-up data, for visitors who want to try the app. When the operator enables them, they are reset every hour; they are not real users. |
+| Account | A person's sign-in: a nickname, a login e-mail address and the daily observations. |
+| Verified account | An account whose owner used the link mailed at sign-up. An unverified one cannot sign in and is erased after a few days. |
+| Demo accounts | Two public accounts with made-up data, reset every hour when the operator enables them. Not real users. |
 | Active account | An account that recorded at least one day in the last 35 days. |
-| Observation, "day" | What a user records for one calendar day (symptoms, notes, temperature). One row in the database. |
+| Observation, "day" | What a user records for one calendar day. One row in the database. |
 | Cycle | The period between two periods; a new one starts on the day the user marks as its first. |
-| Method | The way the user tracks their cycle: *cervical mucus self-observation* (`cervicalmucus`) or *FertilityCare* (`fertilitycare`), each with or without body temperature (`_temp`). |
-| Session | One signed-in browser or one API access key. A person can have several. |
-| Cron | The program that runs once a day at 03:30: it sends the cycle e-mails, erases abandoned accounts, purges old sessions. |
-| Maintenance mode | A switch the operator turns on during an upgrade or a restore: the app refuses every request with a "503 maintenance" answer. |
-| Web server | Apache, the program that receives the visitors' requests and runs the app's PHP code. |
-| PHP | The programming language the app is written in. |
-| OPcache | PHP's memory of the compiled app code. With it, each request does not read and compile the files again. |
-| MariaDB | The database that holds everything. |
-| Connection | One open line between the app and the database. |
-| Statement, "query" | One request the app sends to the database. |
-| Row lock | While a write is in progress the database holds the row, so a second write to the same row waits for the first. |
-| Deadlock | Two writes each waiting for the other. The database cancels one of them; it is a bug to be fixed. |
-| Gauge / counter | A gauge is a value now (it goes up and down). A counter only goes up, until the server restarts; you read it with `rate()` or `increase()` in Prometheus. |
+| Method | How the user tracks their cycle: *cervical mucus self-observation* (`cervicalmucus`) or *FertilityCare* (`fertilitycare`), each with or without body temperature (`_temp`). |
+| Session | One signed-in browser or one API token. A person can have several. |
+| Cron | The job that runs once a day at 03:30: cycle e-mails, erasing abandoned accounts, purging old sessions. |
+| Maintenance mode | An operator switch for upgrades and restores: the app answers every request with `503 maintenance`. |
+| OPcache | PHP's cache of the compiled app code. |
+| Row lock | While a write is in progress the database holds the row, so a second write to it waits. |
+| Deadlock | Two writes each waiting for the other. The database cancels one; it is a bug to fix. |
+| Gauge / counter | A gauge is a value now. A counter only goes up until the server restarts; read it with `rate()` or `increase()`. |
 
 ## Scraping it
 
@@ -50,42 +40,38 @@ scrape_configs:
       - targets: ["moncycle.example:80"]
 ```
 
-- **Not everyone may read it.** The `script/` folder answers only to the addresses listed in `APP_SCRIPT_ALLOW` (default: the server
-  itself, `127.0.0.1 ::1`, see [security](security.md)); anyone else gets a "403 forbidden". Add the address Prometheus connects from,
-  or scrape through a local port. Do not open it to the world: the page tells how many accounts there are.
-- **It must be read over HTTP** (by Prometheus, or `curl`), not by running the file from a terminal: the OPcache numbers are those of the
-  web server's memory, and are absent when the file is run from the command line.
-- **Cost**: about 20 small queries. A scrape every 60 seconds is fine; the daily-scale numbers do not need every 15 seconds.
+- **Not everyone may read it.** `script/` answers only to the addresses in `APP_SCRIPT_ALLOW` (default: the server itself,
+  `127.0.0.1 ::1`, see [security](security.md)); anyone else gets a 403. Add the address Prometheus connects from, or scrape through a
+  local port. Do not open it to the world: it tells how many accounts there are.
+- **Read it over HTTP** (Prometheus or `curl`), not from a terminal: the OPcache numbers come from the web server's memory.
+- **Cost**: about 20 small queries. A scrape every 60 seconds is fine.
 - **Privacy**: no metric holds an address, a nickname or anything a user wrote. Only counts, ages and sizes.
 
 ## How to read the names
 
 | Suffix | Meaning |
 |---|---|
-| `_total` | A counter, as defined above. |
+| `_total` | A counter. |
 | `_percent` | Between 0 and 100. |
-| `_seconds`, `_ms`, `_bytes` | The unit: seconds, milliseconds, bytes (1 MB = 1,048,576 bytes). |
-| nothing | A gauge (a value now), or a plain count. |
+| `_seconds`, `_ms`, `_bytes` | The unit (1 MB = 1,048,576 bytes). |
+| nothing | A gauge, or a plain count. |
 
-**Computed here, not in Prometheus.** Values that need no history are worked out by the page itself and given ready to read: shares
-(`_percent`), averages (`_per_`, `_average_`) and ages (`_age_seconds`). They are averages of everything since the counter started, so
-they tell a state or a long-term level. For "what is happening now" keep the `_total` counters beside them: Prometheus's `rate()` over
-the last 5 minutes is the true current speed, which the page cannot know because it remembers nothing between two reads.
+Shares (`_percent`), averages (`_per_`, `_average_`) and ages (`_age_seconds`) are worked out by the page and are averages since the
+counter started: they show a state or a long-term level. For "what is happening now" use `rate()` of the `_total` counters.
 
-A metric with nothing to say is **left out**, not set to 0, so "absent" is something you can alert on: the usage numbers exist only
-when at least one account is active, the cron numbers only after the first real run of the cron, the OPcache numbers only when OPcache is
-on, and almost everything but `maintenance` and OPcache disappears in maintenance mode.
+A metric with nothing to say is **left out**, not set to 0, so "absent" can be alerted on: usage numbers exist only when an account is
+active, cron numbers only after the first real run, OPcache numbers only when OPcache is on, and in maintenance mode almost
+everything but `maintenance` and OPcache disappears.
 
 ## Metrics
 
-In every table the **Unit** column says what one unit of the value is. "Unix time" is the number of seconds since 1 January 1970
-00:00 UTC (the form computers use for a date and time).
+The **Unit** column says what one unit of the value is. "Unix time" is the seconds since 1 January 1970 00:00 UTC.
 
 ### State of the app
 
 | Metric | Unit | Meaning |
 |---|---|---|
-| `maintenance` | 0 or 1 | 1 when maintenance mode is on, else 0. In maintenance the database may be down or being restored, so the app does not open it: this metric and the OPcache ones are all that is printed. Alert on it staying 1 for too long. |
+| `maintenance` | 0 or 1 | 1 in maintenance mode. The database is not opened then, so only this metric and the OPcache ones are printed. Alert on it staying 1 too long. |
 
 ### Accounts and sessions
 
@@ -133,8 +119,8 @@ The cron writes these two numbers at the end of a run that did not fail. A test 
 
 ### MariaDB (the database)
 
-Read from the database server's own counters (`SHOW GLOBAL STATUS`, which needs no special right). They describe **the whole server**,
-not only this app's database: another database on the same server is counted too. Counters restart from 0 when the server restarts.
+Read from the server's own counters (`SHOW GLOBAL STATUS`). They describe **the whole database server**, not only this app's
+database. Counters restart from 0 when the server restarts.
 
 | Metric | Unit | Meaning | What to do with it |
 |---|---|---|---|
@@ -165,8 +151,7 @@ not only this app's database: another database on the same server is counted too
 
 ### PHP: OPcache
 
-Printed only when OPcache is on (it is in the Docker image). These are read from the web server's own memory, shared by its workers;
-with PHP-FPM they are the numbers of the pool that answered.
+Printed only when OPcache is on (it is in the Docker image). With PHP-FPM they are the numbers of the pool that answered.
 
 | Metric | Unit | Meaning | What to do with it |
 |---|---|---|---|
@@ -206,5 +191,5 @@ with PHP-FPM they are the numbers of the pool that answered.
 - A MariaDB counter is one line in `STAT_DB_STATUS` in `constants.php`.
 - Nothing that identifies a person or holds what a user wrote: counts, ages and sizes only.
 - Add it here, with its unit, in the same change.
-- A number the app only knows while it runs (a count of e-mails sent, of requests) has no home yet: `stat.php` is a separate request that
-  reads the database, so such a number must be written to the `key_value` table by the code that knows it, as the cron does.
+- A number the app only knows while it runs (e-mails sent, requests) must be written to the `key_value` table by the code that knows
+  it, as the cron does: `stat.php` is a separate request that only reads the database.

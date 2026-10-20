@@ -16,13 +16,14 @@ The Docker image serves plain HTTP and is made to sit behind a reverse proxy. Th
 - **Terminate TLS** and redirect http to https. The image sends `Strict-Transport-Security` itself when the request carries
   `X-Forwarded-Proto: https`: make the proxy set that header. If the proxy already sends HSTS, remove that line from
   [`server_conf/zz-moncycleapp.conf`](../server_conf/zz-moncycleapp.conf) to avoid a duplicate.
-- **Rate-limit** `/api/v2/token`, `/api/v2/register`, `/api/v2/recover_password`, `/api/v2/verify_email` and `/api/v2/captcha` (a captcha costs a JPEG to draw and is
-  kept nowhere; the app counts the attempts of `verify_email` per address, but cannot limit what it has not been asked, like the captcha). `/api/v2/recover_password` sleeps 1 to 5 s on purpose and holds one of the 30 workers meanwhile; a password check holds 46 MiB for about 240 ms (Argon2id), and a refused sign-in holds its worker, asleep, until 400 ms ([security.md](security.md)).
+- **Rate-limit** `/api/v2/token`, `/api/v2/register`, `/api/v2/recover_password`, `/api/v2/verify_email` and `/api/v2/captcha`.
+  The app counts failed attempts, but it cannot limit requests it is never asked to check (a captcha costs a JPEG to draw), and these
+  endpoints hold a worker for a while on purpose: `recover_password` sleeps 1 to 5 s, a password check takes about 240 ms and 46 MiB
+  (Argon2id), a refused sign-in is held until 400 ms ([security.md](security.md)).
 - **Cap the body at 256 KB** (`client_max_body_size 256k` with nginx), the same as Apache, so that a request that is too large is
   refused at the edge before it costs a worker.
-- **Not log query strings or paths.** `GET /api/v2/day/2026-09-20`, `GET /api/v2/day?from=`, `GET /api/v2/timeline_sync?since=` and
-  `DELETE /api/v2/token/{prefix}` carry dates and token prefixes, and the dates of someone's observations are sensitive data. The
-  image has no Apache access log for that reason; the app's own log names the endpoint (`/api/v2/day`), never the arguments of the URL.
+- **Not log query strings or paths.** URLs such as `GET /api/v2/day/2026-09-20` carry the dates of someone's observations and token
+  prefixes. The image has no Apache access log for that reason; the app's own log names the endpoint (`/api/v2/day`), never the arguments.
 - **Block `/script/`** too (defence in depth: the app already refuses it to anyone but the machine itself).
 - **Tell the app who the proxy is.** Set `TRUSTED_PROXIES` (an address or a CIDR range, comma separated) and have the proxy send the
   real client address in `X-Forwarded-For` (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` with nginx).
@@ -30,51 +31,43 @@ The Docker image serves plain HTTP and is made to sit behind a reverse proxy. Th
 ### `TRUSTED_PROXIES`
 
 Without it every visitor has the proxy's address: the login throttling (`LOGIN_IP_MAX_ATTEMPTS`, 30 failures in 15 minutes per
-address) becomes one limit for everyone, so 30 failed logins from anywhere answer 429 to all, and the `ip` of the log is the proxy.
+address) becomes one limit for everyone, and the `ip` of the log is the proxy.
 
-- `X-Forwarded-For` is believed only when the peer is in `TRUSTED_PROXIES`. It is read from its right end, skipping trusted
-  addresses, so whatever the client wrote on the left is ignored. From anyone else it is never believed: a visitor who could choose
-  their own address would dodge the throttling with a new one at every attempt, or put the failures on somebody else's.
-- The value is the address the **container** sees the proxy from, which is not always the one you know it by: a proxy on the host
-  reaches a published port from the gateway of the Docker network (`172.x.0.1`), a proxy in another container from that
-  container's address. If the `ip` of the log lines shows an address of your Docker network instead of visitors', put that address
-  in `TRUSTED_PROXIES` (its network's range, e.g. `172.18.0.0/16`, if it can change).
-- A CDN in front of the proxy adds its own address to the chain: list its ranges too, or the first address the app meets from the
-  right, the CDN's, is taken for the visitor.
-- `APP_SCRIPT_ALLOW` is Apache's own `Require ip` and is unchanged: it still sees the proxy's address.
+- `X-Forwarded-For` is believed only when the peer is in `TRUSTED_PROXIES`, and read from its right end, skipping trusted addresses.
+  From anyone else it is ignored, so a visitor cannot pick their own address to dodge the throttling.
+- The value is the address the **container** sees the proxy from. A proxy on the host usually appears as the gateway of the Docker
+  network (`172.x.0.1`); a proxy in another container, as that container's address. If the `ip` of the log shows an address of your
+  Docker network instead of visitors', put it (or its range, e.g. `172.18.0.0/16`) in `TRUSTED_PROXIES`.
+- A CDN in front of the proxy adds its own address to the chain: list its ranges too.
+- `APP_SCRIPT_ALLOW` is Apache's own `Require ip` and still sees the proxy's address.
 
 ## Limits
 
 Set in [`server_conf/`](../server_conf/); they are part of the image.
 
-- **Apache:** request body 256 KB, 30 s `Timeout`, 30 workers of about 21 MB each. A request to `/api/` whose `Content-Length` is
-  larger gets a `413 file_too_large` in the API's JSON envelope before any handler runs, so PHP never starts and logs nothing.
-  (Without that early refusal PHP reads a JSON body into memory: a 20 MB body is read in full and one of 33 MB ends in a
-  `memory_limit` fatal error.) `LimitRequestBody` is the same wall for a body sent in chunks, which has no `Content-Length`.
+- **Apache:** request body 256 KB, 30 s `Timeout`, 30 workers of about 21 MB each. A request to `/api/` with a larger
+  `Content-Length` gets `413 file_too_large` before PHP starts. `LimitRequestBody` is the same wall for a body sent in chunks.
 - **PHP:** `memory_limit` 32M (do not lower it without measuring the peak memory of a multi-year export), `max_execution_time` 30,
   `file_uploads` Off.
-- **`post_max_size` (256K) is coupled** with `NFP_LIMIT_BODY_BYTES` in [`constants.php`](../www_data/constants.php) and with
-  Apache's `LimitRequestBody` and `Content-Length` test: change the three or none. It does not cap a raw JSON body (read from
-  `php://input`): that cap is Apache's 256K and, for `/api/v2/import`, the app's own check of the same size.
-- **Database connections:** the app keeps its connection open between requests (one per Apache worker, 30 at most per
-  container). MariaDB's `max_connections` (151 by default) must cover the workers of every app container plus the cron.
-  `php www_data/script/db_perf.php` (command line, read-only) measures the link and checks that this is safe.
+- **Change these together or not at all:** `post_max_size` (256K), `NFP_LIMIT_BODY_BYTES` in [`constants.php`](../www_data/constants.php),
+  and Apache's `LimitRequestBody` and `Content-Length` test.
+- **Database connections:** one per Apache worker (30 per container), kept open between requests. MariaDB's `max_connections`
+  (151 by default) must cover the workers of every container plus the cron. `php www_data/script/db_perf.php` (command line,
+  read-only) checks it.
 
 ## Web app and API on one origin, or two
 
 **The default: one origin.** The container serves the pages and `/api/` from the same host, `APP_URL`. A reverse proxy that routes
 `/api` to another backend still shows the browser one origin, so it needs nothing here but `TRUSTED_PROXIES`.
 
-**The image does not serve the web app from another origin than its API.** Every URL in the pages is relative (`api/v2/...`) and the
-API sends no CORS header, so a browser page on another origin cannot call it. What is there is the groundwork:
+**The image does not serve the web app from another origin than its API.** The pages use relative URLs and the API sends no CORS
+header, so a browser page on another origin cannot call it. Only the groundwork is there:
 
-- `APP_URL` and `WEB_APP_ORIGINS` name the browser origins that may *write* (the `Origin` check, see
-  [security.md](security.md#writes-from-other-sites)): the origin of `APP_URL`, the ones you list, and the API's own host (the `Host`
-  header of the request; if your proxy rewrites it, `APP_URL` is what lets your own pages through).
-- `COOKIE_SAMESITE` sets the cookie's `SameSite`. `strict` (the default) is right for pages and API on the same site, sibling
-  subdomains included. A web app on **another site** needs `lax` (page navigations only) or `none` (requests from scripts; needs
-  `PHP_SECURE_COOKIES=true`) and relies on the browser not blocking third-party cookies: treat that as fragile.
-- Clients that are not browsers (a mobile app, a script) send no `Origin`, use `Authorization: Bearer <token>` and work from anywhere.
+- `APP_URL` and `WEB_APP_ORIGINS` name the origins allowed to *write* (the `Origin` check, see
+  [security.md](security.md#writes-from-other-sites)): `APP_URL`'s origin, the ones you list, and the API's own host.
+- `COOKIE_SAMESITE` sets the cookie's `SameSite`. `strict` (default) suits pages and API on the same site. Another site needs `lax`
+  or `none` (which needs `PHP_SECURE_COOKIES=true`) and depends on the browser allowing third-party cookies: treat that as fragile.
+- Clients that are not browsers send no `Origin`, use `Authorization: Bearer <token>` and work from anywhere.
 
 ## Content-Security-Policy
 
@@ -85,11 +78,11 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
 frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
 ```
 
-The terms of service are shown in an iframe, so `frame-src` lists the origin of that page (the image's entrypoint makes it from
-`TERMS_OF_SERVICE_URL`; `'none'` when it is not set). An origin, not the page: the terms page links to its other languages inside the
-frame. The news banner is a JSON file the web app fetches, so `connect-src` adds the origin of `NEWS_URL`, and the file's server must
-answer with `Access-Control-Allow-Origin` for the app's origin. Pages served by anything else need the same policy from their own server,
-and a front end that calls an API on another origin adds that origin to its `connect-src`. Swagger UI is one of the image's pages and is covered by the same policy.
+- `frame-src`: the origin of `TERMS_OF_SERVICE_URL` (the terms are shown in an iframe), `'none'` when unset.
+- `connect-src`: the origin of `NEWS_URL` (the news banner is a JSON file the web app fetches). That server must answer with
+  `Access-Control-Allow-Origin` for the app's origin.
+
+Pages served by anything else need the same policy from their own server. Swagger UI is covered by it too.
 
 ## Without Docker, in production
 
