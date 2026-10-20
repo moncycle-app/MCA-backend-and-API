@@ -2089,7 +2089,7 @@ paths:
         ### Free-text labels
 
         Names you put in `freeMucusSensation`, `freeMucusObservation` and `freeOther` are
-        resolved for you: an existing name is reused, a new name is created. You do not need
+        trimmed and lower-cased, then resolved for you: an existing name is reused, a new name is created. You do not need
         `POST /description` first. Sending a name that exists under another type links the
         existing label and keeps its original type.
 
@@ -2317,7 +2317,7 @@ paths:
         Creates a label. You rarely need to: a name sent in a day is created for you (see `POST /day/{date}`). It exists
         for a picklist ("most used first") and to prepare labels before they are used.
 
-        Names are **unique per account** and **case-sensitive**: a name that exists is `409 duplicate_name`. The type
+        Names are stored **trimmed and in lower case** (`Humide ` is saved as `humide`) and are **unique per account**: a name that exists, whatever the case you send, is `409 duplicate_name`. The type
         is `sensation` or `observation` (`undefined` is a label nobody classified yet: to classify
         one, `POST /description/{id}` it).
 
@@ -2339,6 +2339,7 @@ paths:
                 name:
                   type: string
                   maxLength: 256
+                  description: Trimmed and lower-cased by the server.
                   example: stretchy
                 type:
                   $ref: '#/components/schemas/DescriptionType'
@@ -2415,6 +2416,7 @@ paths:
                 name:
                   type: string
                   maxLength: 256
+                  description: Trimmed and lower-cased by the server.
                   example: very stretchy
                 type:
                   $ref: '#/components/schemas/DescriptionType'
@@ -3477,7 +3479,8 @@ components:
 
             A name that does not exist yet is created for you. A name that already exists under
             `freeMucusObservation` is reused and keeps its original type — names are unique per
-            account whatever their type. Names are case-sensitive.
+            account whatever their type. Names are trimmed and lower-cased by the server (`Dry ` and `dry` are one label), and
+            the day comes back with the stored form.
 
             In the NFP **file** format these labels are an array too; `POST /import` also reads
             the form older files use, one comma-joined string.
@@ -3591,7 +3594,7 @@ components:
         name:
           type: string
           maxLength: 256
-          description: The label text. Unique per account, case-sensitive.
+          description: The label text, always trimmed and in lower case. Unique per account.
           example: clear and stretchy
         type:
           type: string

@@ -1159,10 +1159,10 @@ moncycle_app = {
 	},
 	desc_add_submit : function (form) {
 		let desc_type = parseInt(form.data("desc-type"));
-		let name = form.find(".desc_add_input").val().trim();
+		let name = form.find(".desc_add_input").val().trim().toLowerCase();
 		let status = form.find(".desc_add_status");
 		if (name == "") return;
-		let duplicate = moncycle_app.description.some(d => d.name.toLowerCase() == name.toLowerCase());
+		let duplicate = moncycle_app.description.some(d => d.name.toLowerCase() == name);
 		if (duplicate) {
 			status.text(moncycle_app_text.desc_add_duplicate(name));
 			return;

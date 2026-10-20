@@ -79,7 +79,7 @@ function data_description_to_json(array $row): array {
 // The description of a name, found or created with $type. $known keeps the answers between calls (a file repeats a few names on every
 // day). A name is one row whatever type it is asked as: "type" is the one it has, "created" whether this call made it.
 function data_resolve_description($db, int $no_user_account, string $name, int $type, string $last_write_client_UTC, array &$known = []): array {
-	$name = trim($name);
+	$name = day_format_description_name($name);
 	if (isset($known[$name])) return $known[$name] + ["created" => false];
 
 	$existing = db_querie_select_description_exact_name($db, $no_user_account, $name);

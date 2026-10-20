@@ -472,7 +472,7 @@ function nfp_import_day_labels(object $nfp_day, string $date, array &$report): a
 		$names = [];
 		foreach ($values as $name) {
 			if (!is_string($name)) continue;
-			$name = day_format_clean_text($name);
+			$name = day_format_description_name($name);
 			if ($name === '') continue;
 			if (mb_strlen($name) > DAY_LIMIT_DESCRIPTION_CHARS) {
 				$report["issues"][] = sprintf(

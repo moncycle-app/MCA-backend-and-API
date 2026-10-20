@@ -660,12 +660,17 @@ function settings_desc_row(description) {
 	return $("<form>", {class: "desc_row", id: "desc_row_" + description.id}).data("id", description.id).append(enter_button, line, actions, message);
 }
 
+// A description is kept trimmed and in lower case (the server does the same): what is typed is compared and sent that way.
+function settings_desc_row_name(row) {
+	return row.find(".desc_name").val().trim().toLowerCase();
+}
+
 // Name or type changed: save it. Only a difference is sent (focus, Tab and arrows make events with none): what is typed is compared with
 // what was sent last, or else what is saved.
 function settings_desc_save(row) {
 	const id = row.data("id");
 	const known = settings_desc_find(id);
-	const name = row.find(".desc_name").val();
+	const name = settings_desc_row_name(row);
 	// the whole name is in the tooltip: the field shows what fits
 	row.find(".desc_name").attr("title", name);
 	// the option selected, not the value of the select: the "à définir" option is disabled, and the select answers nothing for it
@@ -675,7 +680,7 @@ function settings_desc_save(row) {
 
 	const edit = ++settings_desc_last_edit;
 	const line = row.find(".form_msg");
-	if (name.trim() == "") return settings_say(line, "error", settings_text.desc_name_empty);
+	if (name == "") return settings_say(line, "error", settings_text.desc_name_empty);
 	if (settings_desc_exists(name, type, id)) return settings_say(line, "error", settings_text.desc_duplicate);
 
 	settings_say(line, "busy", "⏳");
@@ -741,7 +746,7 @@ async function settings_desc_move_to_comments(row) {
 		const description = moncycle_store.descriptions.find(function (known) { return known.id === id; });
 		if (!description) return alert(settings_text.desc_comment_gone);
 		// the name that will be written is the one saved, which must be the one the user sees
-		if (description.name !== row.find(".desc_name").val()) return alert(settings_text.desc_comment_unsaved);
+		if (description.name !== settings_desc_row_name(row)) return alert(settings_text.desc_comment_unsaved);
 		const plan = moncycle_store.plan_description_to_comments(description);
 		// all or nothing: a day that cannot take the name would lose the description with the others
 		if (plan.too_long.length) return alert(settings_text.desc_comment_too_long(description.name, plan.too_long, moncycle_store.comment_max_chars));
@@ -809,7 +814,7 @@ async function settings_desc_merge(row, target_id) {
 		const source = moncycle_store.descriptions.find(function (known) { return known.id === id; });
 		const target = moncycle_store.descriptions.find(function (known) { return known.id === target_id; });
 		if (!source || !target) return alert(settings_text.desc_merge_gone);
-		if (source.name !== row.find(".desc_name").val()) return alert(settings_text.desc_comment_unsaved);
+		if (source.name !== settings_desc_row_name(row)) return alert(settings_text.desc_comment_unsaved);
 		const change = moncycle_store.plan_description_merge(source, target);
 		if (!confirm(settings_text.desc_merge_confirm(source.name, target.name, change.length))) return;
 

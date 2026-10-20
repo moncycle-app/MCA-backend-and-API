@@ -47,7 +47,7 @@ containers started together do not both migrate.
 ## From v14 to v15
 
 A large migration: it renames the tables and columns to English, moves the `sensation` text of each day into `description` rows
-linked to it (and drops the `sensation` column at the end), hashes the session tokens, and stores login addresses in lower case.
+linked to it (and drops the `sensation` column at the end), hashes the session tokens, stores login addresses in lower case, and merges the descriptions that are equal once trimmed and lower-cased.
 Read its output: it says what it did and why.
 
 **Accounts whose addresses differ only by case.** v14 compared addresses exactly, so `Alice@X.test` and `alice@x.test` could be two

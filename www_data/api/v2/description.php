@@ -56,7 +56,7 @@ else {
 	$body = input_body(["name", "type", "lastWriteClientUtc"], $issues);
 	$creates = $path === [];
 
-	$name = day_format_body_text($body, "name", DAY_LIMIT_DESCRIPTION_CHARS, $issues);
+	$name = array_key_exists("name", $body) ? day_format_description_text($body["name"], "name", DAY_LIMIT_DESCRIPTION_CHARS, $issues) : null;
 	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");
 	elseif ($creates) input_require($body, "name", $issues);
 

@@ -125,6 +125,16 @@ function day_format_text(mixed $value, string $field, int $max_chars, array &$is
 	return null;
 }
 
+// A description's name as it is stored: cleaned, trimmed and in lower case, so that "Humide " and "humide" are one description.
+function day_format_description_name(string $name): string {
+	return mb_strtolower(day_format_clean_text($name));
+}
+
+// A client's description name for a varchar($max_chars): day_format_description_name() then the checks of day_format_text().
+function day_format_description_text(mixed $value, string $field, int $max_chars, array &$issues): ?string {
+	return day_format_text(is_string($value) ? day_format_description_name($value) : $value, $field, $max_chars, $issues);
+}
+
 // $body[$field] as day_format_text(); null when absent.
 function day_format_body_text(array $body, string $field, int $max_chars, array &$issues): ?string {
 	return array_key_exists($field, $body) ? day_format_text($body[$field], $field, $max_chars, $issues) : null;
@@ -183,7 +193,7 @@ function day_format_validate(array $day, array &$issues): array {
 		}
 		$names = [];
 		foreach ($day[$field] as $position => $name) {
-			$name = day_format_text($name, "{$field}[$position]", DAY_LIMIT_DESCRIPTION_CHARS, $issues);
+			$name = day_format_description_text($name, "{$field}[$position]", DAY_LIMIT_DESCRIPTION_CHARS, $issues);
 			if (!is_null($name) && $name !== '') $names[] = $name;
 		}
 		$day[$field] = array_values(array_unique($names));

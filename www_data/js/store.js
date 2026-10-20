@@ -470,7 +470,7 @@ const moncycle_store = {
 	// shown at once and sent when the server can be reached: a day that carries it by name creates it too, so
 	// whichever arrives first, the other finds it there.
 	queue_description : function (name, type, last_write_client_utc) {
-		moncycle_store.pending_descriptions.push({name : name, type : type, lastWriteClientUtc : last_write_client_utc || null});
+		moncycle_store.pending_descriptions.push({name : String(name).trim().toLowerCase(), type : type, lastWriteClientUtc : last_write_client_utc || null});
 		moncycle_store.write(moncycle_store.keys.pending_descriptions, moncycle_store.pending_descriptions);
 		moncycle_store.emit("changed", {days : [], descriptions : true, account : false, source : "local"});
 		moncycle_store.flush().catch(function () { });

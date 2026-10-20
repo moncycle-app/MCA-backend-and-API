@@ -294,8 +294,12 @@ try {
             // THERE IS SENSATION TO MIGRATE
             $sensations = explode(',', $obs["sensation"]);
 
+            // names that are equal once trimmed and lower-cased are one description ("Humide", "humide ") and one link per day
+            $linked_today = [];
+
             foreach ($sensations as $sens) {
-                $sens = trim($sens);
+                $sens = mb_strtolower(trim($sens));
+                if ($sens === "") continue;
                 print(PHP_EOL);
                 print("      # desc  ");
                 print($sens);
@@ -334,6 +338,12 @@ try {
                     if (!isset($cached_descriptions[$obs["no_user_account"]][$sens])) {
                         $cached_descriptions[$obs["no_user_account"]][$sens] = $no_desc;
                     }
+
+                    if (isset($linked_today[$sens])) {
+                        print(" merged, already linked to this day");
+                        continue;
+                    }
+                    $linked_today[$sens] = true;
 
                     $statement_insert_link->bindValue(":observation_no", $obs["no_day"], PDO::PARAM_INT);
                     $statement_insert_link->bindValue(":description_no", $no_desc, PDO::PARAM_INT);
