@@ -41,7 +41,7 @@ RUN arch="$(dpkg --print-architecture)" \
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 # No ENV here: the settings come from the container's environment or from config.php (config.docker.php, README "Settings"), and the
-# entrypoint gives the few it needs for Apache their defaults (APP_SCRIPT_ALLOW, CSP_FRAME_SRC; CRON_ENABLED is on unless set off).
+# entrypoint gives the few it needs for Apache their defaults (APP_SCRIPT_ALLOW, CSP_FRAME_SRC, CSP_CONNECT_SRC; CRON_ENABLED is on unless set off).
 
 COPY --from=composer/composer:latest-bin /composer /usr/bin/composer
 COPY ./server_conf/zz-moncycleapp.conf /etc/apache2/conf-enabled/zz-moncycleapp.conf

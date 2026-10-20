@@ -4,7 +4,7 @@
 #   1b. upgrades the database when its schema_version is behind APP_VERSION (script/auto_upgrade.php; skipped in MAINTENANCE_MODE),
 #       what it does is printed, so `docker logs` shows it,
 #   2. makes the key that signs the captcha challenges when none is given (CAPTCHA_SECRET),
-#   3. makes the frame-src of the CSP from NEWS_URL and TERMS_OF_SERVICE_URL (CSP_FRAME_SRC),
+#   3. makes the frame-src of the CSP from TERMS_OF_SERVICE_URL (CSP_FRAME_SRC) and its connect-src from NEWS_URL (CSP_CONNECT_SRC),
 #   3b. makes the ServerName of Apache from the host of APP_URL (APP_SERVER_NAME),
 #   4. starts the schedulers (supercronic) unless CRON_ENABLED is off: one for the daily job (server_conf/moncycle.crontab)
 #      and, when DEMO_ENABLED is on, one for the hourly reset of the demo accounts (server_conf/moncycle-demo.crontab),
@@ -47,24 +47,22 @@ if [ "${1:-}" = "apache2-foreground" ]; then
 		echo "captcha: CAPTCHA_SECRET is shorter than 32 characters, the captcha stays closed (503 captcha_unavailable)."
 	fi
 
-	# The frame-src of the CSP (zz-moncycleapp.conf) lists the origins of the two pages the web app shows in an iframe, NEWS_URL
-	# and TERMS_OF_SERVICE_URL. The origin, not the page: the terms page links to its other languages, inside the frame. Only an
-	# https URL counts; none, and the policy forbids every frame.
-	# The two URLs are read from config.php, which has their defaults (an unset variable is the official instance's, an empty one none),
+	# The frame-src of the CSP (zz-moncycleapp.conf) is the origin of the terms of service page, which the web app shows in an iframe, and
+	# its connect-src adds the origin of the news file (NEWS_URL), which the web app fetches. The origin, not the page: the terms page links
+	# to its other languages, inside the frame. Only an https URL counts (a news file may also be http://localhost, for a dev server); none,
+	# and the policy forbids every frame and every request but the app's own.
+	# The URLs are read from config.php, which has their defaults (an unset variable is the official instance's, an empty one none),
 	# so that the image holds no copy of them.
 	urls=$(as_web_user php -r 'require "/var/www/html/config.php"; echo TERMS_OF_SERVICE_URL, "\n", NEWS_URL, "\n";')
-	CSP_FRAME_SRC=""
-	for url in $urls; do
-		origin=$(printf '%s' "$url" | sed -nE 's#^(https://[A-Za-z0-9.-]+(:[0-9]+)?)(/.*)?$#\1#p')
-		[ -n "$origin" ] || continue
-		case " $CSP_FRAME_SRC " in
-			*" $origin "*) ;;
-			*) CSP_FRAME_SRC="$CSP_FRAME_SRC $origin" ;;
-		esac
-	done
-	CSP_FRAME_SRC="${CSP_FRAME_SRC# }"
+	terms_url=$(printf '%s\n' "$urls" | sed -n 1p)
+	news_url=$(printf '%s\n' "$urls" | sed -n 2p)
+	CSP_FRAME_SRC=$(printf '%s' "$terms_url" | sed -nE 's#^(https://[A-Za-z0-9.-]+(:[0-9]+)?)(/.*)?$#\1#p')
 	[ -n "$CSP_FRAME_SRC" ] || CSP_FRAME_SRC="'none'"
 	export CSP_FRAME_SRC
+	CSP_CONNECT_SRC="'self'"
+	news_origin=$(printf '%s' "$news_url" | sed -nE 's#^(https://[A-Za-z0-9.-]+(:[0-9]+)?|http://(localhost|127\.0\.0\.1)(:[0-9]+)?)(/.*)?$#\1#p')
+	[ -z "$news_origin" ] || CSP_CONNECT_SRC="'self' $news_origin"
+	export CSP_CONNECT_SRC
 
 	# Apache's ServerName (zz-moncycleapp.conf): the host of APP_URL, read from config.php for its default. Without one Apache guesses
 	# from the container's address and prints AH00558. Not a host name (a typo, no https): localhost, which only silences the warning.

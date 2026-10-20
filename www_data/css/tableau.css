@@ -502,16 +502,16 @@ h2 {
 	vertical-align: top;
 }
 
-/* the news page of another site: its height cannot follow the page's, so it scrolls. White behind it: a page that paints nothing
-   (a bare fragment of markup) would show its black text on the dark theme's black; a page with a background of its own covers it. */
-.actu .actu_frame {
+/* the news item: text from another site, drawn as text */
+.actu .actu_title {
 	display: block;
-	width: 100%;
-	height: 15em;
 	margin: 5px 0;
-	border: 0;
-	border-radius: 4px;
-	background-color: white;
+}
+
+.actu .actu_text {
+	margin: 5px 0;
+	max-height: 10em;
+	overflow-y: auto;
 }
 
 #fc_msg {

@@ -6,11 +6,11 @@
 ** https://github.com/moncycle-app/backend-api-web-app
 */
 
-// The settings page (settings.html). It is a menu and eight panels; the address says which one is open (settings#securite).
+// The settings page (settings.html). It is a menu and nine panels; the address says which one is open (settings#securite).
 // Reading order of this file:
 //   1. the text the user reads        5. the panels, one section each:
 //   2. small helpers                     suivi, descriptions, notifications, data (export, import), connexion (address, password,
-//   3. the account, loaded once          double authentication), appareils (connections, tokens), apropos, suppression
+//   3. the account, loaded once          double authentication), appareils (connections, tokens), apropos, actualites (the news), suppression
 //   4. the menu (which panel is open) 6. start
 // A form carries the data it sends and the script submits it; the one exception is the description rows, which save as they are typed.
 
@@ -1366,10 +1366,26 @@ function settings_load_server_info() {
 		const info = (ret || {}).data || {};
 		$("#tech_info_ver").text(info.appVersion ?? "?");
 		if (info.passwordPolicyRegex) $("#i_pw1, #i_pw2").attr("pattern", info.passwordPolicyRegex);
+		if (info.newsUrl) settings_load_news(info.newsUrl);
+		else console.info("news: server_info tells no newsUrl (NEWS_URL is empty or not https), no news entry");
 		if (!/^https:\/\//i.test(info.termsOfServiceUrl || "")) return;
 		$("#a_terms").attr("href", info.termsOfServiceUrl);
 		$("#terms_about").prop("hidden", false);
 	}).fail(settings_leave_if_signed_out);
+}
+
+
+// The news of Tech 4 Fertility (js/news.js): the entry of the menu shows only when there is an item. The address #actualites is read again
+// once it is there, so that a link to it opens the panel.
+function settings_load_news(url) {
+	moncycle_news.load(url).then(function (item) {
+		if (!item) return;
+		$("#news_title").text(item.title);
+		$("#news_text").text(item.description);
+		$("#but_news_read").off("click").on("click", function () { window.open(item.url, "_blank", "noopener,noreferrer"); });
+		$("#menu_actualites").prop("hidden", false);
+		if (location.hash === "#actualites") settings_show_panel();
+	});
 }
 
 

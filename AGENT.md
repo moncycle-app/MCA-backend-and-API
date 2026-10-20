@@ -271,10 +271,11 @@ refactoring the old code.
   `js/settings.js`, `js/tableau.js`, `js/swagger-init.js`).
 - **Nothing a user can store goes into the page as HTML.** Names, comments and labels go through `.text()`, `.val()` or text nodes
   (`settings_say()` for a server message). jQuery's `append(string)` reads a `<` or an entity in a string as HTML, so a text
-  is `document.createTextNode()`. The two pages from outside, the news banner (`NEWS_URL`, the `newsUrl` of `GET /api/v2/server_info`) and
-  the terms of service (`TERMS_OF_SERVICE_URL`, `termsOfServiceUrl`), are never read by the page: each is a sandboxed iframe
-  (`sandbox` without `allow-scripts`, `referrerpolicy="no-referrer"`), and the CSP's `frame-src` names their origins. An iframe of
-  another origin cannot be read, so "OK merci" of the banner hides it for 7 days instead of remembering a title.
+  is `document.createTextNode()`. The terms of service (`TERMS_OF_SERVICE_URL`, `termsOfServiceUrl`) come from outside and are never read by
+  the page: a sandboxed iframe (`sandbox` without `allow-scripts`, `referrerpolicy="no-referrer"`), and the CSP's `frame-src` names its
+  origin. The news banner is a JSON file (`NEWS_URL`, the `newsUrl` of `GET /api/v2/server_info`): `js/news.js` (`moncycle_news.load`) fetches it
+  (no cookie, no referrer), checks type, size, shape and the https link, and gives the French item, drawn with `.text()` only, by the
+  timeline's banner and the settings' "Tech 4 Fertility actualités" panel; on any problem there is no item and the details go to the console. "OK merci" hides the article (its link) it was clicked on.
 - **Forms carry the data, the script only submits it.** Every value sent to the remote API lives in an HTML `<form>` of the page: a
   visible field for what the user fills in, a hidden one (`<input type="hidden">`) for what the user need not know. The script catches
   the form's `submit` event (`preventDefault()`), reads the form, builds the JSON body, calls the API and shows the answer; it holds

@@ -134,7 +134,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | `LOGIN_ENABLED` | `true` | Allow sign-in. |
 | `DEMO_ENABLED` | `false` | The two public demo accounts. See [Demo accounts](#demo-accounts). |
 | `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
-| `NEWS_URL` | `https://www.moncycle.app/actu.html` | The https page shown as the news banner, in a sandboxed iframe: the page keeps its own design. **Empty: no banner.** |
+| `NEWS_URL` | `https://tech4fertility.org/latest-news.json` | The JSON file of the news banner (`{"fr": {"title", "description", "url", "pubDate"}, ...}`): the browser fetches it, checks it and draws the French item as text, hidden when older than a month. https, or `http://localhost:PORT/...` for a dev server. **Empty: no banner.** |
 | `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | The https page of your terms of service. The sign-up page shows it in an iframe above the box to tick (`termsAccepted`, required by `POST /api/v2/register`), the settings page links to it, and `GET /api/v2/server_info` tells it (`termsOfServiceUrl`). Empty: no page to show or link, and the box stays. The OpenAPI file (`info.termsOfService`) carries the official instance's address: change it there too if your terms are elsewhere. A page that sends `X-Frame-Options` or a `frame-ancestors` policy that excludes your instance cannot be shown. |
 | `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
 

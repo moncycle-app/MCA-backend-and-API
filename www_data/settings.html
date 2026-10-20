@@ -31,6 +31,7 @@
 		<link rel="stylesheet" href="css/settings.css" />
 		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
 		<script type="text/javascript" src="js/store.js" defer></script>
+		<script type="text/javascript" src="js/news.js" defer></script>
 		<script type="text/javascript" src="js/captcha.js" defer></script>
 		<script type="text/javascript" src="js/settings.js" defer></script>
 	</head>
@@ -77,6 +78,10 @@
 				<a class="menu_item" id="menu_apropos" href="#apropos">
 					<span class="menu_icon">ℹ️</span>
 					<span class="menu_text"><b>À propos et contact</b><small>L'application, vos conditions, nous écrire</small></span>
+				</a>
+				<a class="menu_item" id="menu_actualites" href="#actualites" hidden>
+					<span class="menu_icon">📰</span>
+					<span class="menu_text"><b>Tech 4 Fertility actualités</b><small>La dernière nouvelle de l'association</small></span>
 				</a>
 				<a class="menu_item menu_danger" id="menu_suppression" href="#suppression">
 					<span class="menu_icon">🗑️</span>
@@ -527,6 +532,18 @@
 					<button type="button" id="but_local_reset">🧹 Vider les données locales</button>
 				</div>
 				<p class="form_msg" id="local_msg" role="status"></p>
+			</section>
+
+
+			<!-- ===== Tech 4 Fertility actualités: the latest news, from the news file (js/news.js); the entry shows only when there is one ===== -->
+			<section class="panel" id="panel_actualites" hidden>
+				<a class="back" href="#">‹ Réglages</a>
+				<h2>📰 Tech 4 Fertility actualités</h2>
+				<h3 id="news_title"></h3>
+				<p id="news_text"></p>
+				<div class="buttons">
+					<button type="button" id="but_news_read">Lire l&#x2019;article &#x1F517;</button>
+				</div>
 			</section>
 
 

@@ -43,7 +43,7 @@ function email_token_refusal($db, mixed $token, int $purpose): ?string {
 
 // Uses the link for $purpose: $apply($account) does what it is for, inside the transaction with the account held (["error" => code]
 // leaves the link in place). Answers ["account" => the row, "result" => what $apply answered] or ["error" => "invalid_token" (unknown,
-// used, replaced, or for another purpose) | "token_expired" | $apply's code].
+// used, replaced, or for another purpose) | "token_expired" | $apply's code, with "uid" (the account the link was found on) once the link is found, for the log].
 function email_token_use($db, mixed $token, int $purpose, callable $apply): array {
 	if (!is_string($token) || $token === "" || strlen($token) > EMAIL_TOKEN_LIMIT_CHARS) return ["error" => "invalid_token"];
 	$token_hash = sec_token_hash($token);
@@ -54,11 +54,11 @@ function email_token_use($db, mixed $token, int $purpose, callable $apply): arra
 		// read again under the lock: another request may have used or replaced the link since
 		db_querie_select_user_account_for_update($db, $found["no_user_account"]);
 		$account = db_querie_select_user_account_by_email_token($db, $token_hash);
-		if (is_null($account) || intval($account["email_token_purpose"]) !== $purpose) return ["error" => "invalid_token"];
-		if (intval($account["email_token_expired"]) === 1) return ["error" => "token_expired"];
+		if (is_null($account) || intval($account["email_token_purpose"]) !== $purpose) return ["error" => "invalid_token", "uid" => $found["no_user_account"]];
+		if (intval($account["email_token_expired"]) === 1) return ["error" => "token_expired", "uid" => $found["no_user_account"]];
 
 		$result = $apply($account);
-		if (isset($result["error"])) return ["error" => $result["error"]];
+		if (isset($result["error"])) return ["error" => $result["error"], "uid" => $found["no_user_account"]];
 		db_querie_update_user_account_email_token_clear($db, $account["no_user_account"]);
 		return ["account" => $account, "result" => $result];
 	});
@@ -102,6 +102,7 @@ function email_token_complete($db, array $body, array $issues = []): array {
 	});
 
 	if (isset($used["error"])) {
+		if (isset($used["uid"])) log_context(["uid" => intval($used["uid"])]);
 		log_event("account.refused", ["act" => "verify_email", "err" => $used["error"]]);
 		return match ($used["error"]) {
 			"token_expired" => $refuse(400, "token_expired", "This link has expired: ask for a new one."),

@@ -64,9 +64,9 @@ define("WEB_APP_ORIGINS", []);
 // use it). Empty: every request is a client, whatever it sends.
 define("TRUSTED_PROXIES", []);
 
-// The news banner of the web app: an https page shown in an iframe (sandboxed, no script), which keeps the design of the page.
-// Empty: no banner.
-define("NEWS_URL", "https://www.moncycle.app/actu.html");
+// The news banner of the web app: the https address of a JSON file ({"fr": {title, description, url, pubDate}, ...}) that the browser
+// fetches and draws as text. Empty: no banner. A dev server may be http://localhost:PORT/...
+define("NEWS_URL", "https://tech4fertility.org/latest-news.json");
 
 // The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
 // GET /api/v2/server_info tells it to every client. Empty: no page to show or link (the box stays required).

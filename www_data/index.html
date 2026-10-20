@@ -29,6 +29,7 @@
 		<script type="text/javascript" src="vendor/components/jquery/jquery.min.js" defer></script>
 		<script type="text/javascript" src="vendor/chartjs/chart.js" defer></script>
 		<script type="text/javascript" src="js/store.js" defer></script>
+		<script type="text/javascript" src="js/news.js" defer></script>
 		<script type="text/javascript" src="js/tableau.js" defer></script>
 		<link rel="stylesheet" href="css/commun.css" />
 		<link rel="stylesheet" href="css/tableau.css" />
@@ -43,8 +44,10 @@
 			<noscript><p class="rouge">Cette application a besoin de Javascript pour fonctionner.</p></noscript>
 		</center>
 		<div class="actu" id="actu" style="display:none">
-			<span class="tag">actualités</span>
-			<iframe id="actu_frame" class="actu_frame" title="actualités" sandbox="allow-popups allow-popups-to-escape-sandbox" referrerpolicy="no-referrer"></iframe>
+			<span class="tag">Tech 4 Fertility actualités</span>
+			<strong class="actu_title" id="actu_title"></strong>
+			<p class="actu_text" id="actu_text"></p>
+			<button type="button" id="lire_actu">Lire l&#x2019;article &#x1F517;</button>
 			<button type="button" id="fermer_actu">OK merci &#x1F44D;</button>
 		</div>
 		<div class="sync_status" id="sync_status" style="display:none"></div>

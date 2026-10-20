@@ -28,6 +28,11 @@ function server_exit_if_schema_mismatch($db): void {
 	http_error(503, "schema_mismatch", "The database is not at the version this server needs (it has " . ($version ?? "none") . ", the server needs " . $needed . "). Run the migrations, then start the server again.");
 }
 
+// The address of the news file (NEWS_URL): https, or http on this machine for a dev server. Anything else is no news.
+function server_news_url(): ?string {
+	return preg_match('#^(https://|http://(localhost|127\.0\.0\.1)(:[0-9]+)?/)#', NEWS_URL) === 1 ? NEWS_URL : null;
+}
+
 // What a client needs before it signs in, from the settings alone: no database, so it answers in maintenance too. The version told is the
 // app's (it changes with every release, so a client can tell the server was updated); it promises nothing about the contract.
 function server_info(): array {
@@ -38,7 +43,7 @@ function server_info(): array {
 		"registrationEnabled" => REGISTRATION_ENABLED,
 		"demoEnabled" => DEMO_ENABLED,
 		"captchaAvailable" => sec_captcha_ready(),
-		"newsUrl" => str_starts_with(NEWS_URL, "https://") ? NEWS_URL : null,
+		"newsUrl" => server_news_url(),
 		"passwordPolicyRegex" => sec_password_policy_regex(),
 		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
 		"limits" => [

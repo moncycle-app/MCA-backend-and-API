@@ -188,9 +188,13 @@ A request with none of these headers (curl, a script, a mobile app) is not a bro
 
 What a user can store (the account nickname, a comment, a label, whether typed or imported from a file) is written into the page
 as text, never as HTML. The pages are served with a Content-Security-Policy whose `script-src` is `'self'`: no inline script runs.
-The only pages from outside are the news banner (`NEWS_URL`) and the terms of service (`TERMS_OF_SERVICE_URL`). Each is shown in an
-iframe with `sandbox` (no script, no same origin; links open in a new tab) and `referrerpolicy="no-referrer"`, and the CSP's
-`frame-src` allows the origin of those two pages and no other.
+The terms of service (`TERMS_OF_SERVICE_URL`) are the only page from outside: it is shown in an iframe with `sandbox` (no script, no
+same origin; links open in a new tab) and `referrerpolicy="no-referrer"`, and the CSP's `frame-src` allows its origin and no other.
+
+The news banner (`NEWS_URL`) is data, not a page. The browser fetches the JSON (no cookie, no referrer, the CSP's `connect-src` allows
+that origin only), refuses anything but a JSON answer under 16 KB, keeps only the strings it expects with a length cap, and draws them as
+text. The link must be an https URL; it opens in a new tab with `noopener noreferrer`. Any failure hides the banner and is written to the
+browser console.
 
 ## What is not public
 

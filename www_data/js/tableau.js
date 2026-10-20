@@ -619,23 +619,29 @@ moncycle_app = {
 		}
 		else moncycle_app.charger_cycle();
 	},
-	// The news banner: the page of the instance's NEWS_URL (the server says it in the account, null when it is off), once per page, in a
-	// sandboxed iframe: it is another site's page, and it keeps its own design. A frame of another origin cannot be read, so the banner
-	// cannot tell a new news from the one already read: "OK merci" hides it for news_hidden_days days.
+	// The news banner: the French item of the news file (js/news.js), once per page. "OK merci" hides the article whose link it was
+	// clicked on, so a new article shows again.
 	news_requested : false,
-	news_hidden_days : 7,
 	charger_actu : function() {
 		let url = moncycle_store.account ? moncycle_store.account.newsUrl : null;
-		if (!url || !/^https:\/\//i.test(url) || moncycle_app.news_requested) return;
+		if (!url || moncycle_app.news_requested) return;
 		moncycle_app.news_requested = true;
-		if (parseInt(localStorage.actu_hidden_until) > Date.now()) return;
-		$("#actu_frame").attr("src", url);
-		$("#actu").show();
-		$("#fermer_actu").click(function () {
-			localStorage.actu_hidden_until = Date.now() + moncycle_app.news_hidden_days * 24 * 60 * 60 * 1000;
-			$("#actu").hide();
-			$("#actu_frame").removeAttr("src");
+		moncycle_news.load(url).then(function (item) {
+			if (item) moncycle_app.show_actu(item);
 		});
+	},
+	show_actu : function(item) {
+		if (localStorage.actu_hidden === item.url) return;
+		$("#actu_title").text(item.title);
+		$("#actu_text").text(item.description);
+		$("#lire_actu").off("click").click(function () {
+			window.open(item.url, "_blank", "noopener,noreferrer");
+		});
+		$("#fermer_actu").off("click").click(function () {
+			localStorage.actu_hidden = item.url;
+			$("#actu").hide();
+		});
+		$("#actu").show();
 	},
 	charger_cycle : function() {
 		if (moncycle_app.cycle_curseur >= moncycle_app.constante.all_cycles_1st_day.length) {

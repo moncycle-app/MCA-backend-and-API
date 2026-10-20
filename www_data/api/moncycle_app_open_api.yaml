@@ -4227,9 +4227,10 @@ components:
           format: uri
           nullable: true
           description: |-
-            The https page the web app shows as its news banner, in an iframe: the `NEWS_URL` setting of the instance. `null` when it is off,
-            and for any value that is not an https URL.
-          example: https://www.moncycle.app/actu.html
+            The JSON file the web app fetches for its news banner: the `NEWS_URL` setting of the instance (an object per language, each with
+            `title`, `description`, `url`, `pubDate`). `null` when it is off, and for any value that is not an https URL (or http on
+            localhost, for a dev server).
+          example: https://tech4fertility.org/latest-news.json
         termsOfServiceUrl:
           type: string
           format: uri

@@ -37,7 +37,7 @@ const moncycle_store = {
 	is_demo : function (user_id) { return moncycle_store.demo_user_ids.includes(parseInt(user_id)); },
 	keys : {version : "data_version", last_sync : "data_last_sync", account : "data_account", account_etag : "data_account_etag", descriptions : "data_descriptions", pending : "data_pending", pending_descriptions : "data_pending_descriptions", stale : "data_stale", day : "data_day_"},
 	// what the versions before this one kept in localStorage, and nobody reads any more
-	legacy_keys : ["description", "constante", "day_timeline", "timeline_asc", "actu_lu"],
+	legacy_keys : ["description", "constante", "day_timeline", "timeline_asc", "actu_lu", "actu_hidden_until"],
 
 	// the copy, in memory (the same as in localStorage)
 	days : {},          // date -> Day: only the days that hold something, a cleared day is not kept

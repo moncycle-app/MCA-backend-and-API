@@ -77,9 +77,10 @@ define("WEB_APP_ORIGINS", env_origins("WEB_APP_ORIGINS"));
 // throttling and the log use it). Empty: every request is a client, whatever it sends.
 define("TRUSTED_PROXIES", env_ip_ranges("TRUSTED_PROXIES"));
 
-// The news banner of the web app: an https page shown in an iframe (sandboxed, no script), which keeps the design of the page. Unset: the
-// official instance's. Set empty: no banner. The Docker image also reads it for the CSP (frame-src, server_conf/docker-entrypoint.sh).
-define("NEWS_URL", getenv("NEWS_URL") === false ? "https://www.moncycle.app/actu.html" : trim(getenv("NEWS_URL")));
+// The news banner of the web app: the https address of a JSON file ({"fr": {title, description, url, pubDate}, ...}) that the browser
+// fetches and draws as text. Unset: Tech 4 Fertility's. Set empty: no banner. A dev server may be http://localhost:PORT/... The Docker
+// image also reads it for the CSP (connect-src, server_conf/docker-entrypoint.sh).
+define("NEWS_URL", getenv("NEWS_URL") === false ? "https://tech4fertility.org/latest-news.json" : trim(getenv("NEWS_URL")));
 
 // The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
 // GET /api/v2/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
