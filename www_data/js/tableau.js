@@ -163,16 +163,25 @@ moncycle_app = {
 		}
 	},
 	charger_actu : function() {
-		$.get("https://www.moncycle.app/actu.html", function(data) {
-			let html = $.parseHTML(data);
-			$("#actu_contenu").html(html);
-			let titre = $("#actu_contenu").find("h4").text();
-			if (titre && localStorage.actu_lu != titre) $("#actu").show();
-			$("#fermer_actu").click(function () {
-				localStorage.actu_lu = $("#actu_contenu").find("h4").text();
+		$.getJSON("https://tech4fertility.org/latest-news.json", function(data) {
+			let actu = data && data.fr;
+			if (!actu || !actu.title) return;
+			let contenu = $("#actu_contenu").empty();
+			contenu.append($("<h4>").text(actu.title));
+			if (actu.pubDate) {
+				let date = new Date(actu.pubDate);
+				if (!isNaN(date)) contenu.append($("<time>").attr("datetime", actu.pubDate).text(date.toLocaleDateString("fr-FR", {day: "numeric", month: "long", year: "numeric"})));
+			}
+			if (actu.description) contenu.append($("<p>").text(actu.description));
+			// the link is only used when it is an https address
+			if (/^https:\/\//.test(actu.url || "")) $("#actu_plus").attr("href", actu.url).show();
+			else $("#actu_plus").hide();
+			if (localStorage.actu_lu != actu.title) $("#actu").show();
+			$("#fermer_actu").off("click").click(function () {
+				localStorage.actu_lu = actu.title;
 				$("#actu").hide();
 			});
-		});	
+		});
 	},
 	loading_observation : {date_obs: "", pos: 0, chargement: true, temperature: NaN, cycle: ""},
 	charger_cycle : function() {

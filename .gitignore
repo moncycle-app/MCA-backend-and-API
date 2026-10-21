@@ -13,3 +13,8 @@ www_data/module
 *.pw
 .DS_Store
 .vscode
+www_data/api/v2/test.php
+gitignore
+CLAUDE.md
+dev.env
+SECURITY_AUDIT.md

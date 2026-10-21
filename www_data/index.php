@@ -44,6 +44,7 @@
 		<div class="actu" id="actu" style="display:none">
 			<span class="tag">actualités</span>
 			<div id="actu_contenu"></div>
+			<a id="actu_plus" href="#" target="_blank" rel="noopener" style="display:none"><button type="button">En savoir plus</button></a>
 			<button type="button" id="fermer_actu">OK merci &#x1F44D;</button>
 		</div>
 		<div class="contennu macro" id="recap" style="display:none"></div>
