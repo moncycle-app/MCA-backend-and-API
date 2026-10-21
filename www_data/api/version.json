@@ -1,6 +1,1 @@
-{
-    "app": "moncycle.app",
-    "version": "dev",
-    "build": "YYYY-MM-DD",
-    "commit": "xxxxxxxx"
-}
+{"app": "MONCYCLE.APP", "version": "v14-10-ga277db0", "build": "2026-10-21", "commit": "a277db0"}

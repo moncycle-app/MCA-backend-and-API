@@ -1,4 +1,4 @@
-FROM php:apache
+FROM php:8.4.27-apache
 
 RUN apt-get update
 RUN apt-get install -y libfreetype6-dev libjpeg62-turbo-dev libpng-dev unzip
@@ -32,4 +32,3 @@ RUN composer update
 USER root
 
 COPY ./server_conf/moncycleapp_php.ini $PHP_INI_DIR/conf.d
-
