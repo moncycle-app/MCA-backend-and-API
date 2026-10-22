@@ -71,6 +71,59 @@
 	border-bottom-style: solid;
 }
 
+/* soft glow of the bar in the colour of each day; clip-path keeps it to the two sides (and the two ends of the bar), so that
+   neighbouring days leave no seam */
+.day .g {
+	--glow: transparent;
+	box-shadow: 0 0 7px 0 color-mix(in srgb, var(--glow) 55%, transparent);
+	clip-path: inset(0 -10px);
+}
+
+/* the sticky title (opaque, above everything) would hide the glow of the first day: leave it room below the title */
+.cycle .contenu {
+	padding-top: 8px;
+}
+
+.day:first-child .g {
+	clip-path: inset(-10px -10px 0);
+}
+
+.day:last-child .g {
+	clip-path: inset(0 -10px -10px);
+}
+
+.day:first-child:last-child .g {
+	clip-path: inset(-10px);
+}
+
+.day .g.rouge {
+	--glow: #ac2433;
+}
+
+.day .g.vert {
+	--glow: #1e824c;
+}
+
+.day .g.jaune {
+	--glow: #fbca0b;
+}
+
+.day .g.jcpas {
+	--glow: #5a9ee0;
+}
+
+.day .g.ar {
+	--glow: #f0be1e;
+}
+
+.day .g.g_loading {
+	--glow: #808080;
+}
+
+.day .g.baby {
+	--glow: #8c8c8c;
+}
+
 .day .u {
 	font-size: .9em;
 }
@@ -159,6 +212,19 @@
 .day .ar,
 .day .j_ar {
 	color: #a39040;
+}
+
+/* day numbers take the dominant colour of the day's cell (these sit after the shared rules above) */
+.day .j.j_jcpas {
+	color: #3b78b8;
+}
+
+.day .j.j_ar {
+	color: #b8920f;
+}
+
+.day .j.j_jaune {
+	color: #d4a300;
 }
 
 .day .g_loading,
@@ -541,7 +607,7 @@ h2 {
 
 .cycle_recap .obs,
 .mini_ruler span {
-	width: 2.857%; /* 100% / 35j */
+	width: calc(100% / var(--cycle-cols, 35)); /* days per line: js/tableau.js cycle_line_length */
 }
 
 .cycle_recap .obs span {
@@ -566,6 +632,53 @@ h2 {
 .cycle_recap .obs:last-child span.g {
 	border-top-right-radius: 2px;
 	border-bottom-right-radius: 2px;
+}
+
+/* same glow as the day bar, turned sideways: kept to the top and bottom edges (and the two ends of the bar). The cells are
+   2.857% wide, so their edges fall between pixels: the clip overshoots by 1px on the right only (the next cell paints over it;
+   on the left the glow would draw a light line over the previous cell), or a seam shows */
+.cycle_recap .obs span.g {
+	--glow: transparent;
+	box-shadow: 0 0 4px 0 color-mix(in srgb, var(--glow) 55%, transparent);
+	clip-path: inset(-6px -1px -6px 0);
+}
+
+.cycle_recap .obs:first-child span.g {
+	clip-path: inset(-6px -1px -6px -6px);
+}
+
+.cycle_recap .obs:last-child span.g {
+	clip-path: inset(-6px -6px -6px 0);
+}
+
+.cycle_recap .obs span.g.rouge {
+	--glow: #ac2433;
+}
+
+.cycle_recap .obs span.g.vert {
+	--glow: #1e824c;
+}
+
+.cycle_recap .obs span.g.jaune {
+	--glow: #fbca0b;
+}
+
+.cycle_recap .obs span.g.jcpas {
+	--glow: #5a9ee0;
+}
+
+.cycle_recap .obs span.g.pink {
+	--glow: #e06a7a;
+}
+
+.cycle_recap .obs span.g.baby {
+	--glow: #8c8c8c;
+}
+
+.cycle_recap .obs span.vide {
+	--glow: #f0be1e;
+	box-shadow: 0 0 4px 0 color-mix(in srgb, var(--glow) 55%, transparent);
+	clip-path: inset(-6px -1px -6px 0);
 }
 
 .cycle_recap .obs span.jcpas {
@@ -839,6 +952,82 @@ h2 {
 }
 
 @media (prefers-color-scheme: dark) {
+
+	.day .g {
+		box-shadow: 0 0 9px 1px color-mix(in srgb, var(--glow) 55%, transparent);
+	}
+
+	.day .g.rouge {
+		--glow: #eb465a;
+	}
+
+	.day .g.vert {
+		--glow: #32be73;
+	}
+
+	.day .g.jaune,
+	.day .g.ar {
+		--glow: #fbca0b;
+	}
+
+	.day .g.jcpas {
+		--glow: #5096eb;
+	}
+
+	.day .g.g_loading {
+		--glow: #c8c8c8;
+	}
+
+	.day .g.baby,
+	.cycle_recap .obs span.g.baby {
+		--glow: #ffffff;
+	}
+
+	.cycle_recap .obs span.g {
+		box-shadow: 0 0 5px 0 color-mix(in srgb, var(--glow) 55%, transparent);
+	}
+
+	.cycle_recap .obs span.g.rouge {
+		--glow: #eb465a;
+	}
+
+	.cycle_recap .obs span.g.vert {
+		--glow: #32be73;
+	}
+
+	.cycle_recap .obs span.g.jcpas {
+		--glow: #5096eb;
+	}
+
+	.cycle_recap .obs span.g.pink {
+		--glow: #ff8a9a;
+	}
+
+	.cycle_recap .obs span.vide {
+		--glow: #fbca0b;
+		box-shadow: 0 0 5px 0 color-mix(in srgb, var(--glow) 55%, transparent);
+	}
+
+	/* day numbers: the dominant colour of the day's cell, lightened to read on black */
+	.day .j.j_vert {
+		color: #3bb273;
+	}
+
+	.day .j.j_rouge {
+		color: #e0566a;
+	}
+
+	.day .j.j_jaune {
+		color: #fbca0b;
+	}
+
+	.day .j.j_jcpas {
+		color: #5b9bd8;
+	}
+
+	.day .j.j_ar {
+		color: #e0b020;
+	}
 
 	h2 a {
 		background-color: white;

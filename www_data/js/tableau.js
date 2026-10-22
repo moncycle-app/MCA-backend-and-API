@@ -491,7 +491,32 @@ moncycle_app = {
 	show_account : function () {
 		moncycle_app.show_header();
 		moncycle_app.structure = moncycle_app.structure_of(moncycle_store.account);
+		moncycle_app.cycle_columns = moncycle_app.cycle_line_length();
+		document.documentElement.style.setProperty("--cycle-cols", moncycle_app.cycle_columns);
 		if (moncycle_app.cycle_curseur == 0) moncycle_app.remplir_page_de_cycle();
+	},
+	// Days per line of the recap: wide enough for 80% of the recent complete cycles (and the median + 5), in steps of 5 so that the
+	// layout does not move with every new cycle. A cycle longer than that wraps; the bounds keep the days readable on a phone.
+	cycle_columns : 35,
+	cycle_line_length : function () {
+		const DEFAULT = 35, MIN = 30, MAX = 45, STEP = 5, MARGIN = 5, RECENT = 12, MIN_CYCLES = 3, QUANTILE = 0.8;
+		let starts = moncycle_app.constante.all_cycles_1st_day || [];
+		let pregnancies = moncycle_app.constante.all_pregnancy_dates || [];
+		let lengths = [];
+		// the starts come latest first: starts[c-1] is the day after the end of cycle c, which the latest cycle (still open) lacks
+		for (let c = 1; c < starts.length && lengths.length < RECENT; c++) {
+			let start = moncycle_app.date.parse(starts[c]);
+			let next = moncycle_app.date.parse(starts[c-1]);
+			// a cycle that ended with a pregnancy is not a length
+			if (pregnancies.some(function (d) { return d >= starts[c] && d < starts[c-1]; })) continue;
+			lengths.push(Math.round((next - start) / (1000*60*60*24)));
+		}
+		if (lengths.length < MIN_CYCLES) return DEFAULT;
+		lengths.sort(function (x, y) { return x - y; });
+		let p80 = lengths[Math.ceil(QUANTILE * lengths.length) - 1];
+		let median = (lengths[Math.floor((lengths.length - 1) / 2)] + lengths[Math.ceil((lengths.length - 1) / 2)]) / 2;
+		let wanted = Math.ceil(Math.max(p80, median + MARGIN) / STEP) * STEP;
+		return Math.min(MAX, Math.max(MIN, wanted));
 	},
 	show_header : function () {
 		moncycle_app.constante = moncycle_app.constante_from_api(moncycle_store.account);
@@ -898,7 +923,7 @@ moncycle_app = {
 		cycle.append(moncycle_app.cycle_option(c, moncycle_app.date.str(fin), "recap"));
 		let c_ruler = $("<div>", {id: "ruler_" + c, class: "mini_ruler", style: "display:none"});
 		let odd = true;
-		for (let n=1; n<=35; n++) {
+		for (let n=1; n<=moncycle_app.cycle_columns; n++) {
 			let ruler_num = $(`<span>${n}</span>`);
 			if (odd) ruler_num.addClass("odd");
 			c_ruler.append(ruler_num);
