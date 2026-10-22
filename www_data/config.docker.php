@@ -103,6 +103,13 @@ define("LOGIN_LOCKOUT_THRESHOLD", env_int("LOGIN_LOCKOUT_THRESHOLD", 15));
 // Failed attempts from one IP, in the window of db_querie_count_login_attempt_ip(), before HTTP 429 (0: no limit).
 define("LOGIN_IP_MAX_ATTEMPTS", env_int("LOGIN_IP_MAX_ATTEMPTS", 30));
 
+// The biggest request body any endpoint takes, in bytes (the NFP file of /api/v2/import is the biggest one: 15 years of full days are
+// about 7.7 MB). A body over it is refused with 413 file_too_large by PHP (lib/http.php) and, in the Docker image, by Apache before PHP starts.
+// 1024 at least. Outside Docker, set post_max_size and the web server's own limit (LimitRequestBody, client_max_body_size) to the same
+// number, and keep memory_limit about 6 times above it (docs/deployment.md). The Docker image reads this value at every start and puts it
+// in Apache and php.ini: change the variable, restart the container.
+define("REQUEST_BODY_MAX_BYTES", max(1024, env_int("REQUEST_BODY_MAX_BYTES", 10485760)));
+
 // The key that signs the captcha challenges (lib/sec_captcha.php): at least 32 characters, random, secret. Empty or shorter:
 // the captcha is closed, and register, recover_password and the login of an account that must answer one refuse with
 // 503 captcha_unavailable. The Docker image makes one at start-up when none is given; a restart then only voids the

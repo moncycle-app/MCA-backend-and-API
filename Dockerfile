@@ -10,7 +10,9 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
 # headers: security and cache headers. rewrite: the 413 on the Content-Length of a request (zz-moncycleapp.conf).
 # The others serve nothing here (/server-status shows request URLs)
 RUN a2enmod headers rewrite \
-	&& a2dismod -f status autoindex auth_basic authn_file authz_user access_compat env setenvif
+	&& a2dismod -f status autoindex auth_basic authn_file authz_user access_compat env setenvif \
+	&& a2disconf -q serve-cgi-bin localized-error-pages \
+	&& rm -f "$PHP_INI_DIR/conf.d/docker-php-ext-sodium.ini"
 
 # no Apache access log: the app writes its own (lib/log.php, docs/logs.md), whose `http.request` line
 # has no query string, where this one has `DELETE /api/v2/totp?code=<TOTP code>` and the dates of a read.

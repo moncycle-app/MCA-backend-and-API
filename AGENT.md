@@ -378,8 +378,8 @@ There is no test suite in the repository: a change is checked by running the app
   `shell_exec`, `proc_open`, `popen`, `curl_exec`, `parse_ini_file`, `ini_set`, `mail`) and `open_basedir`. Code that needs one of them
   fails inside the image even when it works elsewhere; `allow_url_fopen` is off too.
 - **The OpenAPI file** must stay valid YAML with unique `operationId`s and every `$ref` resolving; every route has an entry.
-- **Server settings are coupled:** `post_max_size` (`moncycleapp_php.ini`), `NFP_LIMIT_BODY_BYTES` (`constants.php`) and the 256 KB
-  wall of `zz-moncycleapp.conf` change together or not at all.
+- **Server settings are coupled:** `REQUEST_BODY_MAX_BYTES` (`config*.php`; the entrypoint gives it to `post_max_size` and to the wall of `zz-moncycleapp.conf`, and
+  `http_exit_if_body_refused()` applies it in PHP) and `memory_limit` (30 workers x 64M under the `mem_limit` of the compose file) change together or not at all.
 - **Chart.js** is fetched by the `Dockerfile` with a checksum, and by the README's instructions for running without Docker: change the
   version and the checksum in both.
 

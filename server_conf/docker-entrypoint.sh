@@ -5,6 +5,7 @@
 #       what it does is printed, so `docker logs` shows it,
 #   2. makes the key that signs the captcha challenges when none is given (CAPTCHA_SECRET),
 #   3. makes the frame-src of the CSP from TERMS_OF_SERVICE_URL (CSP_FRAME_SRC) and its connect-src from NEWS_URL (CSP_CONNECT_SRC),
+#   3a. reads REQUEST_BODY_MAX_BYTES (APP_BODY_MAX_BYTES: Apache's body wall and php.ini's post_max_size),
 #   3b. makes the ServerName of Apache from the host of APP_URL (APP_SERVER_NAME),
 #   4. starts the schedulers (supercronic) unless CRON_ENABLED is off: one for the daily job (server_conf/moncycle.crontab)
 #      and, when DEMO_ENABLED is on, one for the hourly reset of the demo accounts (server_conf/moncycle-demo.crontab),
@@ -70,6 +71,11 @@ if [ "${1:-}" = "apache2-foreground" ]; then
 	APP_SERVER_NAME=$(printf '%s' "$app_url" | sed -nE 's#^https?://([A-Za-z0-9.-]+)(:[0-9]+)?(/.*)?$#\1#p')
 	APP_SERVER_NAME="${APP_SERVER_NAME:-localhost}"
 	export APP_SERVER_NAME
+
+	# The biggest request body, REQUEST_BODY_MAX_BYTES of config.php (its default is there), for Apache's LimitRequestBody and Content-Length
+	# test (zz-moncycleapp.conf) and php.ini's post_max_size: one setting for the three walls. A restart applies a new value.
+	APP_BODY_MAX_BYTES=$(as_web_user php -r 'require "/var/www/html/config.php"; echo REQUEST_BODY_MAX_BYTES;')
+	export APP_BODY_MAX_BYTES
 
 	# the same words as the boolean settings of the app (true/false, on/off, yes/no, 1/0, any case); a typo keeps the
 	# default: on for CRON_ENABLED, off for DEMO_ENABLED. One scheduler per crontab: it reads its file itself, as the web user.

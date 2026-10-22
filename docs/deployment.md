@@ -20,7 +20,7 @@ The Docker image serves plain HTTP and is made to sit behind a reverse proxy. Th
   The app counts failed attempts, but it cannot limit requests it is never asked to check (a captcha costs a JPEG to draw), and these
   endpoints hold a worker for a while on purpose: `recover_password` sleeps 1 to 5 s, a password check takes about 240 ms and 46 MiB
   (Argon2id), a refused sign-in is held until 400 ms ([security.md](security.md)).
-- **Cap the body at 256 KB** (`client_max_body_size 256k` with nginx), the same as Apache, so that a request that is too large is
+- **Cap the body at 10 MB** (`client_max_body_size 10m` with nginx), the same as Apache, so that a request that is too large is
   refused at the edge before it costs a worker.
 - **Not log query strings or paths.** URLs such as `GET /api/v2/day/2026-09-20` carry the dates of someone's observations and token
   prefixes. The image has no Apache access log for that reason; the app's own log names the endpoint (`/api/v2/day`), never the arguments.
@@ -45,12 +45,17 @@ address) becomes one limit for everyone, and the `ip` of the log is the proxy.
 
 Set in [`server_conf/`](../server_conf/); they are part of the image.
 
-- **Apache:** request body 256 KB, 30 s `Timeout`, 30 workers of about 21 MB each. A request to `/api/` with a larger
+- **Apache:** request body 10 MB, 30 s `Timeout`, 30 workers of about 21 MB each. A request to `/api/` with a larger
   `Content-Length` gets `413 file_too_large` before PHP starts. `LimitRequestBody` is the same wall for a body sent in chunks.
-- **PHP:** `memory_limit` 32M (do not lower it without measuring the peak memory of a multi-year export), `max_execution_time` 30,
+- **PHP:** `memory_limit` 64M (a 15-year export or import peaks at about 40 MB: do not lower it without measuring), `max_execution_time` 30,
   `file_uploads` Off.
-- **Change these together or not at all:** `post_max_size` (256K), `NFP_LIMIT_BODY_BYTES` in [`constants.php`](../www_data/constants.php),
-  and Apache's `LimitRequestBody` and `Content-Length` test.
+- **Change these together or not at all:** `REQUEST_BODY_MAX_BYTES` in [`config.php`](../www_data/config.exemple.php) (10 MB: the app itself refuses a larger body with a 413),
+  `post_max_size`, and Apache's `LimitRequestBody` and `Content-Length` test. The Docker image sets the last two from the first at every
+  start (restart the container after changing it); without Docker you set them yourself. Keep `memory_limit` about 6 times the body limit.
+- **No upload, no form:** the API reads JSON bodies only. The image refuses `multipart/*` and `application/x-www-form-urlencoded` with a 415
+  before PHP starts (the multipart parser is the way in of CVE-2026-109618), and the app refuses them again itself. On your own server do the
+  same at the edge (nginx: `if ($content_type ~* "^(multipart/|application/x-www-form-urlencoded)") { return 415; }`), and set `file_uploads = Off`,
+  `enable_post_data_reading = Off`, `session.upload_progress.enabled = Off`.
 - **Database connections:** one per Apache worker (30 per container), kept open between requests. MariaDB's `max_connections`
   (151 by default) must cover the workers of every container plus the cron. `php www_data/script/db_perf.php` (command line,
   read-only) checks it.
@@ -98,11 +103,11 @@ with `www_data/` as its document root, doing what the Docker image's Apache does
    and `vendor/` except `vendor/components/jquery`, `vendor/chartjs` and `vendor/swagger-api/swagger-ui/dist`.
 3. **Keep `script/` for the machine itself.** It holds the cron and the migrations, which are meant to be run from the command
    line.
-4. **Cap the body at 256 KB** and set `post_max_size = 256K` (see [Limits](#limits)).
+4. **Cap the body at 10 MB** and set `post_max_size = 10M` (see [Limits](#limits)).
 5. **Send the security headers**: the Content-Security-Policy above, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`
    and, over HTTPS, `Strict-Transport-Security`. Send `Cache-Control: no-store` on `/api/`.
 6. **PHP settings** worth keeping from [`server_conf/moncycleapp_php.ini`](../server_conf/moncycleapp_php.ini): `date.timezone = UTC`
-   (the app stores UTC), `display_errors = Off` with `log_errors = On`, `expose_php = Off`, `memory_limit = 32M`,
+   (the app stores UTC), `display_errors = Off` with `log_errors = On`, `expose_php = Off`, `memory_limit = 64M`,
    `max_execution_time = 30`, `file_uploads = Off`, and `open_basedir` set to the app's directory (add the directory of the log file,
    if any, and your secrets directory). The file's `${VAR:-default}` values are filled from the container's environment; outside
    Docker write the values you want.
@@ -127,7 +132,7 @@ A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rew
     DocumentRoot /var/www/moncycle/www_data
     # TLS directives here
 
-    LimitRequestBody 262144
+    LimitRequestBody 10485760
     CGIPassAuth On
 
     <Directory /var/www/moncycle/www_data>
@@ -157,5 +162,5 @@ A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rew
 ```
 
 In the pool (`/etc/php/8.4/fpm/pool.d/www.conf`): `catch_workers_output = yes`, and the PHP settings of rule 6 above as
-`php_admin_value[...]` lines (`post_max_size = 256K`, `open_basedir`, `display_errors = Off`). `script/` is refused to the web but stays runnable from the command
+`php_admin_value[...]` lines (`post_max_size = 10M`, `open_basedir`, `display_errors = Off`). `script/` is refused to the web but stays runnable from the command
 line for the cron.

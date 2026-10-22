@@ -439,11 +439,7 @@ const NFP_SCHEMA_VERSION = "1.0";                  // the schema version the exp
 const NFP_SUPPORTED_SCHEMA_VERSIONS = ["1.0"];     // the ones the import accepts
 
 // A hard limit refuses a file (the body size, the DAY_LIMIT_* widths); an advisory one only warns, as this app's own export can exceed it.
-const NFP_LIMIT_BODY_BYTES = 262144;        // 256K -- matches post_max_size in server_conf, and bounds the work
 const NFP_LIMIT_JSON_DEPTH = 32;            // the format nests 4 deep; 32 is already generous
-const NFP_LIMIT_CYCLES = 120;               // advisory -- ~10 years of cycles in one file
-const NFP_LIMIT_DAYS_PER_CYCLE = 400;       // advisory -- a pregnancy-length cycle still fits
-const NFP_LIMIT_DAYS_TOTAL = 4000;          // advisory
 const NFP_LIMIT_DESCRIPTIONS_PER_DAY = 20;  // advisory -- nothing caps the links of a day
 
 // Outside the band a body reaches (advisory) a temperature only warns; outside DAY_TEMPERATURE_STORABLE_* it refuses the file.

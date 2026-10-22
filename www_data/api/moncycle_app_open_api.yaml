@@ -69,8 +69,8 @@ info:
     | `401` | Not signed in (`unauthorized`) |
     | `403` | Refused: `read_only_token`, `cross_origin_refused`, `account_locked`... |
     | `409` | Conflict with the current state (`stale_write`, `duplicate_name`...) |
-    | `413` | Body over 256 KB, on any endpoint |
-    | `415` | A write that is not sent as JSON |
+    | `413` | `file_too_large`: the body is over the server's limit (10 MB by default, an operator setting; `requestBodyMaxBytes` of `GET /server_info` tells it), on any endpoint |
+    | `415` | `unsupported_media_type`: a body that is not sent as JSON. `multipart/form-data` and `application/x-www-form-urlencoded` are refused on every endpoint, before anything is read: the API takes no upload and no form |
     | `429` | Too many attempts from your IP address (`rate_limited`) |
     | `503` | `maintenance`: the operator stopped the server, nothing was done, try later. Only `GET /server_info` stays up. `schema_mismatch`: the database needs a migration |
 
@@ -2419,14 +2419,13 @@ paths:
 
         - `mucusNotObserved` together with an observation, a stamp or a label.
         - More than 20 labels on a day.
-        - More than 400 days in a cycle, more than 120 cycles or 4000 days in a file.
         - A temperature under 30 °C or over 45 °C (kept), or an unreadable `temperatureTime` (dropped).
 
         ### Hard limits
 
         These refuse the file (`400`, or `413` for the first):
 
-        - **256 KB** per request (`413 file_too_large`). This holds for every endpoint. Split a big file into fewer cycles.
+        - **`requestBodyMaxBytes`** per request (`GET /server_info`; 10 MB by default, the operator's `REQUEST_BODY_MAX_BYTES`): `413 file_too_large`. This holds for every endpoint, and the number of days or cycles in a file is not limited otherwise: 15 years of full days are about 7.7 MB. Split a bigger file into fewer cycles.
         - 256 characters per label and per joined comment.
         - 32 characters for the packed FertilityCare notes of a day.
         - A temperature outside `0.00`–`99.99`.
@@ -2532,7 +2531,7 @@ paths:
                 $ref: '#/components/schemas/ErrorEnvelope'
         "413":
           description: |-
-            `file_too_large` — the body is over 256 KB. Split the file into fewer cycles.
+            `file_too_large` — the body is over `requestBodyMaxBytes` (10 MB by default). Split the file into fewer cycles.
           content:
             application/json:
               schema:
@@ -3693,8 +3692,8 @@ components:
               example: 100
             requestBodyMaxBytes:
               type: integer
-              description: The biggest request body any endpoint takes.
-              example: 262144
+              description: The biggest request body any endpoint takes, in bytes (the operator's `REQUEST_BODY_MAX_BYTES`).
+              example: 10485760
 
     TimelineSync:
       type: object

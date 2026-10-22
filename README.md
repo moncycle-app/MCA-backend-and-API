@@ -93,7 +93,8 @@ is in [Without Docker, in production](docs/deployment.md#without-docker-in-produ
    | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_ID`, `DB_PASSWORD` | the database above |
    | `REGISTRATION_ENABLED`, `LOGIN_ENABLED` | `true` (the example ships with both off) |
    | `PHP_SECURE_COOKIES` | `true` over HTTPS (the default); `false` only on plain HTTP |
-   | `CAPTCHA_SECRET` | 32 characters or more, random (`openssl rand -base64 48`): without it sign-up and password recovery answer `503 captcha_unavailable` |
+   | `REQUEST_BODY_MAX_BYTES` | `10485760` (10 MB) | The biggest request body, in bytes, 1024 at least. A bigger one gets `413 file_too_large`. 15 years of daily observations make an NFP file of up to about 7.7 MB. The Docker image applies it to Apache and `post_max_size` at start-up (restart the container to change it); keep `memory_limit` (64M) about 6 times above it, and the container's `mem_limit` above 30 workers x `memory_limit`. Without Docker, set `post_max_size` and your web server's own limit to the same number. |
+| `CAPTCHA_SECRET` | 32 characters or more, random (`openssl rand -base64 48`): without it sign-up and password recovery answer `503 captcha_unavailable` |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_MAIL`, `SMTP_PASSWORD` | your mail server, for sign-up and password links |
    | `DEMO_ENABLED` | `true` to sign in with the two demo buttons and no mail server (see [Demo accounts](#demo-accounts)) |
 
@@ -168,6 +169,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 
 | Setting | Default | Description |
 |---|---|---|
+| `REQUEST_BODY_MAX_BYTES` | `10485760` (10 MB) | The biggest request body, in bytes, 1024 at least. A bigger one gets `413 file_too_large`. 15 years of daily observations make an NFP file of up to about 7.7 MB. The Docker image applies it to Apache and `post_max_size` at start-up (restart the container to change it); keep `memory_limit` (64M) about 6 times above it, and the container's `mem_limit` above 30 workers x `memory_limit`. Without Docker, set `post_max_size` and your web server's own limit to the same number. |
 | `CAPTCHA_SECRET` | made at start-up (Docker) | Random key that signs captcha challenges, **32 characters or more**. Without it sign-up, password recovery and some sign-ins answer `503 captcha_unavailable`. Instances behind one address must share it. |
 | `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients as `passwordPolicyRegex` in `GET /api/v2/server_info`. A password is 128 characters at most whatever it says. |
 | `LOGIN_ATTEMPTS_DECAY_MINUTES` | `60` | Failed logins on an account older than this restart the count; `0` counts nothing, so no captcha and no lockout. |

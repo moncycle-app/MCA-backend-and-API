@@ -27,6 +27,7 @@ function api_start_open(): void {
 		http_error(500, "unexpected_error", "Unexpected error.");
 	});
 	header('Content-Type: application/json');
+	http_exit_if_body_refused();
 }
 
 // api_start_open(), then the 503 of maintenance, the 403 of a write from a foreign page (before anything is read), the database checked

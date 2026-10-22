@@ -61,7 +61,7 @@ function server_info(): array {
 			"temperatureMin" => DAY_TEMPERATURE_STORABLE_MIN,
 			"temperatureMax" => DAY_TEMPERATURE_STORABLE_MAX,
 			"queryDaysMax" => DAY_LIMIT_QUERY_DAYS,
-			"requestBodyMaxBytes" => NFP_LIMIT_BODY_BYTES,
+			"requestBodyMaxBytes" => REQUEST_BODY_MAX_BYTES,
 		],
 	];
 }

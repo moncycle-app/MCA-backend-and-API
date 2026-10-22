@@ -29,6 +29,9 @@ services:
       # The container runs the daily job (script/cron.php, 3:30 in TZ) itself. Set it to 'false' if you run the cron
       # from the host instead: both would send every mail twice (README, "Cron")
       # CRON_ENABLED: 'true'
+      # The biggest request body in bytes (default 10 MB: 15 years of daily observations are about 7.7 MB). Apache and php.ini follow it at
+      # every start; keep memory_limit (64M) about 6 times above it and mem_limit (below) above 30 workers x memory_limit
+      # REQUEST_BODY_MAX_BYTES: 10485760
       # The two public demo accounts (password "demo", README, "Demo accounts"). Off by default; on, they can sign in
       # and script/demo_reset.php loads script/db/demo.sql every hour, which puts them back as it makes them
       # DEMO_ENABLED: 'false'
@@ -59,7 +62,9 @@ services:
     security_opt:
       - no-new-privileges:true
     pids_limit: 200
-    mem_limit: 256m
+    # 30 workers x memory_limit 64M (server_conf/moncycleapp_php.ini) is ~1.9 GB at worst: the container is capped at 2 GB, swap included
+    mem_limit: 2g
+    memswap_limit: 2g
     healthcheck:
       # "oookkk" is a healthy answer; the 503 "maintenance" of MAINTENANCE_MODE is alive too (a container in maintenance is not a dead one)
       test: ["CMD-SHELL", "curl -sS http://127.0.0.1/api/v2/health_check | grep -Eq 'oookkk|\"maintenance\"'"]

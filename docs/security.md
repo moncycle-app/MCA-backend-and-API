@@ -46,7 +46,7 @@ policy. They go with the token when it is revoked, expires, or the account is de
 
 **Passwords** are chosen at sign-up: 10 to 128 characters by default (`PASSWORD_POLICY_REGEX` sets the least; 128 is the most). Lengths
 count Unicode characters, not bytes. A password typed to sign in or to confirm an action is not held to the policy and may be up to
-1024 characters. The request body is capped at 256 KB.
+1024 characters. The request body is capped at `REQUEST_BODY_MAX_BYTES` (10 MB by default).
 
 **Hashing.** Every new hash is Argon2id (`sec_password_hash()`, options `PASSWORD_HASH_OPTIONS`: 46 MiB, 4 passes, about 238 ms on the
 production VPS). Accounts with an older bcrypt hash keep signing in; once a sign-in has fully passed (TOTP included), the hash is

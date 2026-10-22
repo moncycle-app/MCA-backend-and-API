@@ -21,6 +21,22 @@ function http_require_json_content_type(): void {
 	http_error(415, "unsupported_media_type", "The body must be sent as 'Content-Type: application/json'.");
 }
 
+// The two refusals every request gets before anything is read, whatever the endpoint: 413 file_too_large when the declared Content-Length is
+// over REQUEST_BODY_MAX_BYTES (a body sent in chunks has none: the endpoint that reads it checks its size), and 415 for a body PHP's own
+// form parsers would take (multipart/*, application/x-www-form-urlencoded: no endpoint reads one, and the multipart parser is a known
+// way to exhaust memory, CVE-2026-109618). The Docker image's Apache says the same two things before PHP starts (zz-moncycleapp.conf);
+// this is the same rule for a server that has no such wall.
+function http_exit_if_body_refused(): void {
+	$length = $_SERVER['CONTENT_LENGTH'] ?? '';
+	if (is_string($length) && ctype_digit($length) && intval($length) > REQUEST_BODY_MAX_BYTES) {
+		http_error(413, "file_too_large", sprintf("The request body is over the limit of %d bytes. To import a file, split it into fewer cycles.", REQUEST_BODY_MAX_BYTES));
+	}
+	$type = $_SERVER['CONTENT_TYPE'] ?? $_SERVER['HTTP_CONTENT_TYPE'] ?? '';
+	if (is_string($type) && preg_match('#^\s*(multipart/|application/x-www-form-urlencoded)#i', $type) === 1) {
+		http_error(415, "unsupported_media_type", "The body must be sent as 'Content-Type: application/json'.");
+	}
+}
+
 // The body as a JSON object: a 415 when it is not declared JSON, a 400 when it is not an object.
 function http_json_body(): array {
 	http_require_json_content_type();

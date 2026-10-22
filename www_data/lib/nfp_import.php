@@ -44,10 +44,10 @@ function nfp_import_parse(string $raw, ?int $content_length = null): array {
 		return $refuse("empty_body", "The request body is empty. Send the content of an .nfp file.");
 	}
 
-	if (strlen($raw) > NFP_LIMIT_BODY_BYTES) {
+	if (strlen($raw) > REQUEST_BODY_MAX_BYTES) {
 		return $refuse("file_too_large", sprintf(
-			"The file is %d bytes; the limit is %d. Split it into fewer cycles.",
-			strlen($raw), NFP_LIMIT_BODY_BYTES
+			"The file is %d bytes; the limit is %d (REQUEST_BODY_MAX_BYTES). Split it into fewer cycles.",
+			strlen($raw), REQUEST_BODY_MAX_BYTES
 		));
 	}
 
@@ -164,28 +164,14 @@ function nfp_import_build_plan(object $file, array $user_account, array $warning
 		return nfp_import_plan_result($report, $plan, 0, 0);
 	}
 
-	// The count limits are advisory (the export is bounded by its dates, not by them): reported, and the file read in full. The body
-	// size of stage 1 is what bounds the work.
-	if (count($cycles) > NFP_LIMIT_CYCLES) {
-		$report["warnings"][] = sprintf("[file] %d cycles, more than the %d a file usually carries. All of them were read.", count($cycles), NFP_LIMIT_CYCLES);
-	}
-
+	// No limit on the number of cycles or days: the body size of stage 1 is what bounds the work.
 	$dates_seen = [];
 	foreach ($cycles as $index => $cycle) {
 		$where = sprintf("cycles[%d]", $index);
 		$header = nfp_import_cycle($cycle, $where, $account_method, $report);
 		if (is_null($header)) continue;
 
-		// a cycle runs to the next first day: an account left alone for years exports one cycle of gaps
-		if (count($header["days"]) > NFP_LIMIT_DAYS_PER_CYCLE) {
-			$report["warnings"][] = sprintf("[%s] %d days, more than the %d a cycle usually runs. The cycle was read in full.", $where, count($header["days"]), NFP_LIMIT_DAYS_PER_CYCLE);
-		}
-
-		$was_under_total = $days_read <= NFP_LIMIT_DAYS_TOTAL;
 		$days_read += count($header["days"]);
-		if ($was_under_total && $days_read > NFP_LIMIT_DAYS_TOTAL) {
-			$report["warnings"][] = sprintf("[file] more than %d days in one file. All of them were read.", NFP_LIMIT_DAYS_TOTAL);
-		}
 
 		$plan = array_merge($plan, nfp_import_cycle_days($header, $where, $dates_seen, $report));
 	}
