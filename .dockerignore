@@ -1,4 +1,8 @@
-.git
+# only what names the commit (Dockerfile, stage "commit"): not objects/, logs/, hooks/
+.git/*
+!.git/HEAD
+!.git/refs
+!.git/packed-refs
 .gitignore
 .vscode
 CLAUDE.md

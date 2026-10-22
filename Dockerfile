@@ -1,3 +1,23 @@
+# The commit the image is built from, read from the few files of .git that name it (.dockerignore lets only these through) in a stage
+# that is thrown away: no git file reaches the final image. Never fails the build: no .git (the globs match nothing), a detached or
+# unreadable HEAD, anything that is not a full hash: "unknown". A modified working tree is not seen (that needs git and every object).
+FROM php:8.4-apache AS commit
+WORKDIR /g
+COPY .gi[t]/HEAD ./HEAD
+COPY .gi[t]/refs ./refs/
+COPY .gi[t]/packed-refs ./
+RUN c=unknown; \
+	h=$(cat HEAD 2>/dev/null); \
+	case "$h" in \
+		"ref: "*) r=${h#ref: }; f=$(cat "$r" 2>/dev/null || grep " $r\$" packed-refs 2>/dev/null | cut -d' ' -f1) ;; \
+		*) f=$h ;; \
+	esac; \
+	case "$f" in \
+		""|*[!0-9a-f]*) ;; \
+		*) if [ ${#f} -eq 40 ] || [ ${#f} -eq 64 ]; then c=$(printf '%.8s' "$f"); fi ;; \
+	esac; \
+	printf '%s' "$c" > /commit
+
 FROM php:8.4-apache
 
 RUN apt-get update \
@@ -49,6 +69,13 @@ COPY --from=composer/composer:latest-bin /composer /usr/bin/composer
 COPY ./server_conf/zz-moncycleapp.conf /etc/apache2/conf-enabled/zz-moncycleapp.conf
 COPY ./www_data /var/www/html/
 COPY ./www_data/config.docker.php /var/www/html/config.php
+
+# APP_COMMIT (constants.php) from the stage above; the value is 8 hex digits or "unknown", and the build fails if the line is gone.
+# A bind mount: the file is in no layer of the image.
+RUN --mount=type=bind,from=commit,source=/commit,target=/tmp/commit \
+	id="$(cat /tmp/commit)" \
+	&& sed -i "s/^const APP_COMMIT = \"dev\";/const APP_COMMIT = \"$id\";/" /var/www/html/constants.php \
+	&& grep -q "^const APP_COMMIT = \"$id\";" /var/www/html/constants.php
 
 # dependencies from composer.lock; the code is root-owned and not writable: the app never writes to disk
 RUN cd /var/www/html \

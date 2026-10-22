@@ -15,6 +15,9 @@ declare(strict_types=1);
 // GET /api/v2/server_info tells the whole string as appVersion. The version of the API contract is the v2 of the URL (api/v2/), not this one.
 const APP_VERSION = "15dev";
 
+// The commit the image was built from (8 hex digits, or "unknown"): the Dockerfile replaces "dev" below at build time. Not in server_info.
+const APP_COMMIT = "dev";
+
 // The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
 // config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db_querie.php) stay next
 // to the code that runs them.

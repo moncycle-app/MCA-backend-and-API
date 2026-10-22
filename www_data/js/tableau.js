@@ -152,9 +152,6 @@ const moncycle_app_text = {
 
 	/* --- keeping the local copy and the server together ------------------ */
 	// the bar at the bottom of the page: only what the user has to know (the routine syncs are silent)
-	sync_pending : function (n) {
-		return `⏳ ${n} modification${n > 1 ? "s" : ""} en cours d'envoi...`;
-	},
 	// n changes are kept on this device but the server has not got them
 	sync_not_sent : function (n) {
 		return `⚠️ ${n} modification${n > 1 ? "s" : ""} enregistrée${n > 1 ? "s" : ""} sur cet appareil, pas encore sur le serveur. Nouvel essai automatique.`;
@@ -570,15 +567,11 @@ moncycle_app = {
 			text = state.error.kind == "network" ? moncycle_app_text.sync_offline : moncycle_app_text.sync_server_error;
 			css = "sync_warning";
 		}
-		else if (state.pending > 0) {
-			text = moncycle_app_text.sync_pending(state.pending);
-			css = "sync_busy";
-		}
 		$("#sync_status").empty().attr("class", "sync_status " + css).toggle(text != "");
 		if (text != "") {
 			$("#sync_status").append($("<span>").text(text));
 			if (state.error && state.error.kind == "rejected") $("#sync_status").append(" ").append($("<button>", {type: "button", id: "sync_dismiss"}).text(moncycle_app_text.sync_dismiss));
-			else if (css != "sync_busy") $("#sync_status").append(" ").append($("<button>", {type: "button", id: "sync_retry"}).text(moncycle_app_text.sync_retry));
+			else $("#sync_status").append(" ").append($("<button>", {type: "button", id: "sync_retry"}).text(moncycle_app_text.sync_retry));
 		}
 		let unsent = state.pending > 0 && state.error && state.error.kind != "rejected";
 		if (unsent) $("#jour_form_saving").hide();
