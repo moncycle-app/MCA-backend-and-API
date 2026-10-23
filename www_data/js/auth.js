@@ -45,6 +45,11 @@ else {
 			answer: $("#rc_captcha"),
 			error: moncycle_captcha.message_in($("#reset_error_msg")),
 		});
+		// the link to the terms of service is the server's (TERMS_OF_SERVICE_URL, told by server_info): none told, no link
+		$.ajax({type : "GET", url : "api/v2/server_info", dataType : "json"}).done(function(ret) {
+			const url = ((ret || {}).data || {}).termsOfServiceUrl;
+			if (/^https:\/\//i.test(url || "")) $("#a_terms").attr("href", url).prop("hidden", false);
+		});
 		// the session is named after the site it was opened on, as the browser knows it
 		$("#i_token_name").val("WEB-APP " + window.location.hostname);
 		$("#connexion_form").on("submit", function(event) {

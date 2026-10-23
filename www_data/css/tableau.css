@@ -81,7 +81,7 @@
    neighbouring days leave no seam */
 .day .g {
 	--glow: transparent;
-	box-shadow: 0 0 7px 0 color-mix(in srgb, var(--glow) 55%, transparent);
+	box-shadow: 0 0 7px 0 color-mix(in srgb, var(--glow) var(--glow-pct, 55%), transparent);
 	clip-path: inset(0 -10px);
 }
 
@@ -108,6 +108,7 @@
 
 .day .g.vert {
 	--glow: #1e824c;
+	--glow-pct: 80%;
 }
 
 .day .g.jaune {
@@ -960,7 +961,7 @@ h2 {
 @media (prefers-color-scheme: dark) {
 
 	.day .g {
-		box-shadow: 0 0 9px 1px color-mix(in srgb, var(--glow) 55%, transparent);
+		box-shadow: 0 0 9px 1px color-mix(in srgb, var(--glow) var(--glow-pct, 55%), transparent);
 	}
 
 	.day .g.rouge {
@@ -969,6 +970,7 @@ h2 {
 
 	.day .g.vert {
 		--glow: #32be73;
+		--glow-pct: 85%;
 	}
 
 	.day .g.jaune,
@@ -987,6 +989,10 @@ h2 {
 	.day .g.baby,
 	.cycle_recap .obs span.g.baby {
 		--glow: #ffffff;
+	}
+
+	.day .g.baby {
+		--glow-pct: 22%;
 	}
 
 	.cycle_recap .obs span.g {
