@@ -22,7 +22,7 @@ declare(strict_types=1);
 const APP_VERSION = "15";
 
 // The commit the image was built from (8 hex digits, or "unknown"): the Dockerfile replaces "dev" below at build time. Not in server_info.
-const APP_COMMIT = "15_release";
+const APP_COMMIT = "dev";
 
 // The internal constants of the app: DB codes, API vocabularies, limits, export layouts; none is a deployment setting (those are the
 // config files, which load this one). NFP_FILE_SCHEMA (lib/nfp_format.php) and DB_SQL_USER_ACCOUNT_LAST_ACTIVITY (lib/db_querie.php) stay next
