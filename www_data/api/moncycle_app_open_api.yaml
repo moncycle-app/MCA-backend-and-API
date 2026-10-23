@@ -5,8 +5,8 @@ info:
   version: "2.0"
   termsOfService: https://www.moncycle.app/ToS/term_of_service_fr.html
   license:
-    name: CC BY-NC-SA 4.0
-    url: https://creativecommons.org/licenses/by-nc-sa/4.0
+    name: AGPL-3.0-or-later
+    url: https://www.gnu.org/licenses/agpl-3.0.html
   description: |-
     This API stores **daily fertility observations** for one person, or for one couple sharing
     an account. It is the backend of the moncycle.app web app; mobile apps, scripts and research
@@ -2748,7 +2748,7 @@ components:
           type: string
           format: email
           description: The login address of the account. Not case-sensitive, spaces around it are ignored.
-          example: demo.mucus.self.obs@moncycle.app
+          example: demo.bl@moncycle.app
         password:
           type: string
           format: password

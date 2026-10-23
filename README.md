@@ -235,7 +235,7 @@ not verified within 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`, `ACCOUNT_UNVERIFI
 
 ### Demo accounts
 
-Accounts 2 (`demo.mucus.self.obs@moncycle.app`, cervical mucus self-observation) and 3 (`demo.fc@moncycle.app`, FertilityCare) are public: the password is `demo`, and
+Accounts 2 (`demo.bl@moncycle.app`, cervical mucus self-observation) and 3 (`demo.fc@moncycle.app`, FertilityCare) are public: the password is `demo`, and
 the sign-in page has a button for each. They are made by [`demo.sql`](www_data/script/db/demo.sql). `DEMO_ENABLED` (off by default) is
 their switch:
 
@@ -318,5 +318,11 @@ curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X
 
 ## License
 
-Creative Commons **CC BY-NC-SA 4.0**: attribution, non-commercial use, share alike.
-[Full license](https://creativecommons.org/licenses/by-nc-sa/4.0/) · [legal code](https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode.fr)
+Copyright (C) 2021-2026 Tech 4 Fertility, aka. T4F ([tech4fertility.org](https://tech4fertility.org)).
+
+**GNU Affero General Public License v3.0 or later** (`AGPL-3.0-or-later`): see [LICENSE](LICENSE).
+[Full license](https://www.gnu.org/licenses/agpl-3.0.html)
+
+If you run a modified version of this program as a service, the AGPL requires you to offer the source of your version to the users
+of that service. The web app does this for the original: the "À propos et contact" panel of the settings links to this repository.
+Keep that link (or point it at your own source) in a modified version. Third-party libraries keep their own licences.

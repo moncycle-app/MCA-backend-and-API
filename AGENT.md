@@ -50,6 +50,9 @@ The rule of the codebase: **`lib/` holds every function, `api/` holds none.** An
 
 Also:
 
+- Every PHP, JS, CSS and HTML file of the app opens with the licence header (copyright Tech 4 Fertility, `SPDX-License-Identifier:
+  AGPL-3.0-or-later`; copy it from a neighbour), and a new file gets it. The AGPL asks that users of a modified, networked version can get
+  its source: keep the source link of the settings' "À propos et contact" panel.
 - Every PHP file declares `declare(strict_types=1);`, right after its licence header. A value from the database or a client is cast or
   checked before it reaches a typed parameter, a built-in function included: `strlen(null)` and `round("1.5")` throw.
 - Every `require_once` is `__DIR__`-based, and no lib file shares its name with an endpoint (`lib/user_account.php`,

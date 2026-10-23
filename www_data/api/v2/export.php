@@ -1,7 +1,13 @@
 <?php
 /* moncycle.app
 **
-** licence Creative Commons CC BY-NC-SA
+** Copyright (C) 2021-2026 Tech 4 Fertility, aka. T4F (https://tech4fertility.org)
+** SPDX-License-Identifier: AGPL-3.0-or-later
+**
+** This program is free software: you can redistribute it and/or modify it under
+** the terms of the GNU Affero General Public License as published by the Free
+** Software Foundation, either version 3 of the License, or (at your option) any
+** later version. It is distributed WITHOUT ANY WARRANTY; see the licence for details.
 **
 ** https://www.moncycle.app
 ** https://github.com/moncycle-app/backend-api-web-app

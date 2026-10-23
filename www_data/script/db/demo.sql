@@ -5,7 +5,7 @@ DELETE FROM `user_account` WHERE `no_user_account` = 3;
 
 INSERT INTO `user_account` (`no_user_account`, `name`, `nfp_method`, `age`, `login_email`, `notification_emails`, `password`, `language`, `totp_state`, `totp_secret`, `nb_connection_attempts`, `timeline_asc`, `sponsor`, `research`, `user_enabled`, `is_inactive`, `email_verified_at`)
 VALUES
-	(2,'Démo glaire cervicale',2,1990,'demo.mucus.self.obs@moncycle.app',NULL,'$argon2id$v=19$m=47104,t=4,p=1$YVVFdlVUS1hTVXVZWC95SQ$ZXkJ7fb0EfJg5pMW0kjsf79C1Vp87yWId7qidOEgnV8','FR',0,NULL,0,1,0,0,1,0,NOW()),
+	(2,'Démo glaire cervicale',2,1990,'demo.bl@moncycle.app',NULL,'$argon2id$v=19$m=47104,t=4,p=1$YVVFdlVUS1hTVXVZWC95SQ$ZXkJ7fb0EfJg5pMW0kjsf79C1Vp87yWId7qidOEgnV8','FR',0,NULL,0,1,0,0,1,0,NOW()),
 	(3,'Démo FertilityCare',3,1990,'demo.fc@moncycle.app',NULL,'$argon2id$v=19$m=47104,t=4,p=1$NnA0c1ZER2J0c0c2ZDBQWQ$qaZitL7UcHhO7mz66qC7CmTOLDCmFRBotYGG/U9EXHg','FR',0,NULL,0,1,0,0,1,0,NOW());
 
 INSERT INTO `day_timeline` (`no_day`, `no_user_account`, `date_obs`, `day_not_observed`, `fc_score`, `fc_arrow`, `stamp`, `temperature`, `time_temp_taken`, `is_peak`, `counter_start`, `union_sex`, `cycle_1st_day`, `pregnancy`, `comment` , `last_write_client_UTC`)
