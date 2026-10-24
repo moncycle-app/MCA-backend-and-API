@@ -113,14 +113,14 @@ Every key the code can write. The first block is on every line.
 | `fmt` | Export format: `pdf`, `csv`, `nfp`. |
 | `anon` | The export was anonymous. |
 | `per` | Length of the exported period in days (not the dates). |
-| `kind` | Which mail: `verify_email`, `account_exists`, `reset_password`, `password_changed`, `confirm_email`, `email_change_requested`, `email_change_taken`, `email_changed`, `notification_emails`, `new_login`, `cycle`, `reminder`, `deletion_warning`, `terms_update`. |
+| `kind` | Which mail: `verify_email`, `account_exists`, `reset_password`, `password_changed`, `confirm_email`, `email_change_requested`, `email_change_taken`, `email_changed`, `notification_emails`, `new_login`, `cycle`, `reminder`, `deletion_warning`, `terms_update`, `weekly_report`. |
 | `to` | Number of recipients of a mail. |
 | `fil` | Number of attachments of a mail. |
 | `msg` | A scrubbed message: the mailer's error, an exception message, a fatal error. |
 | `cls` | Class of an exception. |
 | `sql` | SQLSTATE of a database exception. |
 | `at` | Where an exception was thrown, `file:line`. |
-| `step` | Which step of a cron run is done: `cycle_mails`, `reminders`, `deletion_warnings`, `account_deletions`, `unverified_deletions`, `tokens`, `login_attempts`, `public_stats`, in the order the run takes them. |
+| `step` | Which step of a cron run is done: `cycle_mails`, `reminders`, `deletion_warnings`, `account_deletions`, `unverified_deletions`, `tokens`, `login_attempts`, `public_stats`, `weekly_report` (Mondays, when `WEEKLY_REPORT_EMAILS` is set), in the order the run takes them. |
 | `ok` | The cron run reached its end. |
 | `ms` | Duration in milliseconds. |
 | `sent` | Mails the cron run sent. |
@@ -171,7 +171,7 @@ Every key the code can write. The first block is on every line.
 | `mail.failed` | error | `kind`, `to`, `msg`, `n` | |
 | `system.exception` | error | `cls`, `sql`, `at`, `msg` | An uncaught exception (the client gets a 500 `unexpected_error`). A database exception has `sql` and no `msg`. |
 | `system.cron_started` | info | `dry` | |
-| `system.cron_step` | info | `step`, `dry`, `n`, `ko` | One line when each step of the daily cron is done, even when it had nothing to do (`n` 0): the lines between `system.cron_started` and `system.cron_ended` say how far a run that died got, and the step after the last one is the one that failed. `ko` is on the three mail steps (`cycle_mails`, `reminders`, `deletion_warnings`); `public_stats` has no `n`. |
+| `system.cron_step` | info | `step`, `dry`, `n`, `ko` | One line when each step of the daily cron is done, even when it had nothing to do (`n` 0): the lines between `system.cron_started` and `system.cron_ended` say how far a run that died got, and the step after the last one is the one that failed. `ko` is on the mail steps (`cycle_mails`, `reminders`, `deletion_warnings`, `weekly_report`); `public_stats` has no `n`. |
 | `system.cron_ended` | info, **error** if it failed | `ok`, `dry`, `ms`, `sent`, `ko`, `del`, `tok`, `ipa`, `msg` | `ok:false` when the run died before its end (uncaught exception, fatal error, timeout), or was refused: `msg` is `maintenance` when `MAINTENANCE_MODE` is on and nothing was done. The counters are what had been done by then, so all 0 for a dry run. A mail that could not be sent is `ko` and a `mail.failed` line, and the run is still `ok:true`. The steps in between are the `system.cron_step` lines. |
 | `system.log_sink_failed` | error | `f`, `why` | The log file could not be opened or written; the lines go to `stdout`. At most once per request. |
 | `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `nds`, `full` | The end of every request that reached the app, with the ids the request named (`uid`, `sid`, `day`, `dsc`, `rev`). A read is this line with a `GET`, the `uid`, the path and `n` (and `nds` for a sync); `full` is true for `GET /api/v2/timeline_sync` from the start. `GET /api/v2/day/{date}` names the `day` when it was ever written, and `n` is 0 or 1. |

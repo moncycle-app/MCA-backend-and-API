@@ -22,6 +22,7 @@ require_once __DIR__ . "/../lib/doc_export.php";
 require_once __DIR__ . "/../lib/log.php";
 require_once __DIR__ . "/../lib/mail.php";
 require_once __DIR__ . "/../lib/nfp_export.php";
+require_once __DIR__ . "/../lib/weekly_report.php";
 
 // php cron.php [--dry-run]. --dry-run reads and says what a run would do, and sends, deletes and writes nothing.
 // Only the command line takes it, and anything else on it is refused: a typo must not turn a dry run into a real one.
@@ -183,6 +184,20 @@ else {
 if (!$dry_run) data_public_stats_store($db);
 echo ($dry_run ? "[dry run] public stats would be stored" : "public stats stored") . PHP_EOL;
 log_cron_step("public_stats");
+
+// THE WEEKLY REPORT OF THE TEAM, on Mondays, when WEEKLY_REPORT_EMAILS is set (script/weekly_report.php sends it by hand)
+
+if (WEEKLY_REPORT_EMAILS !== "" && date("N") === "1") {
+	$to = weekly_report_recipients();
+	$sent = true;
+	if ($dry_run) echo "[dry run] the weekly report would be sent to " . count($to) . " addresses" . PHP_EOL;
+	else {
+		$sent = weekly_report_send($to, weekly_report_build($db));
+		log_cron_count($sent ? "sent" : "ko");
+		echo ($sent ? "weekly report sent to " : "COULD NOT send the weekly report to ") . count($to) . " addresses" . PHP_EOL;
+	}
+	log_cron_step("weekly_report", 1, $sent ? 0 : 1);
+}
 
 // what script/stat.php tells Prometheus, so that a cron that stopped running is noticed
 if (!$dry_run) {

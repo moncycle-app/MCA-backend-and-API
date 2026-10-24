@@ -315,6 +315,13 @@ const CRON_LAST_SUCCESS_KEY = "cron_last_success";
 const CRON_LAST_DURATION_KEY = "cron_last_duration_ms";
 
 // ===========================================================================
+// THE WEEKLY REPORT OF THE TEAM -- script/weekly_report.php, the cron on Mondays (lib/weekly_report.php)
+// ===========================================================================
+
+// How many weeks its bars show (and the weeks a record is the best of).
+const WEEKLY_REPORT_WEEKS = 12;
+
+// ===========================================================================
 // SYNC -- GET /api/v2/timeline_sync (api/v2/timeline_sync.php, lib/data.php)
 // ===========================================================================
 

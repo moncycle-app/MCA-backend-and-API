@@ -137,6 +137,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
 | `NEWS_URL` | `https://tech4fertility.org/latest-news.json` | JSON file of the news banner (`{"fr": {"title", "description", "url", "pubDate"}, ...}`), fetched by the browser. https, or `http://localhost:PORT/...` for development. **Empty: no banner.** |
 | `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | https page of your terms of service, shown in an iframe on the sign-up page (the box to tick is required by `POST /api/v2/register`), linked from the settings page and told by `GET /api/v2/server_info`. Empty: nothing to show. Change `info.termsOfService` in the OpenAPI file too. A page that forbids framing cannot be shown. |
+| `WEEKLY_REPORT_EMAILS` | – | Addresses, comma separated, that get the weekly report of the team (French, sent by the cron on Mondays: accounts, usage, sign-up comments, database health, each compared with the week before). **Empty: no report.** See [Cron](#cron). |
 | `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
 
 **Database and mail**
@@ -228,6 +229,10 @@ not verified within 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`, `ACCOUNT_UNVERIFI
   Back up the database before a real run.
 - Run it exactly once a day: more often sends duplicate mails, less often leaves expired tokens and misses mails. It refuses to run in
   [maintenance mode](#maintenance-mode).
+- **The weekly report**: when `WEEKLY_REPORT_EMAILS` is set, the run of Monday also mails the team a report of the 7 days before
+  (Monday to Sunday) compared with the week before. Nothing is stored for it: every figure is read from the tables as they are.
+  `php script/weekly_report.php` sends it at once, `--dry-run` prints its text and its recipients, `--html` prints the mail
+  (`docker exec <container> php /var/www/html/script/weekly_report.php --html > report.html`).
 - **`script/terms_notice.php`** mails every user (verified accounts, login address and notification list, demo accounts excepted) that
   the terms of service change, from which date, and that using the app afterwards means accepting them. `--url=https://...` and
   `--date=YYYY-MM-DD` are required, then either `--test-email=ADDRESS` (ONE trial mail to that address) or `--send` (everyone). Nothing

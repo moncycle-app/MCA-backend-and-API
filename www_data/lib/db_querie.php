@@ -632,3 +632,98 @@ function db_querie_select_key_value($db, string $key): mixed {
 function db_querie_upsert_key_value($db, string $key, int $value): int {
 	return db_ops_exec($db, "INSERT INTO key_value (`key`, `value`) VALUES (:key, :value) ON DUPLICATE KEY UPDATE `value` = VALUES(`value`)", ["key" => $key, "value" => $value]);
 }
+
+// ---------------------------------------------------------------------------
+// The weekly report (lib/weekly_report.php). A week is counted back from today: week 0 is the 7 days before today, week 1 the 7
+// before those. Nothing is kept from one report to the next, so every number is read from what the tables hold now. Without the
+// demo accounts.
+// ---------------------------------------------------------------------------
+
+// Per week of the last $weeks, by the date of the observation: the days, the accounts that wrote one, the cycles and pregnancies begun.
+// A week with no day has no row. Served by the index on date_obs.
+function db_querie_select_day_timeline_weekly($db, int $weeks): array {
+	return db_ops_rows($db,
+		"SELECT FLOOR((DATEDIFF(CURDATE(), dt.date_obs) - 1) / 7) AS week, COUNT(dt.no_day) AS days, COUNT(DISTINCT dt.no_user_account) AS accounts,
+		COALESCE(SUM(dt.cycle_1st_day = 1), 0) AS cycles, COALESCE(SUM(dt.pregnancy = 1), 0) AS pregnancies
+		FROM day_timeline AS dt
+		WHERE dt.date_obs >= CURDATE() - INTERVAL :nb_days DAY AND dt.date_obs < CURDATE() AND dt.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
+		GROUP BY week ORDER BY week",
+		["nb_days" => 7 * $weeks]
+	);
+}
+
+// Per week of the last $weeks, the accounts registered that are still there, and those of them whose address is verified.
+function db_querie_select_user_account_weekly($db, int $weeks): array {
+	return db_ops_rows($db,
+		"SELECT FLOOR((DATEDIFF(CURDATE(), u.inscription_date) - 1) / 7) AS week, COUNT(u.no_user_account) AS accounts,
+		COALESCE(SUM(u.email_verified_at IS NOT NULL), 0) AS verified
+		FROM user_account AS u
+		WHERE u.inscription_date >= CURDATE() - INTERVAL :nb_days DAY AND u.inscription_date < CURDATE() AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
+		GROUP BY week ORDER BY week",
+		["nb_days" => 7 * $weeks]
+	);
+}
+
+// The accounts with a day in the 35 days that end $days_ago days before today (the "active" of script/stat.php, seen from then), per
+// method: [nfp_method => accounts]. An account has one method, so the sum is the total.
+function db_querie_select_user_account_active_by_method_at($db, int $days_ago): array {
+	$counts = [];
+	foreach (db_ops_rows($db,
+		"SELECT u.nfp_method, COUNT(DISTINCT dt.no_user_account) AS accounts
+		FROM day_timeline AS dt JOIN user_account AS u ON u.no_user_account = dt.no_user_account
+		WHERE dt.date_obs >= CURDATE() - INTERVAL :from_days DAY AND dt.date_obs < CURDATE() - INTERVAL :to_days DAY AND dt.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
+		GROUP BY u.nfp_method ORDER BY u.nfp_method",
+		["from_days" => $days_ago + 35, "to_days" => $days_ago]
+	) as $row) $counts[intval($row["nfp_method"])] = intval($row["accounts"]);
+	return $counts;
+}
+
+// The comments left at sign-up in the last $nb_days days, oldest first.
+function db_querie_select_user_account_register_comments($db, int $nb_days): array {
+	return db_ops_rows($db,
+		"SELECT u.inscription_date, u.nfp_method, u.register_comment, u.email_verified_at IS NOT NULL AS verified
+		FROM user_account AS u
+		WHERE u.inscription_date >= CURDATE() - INTERVAL :nb_days DAY AND u.inscription_date < CURDATE()
+		AND u.register_comment IS NOT NULL AND u.register_comment <> '' AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
+		ORDER BY u.inscription_date, u.no_user_account",
+		["nb_days" => $nb_days]
+	);
+}
+
+// The next id of a table of the database in use: an id is never given twice, so it counts the rows ever inserted, deleted ones included.
+function db_querie_select_table_auto_increment($db, string $table): int {
+	return intval(db_ops_value($db, "SELECT t.AUTO_INCREMENT FROM information_schema.TABLES AS t WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = :table_name", ["table_name" => $table]));
+}
+
+// The first id of the accounts registered since $nb_days days before today (null without any).
+function db_querie_select_user_account_first_id_since($db, int $nb_days): ?int {
+	$id = db_ops_value($db, "SELECT MIN(u.no_user_account) FROM user_account AS u WHERE u.inscription_date >= CURDATE() - INTERVAL :nb_days DAY AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")", ["nb_days" => $nb_days]);
+	return is_null($id) ? null : intval($id);
+}
+
+// The first id of the tokens created since $nb_days days before today (null without any).
+function db_querie_select_auth_token_first_id_since($db, int $nb_days): ?int {
+	$id = db_ops_value($db, "SELECT MIN(at.no_auth_token) FROM auth_token AS at WHERE at.date_creation >= CURDATE() - INTERVAL :nb_days DAY", ["nb_days" => $nb_days]);
+	return is_null($id) ? null : intval($id);
+}
+
+// The tokens created between $from_days and $to_days days before today that are still there.
+function db_querie_count_auth_tokens_created_between($db, int $from_days, int $to_days): int {
+	return intval(db_ops_value($db,
+		"SELECT COUNT(at.no_auth_token) FROM auth_token AS at WHERE at.date_creation >= CURDATE() - INTERVAL :from_days DAY AND at.date_creation < CURDATE() - INTERVAL :to_days DAY",
+		["from_days" => $from_days, "to_days" => $to_days]
+	));
+}
+
+// The accounts that used a session in the last $nb_days days (date_use is written every few minutes of use).
+function db_querie_count_user_accounts_connected_since($db, int $nb_days): int {
+	return intval(db_ops_value($db,
+		"SELECT COUNT(DISTINCT at.no_user_account) FROM auth_token AS at WHERE at.date_use >= CURDATE() - INTERVAL :nb_days DAY AND at.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")",
+		["nb_days" => $nb_days]
+	));
+}
+
+// Today for the database, which the weeks above are counted from ("YYYY-MM-DD").
+function db_querie_select_curdate($db): string {
+	return strval(db_ops_value($db, "SELECT CURDATE()"));
+}

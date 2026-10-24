@@ -78,6 +78,10 @@ define("NEWS_URL", "https://tech4fertility.org/latest-news.json");
 // GET /api/v2/server_info tells it to every client. Empty: no page to show or link (the box stays required).
 define("TERMS_OF_SERVICE_URL", "https://www.moncycle.app/ToS/term_of_service_fr.html");
 
+// The weekly report of the team (lib/weekly_report.php): the addresses, separated by commas, that get it every Monday from the cron
+// (script/weekly_report.php sends it by hand). An item that is not an address is skipped. Empty: no report.
+define("WEEKLY_REPORT_EMAILS", "");
+
 // The password policy: a regex, without delimiters (PCRE, and JavaScript for the `pattern` of a form), that a new password must match. Empty
 // or not a valid regex: the default, PASSWORD_POLICY_REGEX_DEFAULT of constants.php (10 characters at least, a lower case letter, an upper
 // case letter, a digit). A new password is at most PASSWORD_MAX_CHARS (128) characters whatever the regex says. GET /api/v2/server_info tells the one in force.
