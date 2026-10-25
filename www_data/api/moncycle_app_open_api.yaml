@@ -281,7 +281,7 @@ info:
     | `days` | Days written since `since`, and the days that follow them in their cycle. A cleared day comes back empty. |
     | `descriptions` | **Every** label of the account, with its `useCount`. |
     | `allCyclesFirstDay` | **Every** day flagged `cycleFirstDay`, newest first. |
-    | `allPregnancyDates` | **Every** day flagged `booleanPregnancyDetected`, newest first. |
+    | `allObservationPausedDates` | **Every** day flagged `observationPaused`, newest first. |
 
     The loop:
 
@@ -292,7 +292,7 @@ info:
     3. GET /timeline_sync?since=<lastSync>  (first time: no parameter)
     4. Merge into your copy:
          - each returned day replaces yours; an empty day means "forget this day";
-         - the returned labels and lists of cycles and pregnancies replace yours;
+         - the returned labels and lists of cycles and pauses replace yours;
          - except a day you changed after step 1: keep yours, you are about to send it
     5. Save syncTimestamp as lastSync, after step 4.
     ```
@@ -1436,7 +1436,7 @@ paths:
         Who the user is and their settings, in one small call. Make it after sign-in and when the app comes back to the
         foreground: `method` and `temperatureTracking` tell you **which fields of a day to show**.
 
-        The timeline is not here. The cycles (`allCyclesFirstDay`, `allPregnancyDates`) come with `GET /timeline_sync`, the news
+        The timeline is not here. The cycles (`allCyclesFirstDay`, `allObservationPausedDates`) come with `GET /timeline_sync`, the news
         address with `GET /server_info`. No password hash or TOTP secret is ever returned.
 
         **`ETag`:** the answer carries one. Send it back in `If-None-Match` and an unchanged account answers `304` with no
@@ -1655,7 +1655,7 @@ paths:
       summary: What changed in the timeline since the last sync?
       description: |-
         Brings a local copy of the timeline up to date: the days written since `since`, every label, the cycles and the
-        pregnancies. Several clients of one account stay consistent without downloading everything each time. (Settings are
+        pauses. Several clients of one account stay consistent without downloading everything each time. (Settings are
         in `GET /account`.)
 
         Section 8 of the introduction gives the loop. In short:
@@ -1666,7 +1666,7 @@ paths:
           back the days that follow it.
 
         `days` is a flat array in date order, each day as `GET /day/{date}` shows it (`cycleStartDate` and `cycleDay`
-        included). `descriptions` is what `GET /description` returns. `allCyclesFirstDay` and `allPregnancyDates` are whole
+        included). `descriptions` is what `GET /description` returns. `allCyclesFirstDay` and `allObservationPausedDates` are whole
         every time, which is how a deletion reaches you.
       parameters:
         - name: since
@@ -1862,7 +1862,7 @@ paths:
         | `isPeak` | boolean | Peak day. |
         | `counterStart` | integer or null (0 to 255) | Start a counter shown for this many days. `0` is stored as null. |
         | `sexUnion` | boolean | Sexual intercourse on this date. |
-        | `booleanPregnancyDetected` | boolean | A pregnancy was detected on this date. |
+        | `observationPaused` | boolean | The observations are paused from this date: it ends the cycle, and a new cycle resumes them. |
         | `freeMucusSensation` | array of string (max 256 each) | Cervical mucus: what the user feels. |
         | `freeMucusObservation` | array of string (max 256 each) | Cervical mucus: what the user sees. |
         | `freeOther` | array of string (max 256 each) | Cervical mucus: labels with no type yet. |
@@ -2254,8 +2254,8 @@ paths:
 
         | Method | Columns |
         |---|---|
-        | `cervicalMucus` | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `freeMucusSensation` `freeMucusObservation` [`temperature` `temperatureTime`] `isPeak` `counterStart` `sexUnion` `booleanPregnancyDetected` `comments` |
-        | `fertilityCare` | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `codifiedBleedingObservation` `codifiedMucusSensation` `codifiedMucusObservation` `codifiedNumberObservations` `codifiedPainObservations` `codifiedArrow` [`temperature` `temperatureTime`] `isPeak` `sexUnion` `booleanPregnancyDetected` `comments` |
+        | `cervicalMucus` | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `freeMucusSensation` `freeMucusObservation` [`temperature` `temperatureTime`] `isPeak` `counterStart` `sexUnion` `observationPaused` `comments` |
+        | `fertilityCare` | `date` `cycleDay` `cycleFirstDay` `mucusNotObserved` `stampColor` `stampBaby` `codifiedBleedingObservation` `codifiedMucusSensation` `codifiedMucusObservation` `codifiedNumberObservations` `codifiedPainObservations` `codifiedArrow` [`temperature` `temperatureTime`] `isPeak` `sexUnion` `observationPaused` `comments` |
 
         The temperature columns exist only for accounts that record temperature.
 
@@ -2391,7 +2391,7 @@ paths:
 
         This app stores less than the format can describe, so every answer reports what became of the rest (`ImportReport`):
 
-        - `ignoredFields`: in the file, nowhere to put it here (cervix observations, `codifiedEvents`, `babyFeedCount`...).
+        - `ignoredFields`: in the file, nowhere to put it here (cervix observations, `babyFeedCount`, an event other than `ObservationPaused`...).
         - `mappedFields`: stored less precisely (a `symptothermic_fr` bleeding value becomes a Red stamp).
         - `warnings`: imported, but worth showing: a cycle whose `method` differs from the account's, `null` values, and the
           shapes listed below.
@@ -2993,10 +2993,10 @@ components:
           type: boolean
           default: false
           description: Sexual intercourse on this date.
-        booleanPregnancyDetected:
+        observationPaused:
           type: boolean
           default: false
-          description: A pregnancy was detected on this date. Listed in `GET /timeline_sync` as `allPregnancyDates`.
+          description: The observations are paused from this date (whatever the reason); it ends the cycle, and a new cycle resumes them. Listed in `GET /timeline_sync` as `allObservationPausedDates`.
 
         freeMucusSensation:
           type: array
@@ -3284,7 +3284,11 @@ components:
         endOfCycleFollowUp:
           type: string
           enum: [Pregnancy, Menopause, Disease, Other]
-          description: Not recorded by this app. Reported on import.
+          description: |-
+            *Narrowed.* Any reason is a pause of the observations (`observationPaused` of the API), and no reason is stored:
+            export writes `Other` on a cycle that holds a paused day; import stores another value as `Other` and reports it in
+            `warnings`. When no day of the cycle carries the `ObservationPaused` event (or `booleanPregnancyDetected`), the pause
+            goes on the cycle's last day that is not in the future.
         temperatureUsualTime:
           type: string
           pattern: '^\d{2}:\d{2}:\d{2}$'
@@ -3349,6 +3353,9 @@ components:
           example: true
         booleanPregnancyDetected:
           type: boolean
+          description: |-
+            *Narrowed.* Read as a pause of the observations on this day (reason `Other`), reported in `warnings`. Export never
+            writes it: a paused day carries the `ObservationPaused` event of `codifiedEvents`.
           example: false
         temperature:
           type: number
@@ -3442,7 +3449,9 @@ components:
         codifiedEvents:
           type: array
           maxItems: 32
-          description: "*Not stored.* No pre-defined event list is recorded here."
+          description: |-
+            *Narrowed.* Only the custom event `ObservationPaused` is stored: the observations are paused from this day
+            (`observationPaused` of the API); export writes it on such a day. Any other event is reported in `ignoredFields`.
           items:
             type: string
             maxLength: 128
@@ -3720,9 +3729,9 @@ components:
             type: string
             format: date
           example: ["2026-03-10", "2026-02-11", "2026-01-14"]
-        allPregnancyDates:
+        allObservationPausedDates:
           type: array
-          description: "Every date flagged `booleanPregnancyDetected: true`, newest first, whole every time."
+          description: "Every date flagged `observationPaused: true`, newest first, whole every time."
           items:
             type: string
             format: date

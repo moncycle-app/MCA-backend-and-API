@@ -58,10 +58,17 @@ function nfp_export_day(array $day): array {
 		if (day_format_filled($day, 'temperatureTime')) $nfp['temperatureTime'] = $day['temperatureTime'];
 	}
 	if (!empty($day['isPeak'])) $nfp['isPeak'] = true;
-	if (!empty($day['booleanPregnancyDetected'])) $nfp['booleanPregnancyDetected'] = true;
+	if (!empty($day['observationPaused'])) $nfp['codifiedEvents'] = [NFP_EVENT_OBSERVATION_PAUSED];
 	if (!empty($day['sexUnion'])) $nfp['sexUnion'] = 'Union';   // the app records whether there was one, not which kind
 	if (!empty($day['counterStart'])) $nfp['counterStart'] = intval($day['counterStart']);
 	return $nfp;
+}
+
+// One cycle of the file; a pause of the observations among its days ends it, which the format says with its end-of-cycle reason.
+function nfp_export_cycle(string $method, string $start_date, array $days, bool $paused): array {
+	$cycle = ["method" => $method, "cycleStartDate" => $start_date];
+	if ($paused) $cycle["endOfCycleFollowUp"] = NFP_END_OF_CYCLE_PAUSED;
+	return $cycle + ["days" => $days];
 }
 
 // The cycles of a period, split at each cycle's first day. The period is widened back to the first day of the cycle $start_date is in,
@@ -79,22 +86,25 @@ function nfp_export_cycles($db, string $start_date, string $end_date, array $use
 	$rows_read = count($rows);
 
 	$cycles = [];
-	$current = ["method" => $method, "cycleStartDate" => $cycle_start_date, "days" => []];
+	$current_start = $cycle_start_date;
+	$current_days = [];
+	$current_paused = false;
 	$last_date = min($end_date, date('Y-m-d'));
 	for ($date = $cycle_start_date; $date <= $last_date; $date = date_next_day($date)) {
 		if (!isset($rows[$date])) {
-			$current["days"][] = new stdClass();   // a gap: "{}"
+			$current_days[] = new stdClass();   // a gap: "{}"
 			continue;
 		}
 		$row = $rows[$date];
-		if (!empty($row["cycle_1st_day"]) && $date !== $current["cycleStartDate"]) {
-			$cycles[] = $current;
-			$current = ["method" => $method, "cycleStartDate" => $date, "days" => []];
+		if (!empty($row["cycle_1st_day"]) && $date !== $current_start) {
+			$cycles[] = nfp_export_cycle($method, $current_start, $current_days, $current_paused);
+			[$current_start, $current_days, $current_paused] = [$date, [], false];
 		}
+		if (!empty($row["observation_paused"])) $current_paused = true;
 		$nfp_day = nfp_export_day(day_format_to_json(data_day($row, null, $descriptions[$row["no_day"]] ?? [])));
-		$current["days"][] = empty($nfp_day) ? new stdClass() : $nfp_day;
+		$current_days[] = empty($nfp_day) ? new stdClass() : $nfp_day;
 	}
-	$cycles[] = $current;
+	$cycles[] = nfp_export_cycle($method, $current_start, $current_days, $current_paused);
 	return $cycles;
 }
 

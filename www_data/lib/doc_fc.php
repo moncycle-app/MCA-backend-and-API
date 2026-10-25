@@ -175,7 +175,7 @@ function doc_fc_grid_rows(array $days): array {
 
 function doc_fc_stamp_key(?array $day): string {
 	if (is_null($day)) return "";          // padding after a cycle's last day
-	if ($day["booleanPregnancyDetected"]) return "Gi";   // not "G", the green stamp
+	if ($day["observationPaused"]) return "pause";
 	if ($day["isGap"] || $day["mucusNotObserved"]) return "?";
 	return day_format_stamp_encode($day["stampColor"], $day["stampBaby"]);
 }
@@ -187,8 +187,8 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 	$line_h = $grid["line_h"];
 	$stamp_h = $grid["stamp_h"];
 	$coef = $grid["color_coef"];
-	$pregnancy = !empty($day["booleanPregnancyDetected"]);
-	$text_color = $pregnancy ? DOC_PREGNANCY_COLOR : [0, 0, 0];
+	$paused = !empty($day["observationPaused"]);
+	$text_color = $paused ? DOC_PAUSE_COLOR : [0, 0, 0];
 
 	// the stamp, the baby and the peak, in the stamp's colour
 	[$symbol, $r, $g, $b] = DOC_FC_STAMPS[doc_fc_stamp_key($day)];
@@ -200,7 +200,7 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 
 	$pdf->UseStyle('fc.baby', $text_color);
 	$pdf->SetXY($x, $y + $line_h);
-	$pdf->Cell($w, $stamp_h, $pregnancy ? "GROSSESSE" : "", 'B', 0, 'C', true);
+	$pdf->Cell($w, $stamp_h, $paused ? "PAUSE" : "", 'B', 0, 'C', true);
 	$image_size = min($w, $stamp_h) - 2;
 	if (str_contains($symbol, 'BB')) $pdf->Image(DOC_BABY_IMAGE, $x + $image_size / 2, $y + $line_h + 1, $image_size, $image_size);
 

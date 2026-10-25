@@ -753,15 +753,15 @@ h2 {
 	padding-bottom: 0;
 }
 
-.o_gross,
-.o_gross .j,
+.o_paused,
+.o_paused .j,
 .cycle_recap .obs span.pink,
-.o_gross .s,
-.o_gross .n {
+.o_paused .s,
+.o_paused .n {
 	color: #821521;
 }
 
-.o_gross,
+.o_paused,
 .cycle_recap .obs span.pink {
 	background-color: #ffecee;
 	border-color: #ffecee;
@@ -775,11 +775,11 @@ h2 {
 	padding-top: 0;
 }
 
-.cycle_recap .o_gross {
+.cycle_recap .o_paused {
 	border-radius: 3px;
 }
 
-#timeline .o_gross {
+#timeline .o_paused {
 	padding-top: 2px;
 }
 
@@ -930,7 +930,7 @@ h2 {
 
 @media (min-width: 601px) {
 
-	.o_gross {
+	.o_paused {
 		border-radius: 3px;
 	}
 
@@ -1085,15 +1085,15 @@ h2 {
 		color: white;
 	}
 
-	.o_gross,
-	.o_gross .j,
+	.o_paused,
+	.o_paused .j,
 	.cycle_recap .obs span.pink,
-	.o_gross .s,
-	.o_gross .n {
+	.o_paused .s,
+	.o_paused .n {
 		color: #faa;
 	}
 
-	.o_gross,
+	.o_paused,
 	.cycle_recap .obs span.pink {
 		background-color: #3c0006;
 		border-color: #3c0006;

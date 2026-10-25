@@ -264,7 +264,7 @@ function nfp_import_cycle(mixed $cycle, string $where, string $account_method, a
 		if (nfp_format_has($cycle, $field)) $report["ignored"][] = sprintf("[%s] %s: %s.", $where, $field, $why);
 	}
 	foreach (nfp_format_object_keys($cycle) as $key) {
-		if (!in_array($key, NFP_CYCLE_FIELDS_STRUCTURAL, true) && !isset(NFP_CYCLE_FIELDS_NOT_STORED[$key])) {
+		if (!in_array($key, [...NFP_CYCLE_FIELDS_STRUCTURAL, ...NFP_CYCLE_FIELDS_STORED], true) && !isset(NFP_CYCLE_FIELDS_NOT_STORED[$key])) {
 			$report["ignored"][] = sprintf("[%s] %s: not a cycle field of schema %s.", $where, $key, NFP_SCHEMA_VERSION);
 		}
 	}
@@ -275,7 +275,35 @@ function nfp_import_cycle(mixed $cycle, string $where, string $account_method, a
 		return null;
 	}
 
-	return ["method" => $method, "start_date" => $start_date, "days" => $days];
+	// any end-of-cycle reason is a pause of the observations, and this app records no reason
+	$follow_up = nfp_format_get($cycle, "endOfCycleFollowUp");
+	$paused = is_string($follow_up) && trim($follow_up) !== '';
+	if ($paused && $follow_up !== NFP_END_OF_CYCLE_PAUSED) {
+		$report["warnings"][] = sprintf("[%s] endOfCycleFollowUp '%s' stored as a pause of the observations, reason '%s': no reason is recorded here.", $where, $follow_up, NFP_END_OF_CYCLE_PAUSED);
+	}
+
+	return ["method" => $method, "start_date" => $start_date, "days" => $days, "paused" => $paused];
+}
+
+// Does an NFP day say that the observations are paused from it on: this app's event, or the format's older day flag.
+function nfp_import_day_is_paused(mixed $nfp_day): bool {
+	if (!is_object($nfp_day)) return false;
+	$events = nfp_format_get($nfp_day, "codifiedEvents");
+	if (is_array($events) && in_array(NFP_EVENT_OBSERVATION_PAUSED, $events, true)) return true;
+	return nfp_format_get($nfp_day, "booleanPregnancyDetected") === true;
+}
+
+// The day a cycle's end-of-cycle reason puts the pause on when none of its days carries it: its last day that is not in the future,
+// null when it has none.
+function nfp_import_cycle_pause_index(array $cycle): ?int {
+	if (!$cycle["paused"] || empty($cycle["days"])) return null;
+	foreach ($cycle["days"] as $nfp_day) {
+		if (nfp_import_day_is_paused($nfp_day)) return null;
+	}
+	[, $ceiling] = nfp_import_date_limits();
+	$days_to_ceiling = intval((new DateTime($cycle["start_date"]))->diff($ceiling)->format('%r%a'));
+	$index = min(count($cycle["days"]) - 1, $days_to_ceiling);
+	return $index >= 0 ? $index : null;
 }
 
 // The days of a cycle -> the entries to write. The day at index n is the nth from the cycle's start; $dates_seen (date => where) is shared
@@ -284,6 +312,7 @@ function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, 
 	[, $ceiling] = nfp_import_date_limits();
 	$plan = [];
 	$cursor = new DateTime($cycle["start_date"]);
+	$pause_index = nfp_import_cycle_pause_index($cycle);
 
 	foreach ($cycle["days"] as $day_index => $nfp_day) {
 		$day_date = clone $cursor;
@@ -306,6 +335,10 @@ function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, 
 
 		$is_cycle_first_day = ($day_index === 0);
 		$mapping = nfp_import_day($nfp_day, $cycle["method"], $date, $report);
+		if ($day_index === $pause_index) {
+			$mapping["day"]["observationPaused"] = true;
+			$mapping["content"] = true;
+		}
 
 		// a day past today is only a problem when it carries something: the export pads a cycle with gaps up to today, and a client a
 		// time zone ahead would otherwise make its own file unimportable around midnight
@@ -490,10 +523,20 @@ function nfp_import_day_labels(object $nfp_day, string $date, array &$report): a
 	return array_values($names_by_field);
 }
 
-// isPeak, pregnancy, the union, the counter
+// isPeak, the pause of the observations, the union, the counter
 function nfp_import_day_flags(object $nfp_day, string $date, array &$day, array &$report): void {
-	foreach (["isPeak", "booleanPregnancyDetected"] as $flag) {
-		if (nfp_format_get($nfp_day, $flag) === true) $day[$flag] = true;
+	if (nfp_format_get($nfp_day, "isPeak") === true) $day["isPeak"] = true;
+
+	if (nfp_import_day_is_paused($nfp_day)) $day["observationPaused"] = true;
+	if (nfp_format_get($nfp_day, "booleanPregnancyDetected") === true) {
+		$report["warnings"][] = sprintf("[%s] booleanPregnancyDetected stored as a pause of the observations, reason '%s'.", $date, NFP_END_OF_CYCLE_PAUSED);
+	}
+	$events = nfp_format_get($nfp_day, "codifiedEvents");
+	foreach (is_array($events) ? $events : [] as $event) {
+		if ($event !== NFP_EVENT_OBSERVATION_PAUSED) {
+			$report["ignored"][] = sprintf("[%s] codifiedEvents: no event but '%s' is recorded here.", $date, NFP_EVENT_OBSERVATION_PAUSED);
+			break;
+		}
 	}
 
 	$union = nfp_format_get($nfp_day, "sexUnion");

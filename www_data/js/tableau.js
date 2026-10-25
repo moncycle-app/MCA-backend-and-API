@@ -103,10 +103,9 @@ const moncycle_app_text = {
 	to_fill_in_glyph : "👋",
 	not_observed : "jour non observé",
 	not_observed_glyph : "?",
-	pregnancy : "🤰 grossesse",
-	pregnancy_glyph : "🤰",
-	// stamp drawn in the recap for a pregnancy day
-	pregnancy_stamp_glyph : "G",
+	observation_paused : "⏸️ suivi en pause",
+	// stamp drawn in the recap for the day the observations are paused
+	observation_paused_stamp_glyph : "⏸️",
 	union : "❤️",
 	peak_mucus : "⛰️",
 	peak_fc : "PIC",
@@ -334,7 +333,7 @@ moncycle_app = {
 			is_peak : d.isPeak,
 			counter_start : d.counterStart,
 			union_sex : d.sexUnion,
-			pregnancy : d.booleanPregnancyDetected,
+			observation_paused : d.observationPaused,
 			temperature : d.temperature,
 			time_temp_taken : d.temperatureTime,
 			fc_score : moncycle_app.fc_score_from_api(d),
@@ -365,14 +364,14 @@ moncycle_app = {
 			nfp_method : nfp_method,
 			nfp_method_name : {1:"mucus_temp", 2:"mucus", 3:"fc", 4:"fc_temp"}[nfp_method],
 			all_cycles_1st_day : d.allCyclesFirstDay,
-			all_pregnancy_dates : d.allPregnancyDates,
+			all_observation_paused_dates : d.allObservationPausedDates,
 			timeline_asc : d.timelineAscending,
 		};
 	},
 
 	// the serializeArray() output of #form_data (legacy flat field names: date, stamp, baby,
 	// fc_score, fc_arrow, temp, time_temp_taken, counter_start, is_peak, union_sex,
-	// cycle_1st_day, day_not_observed, pregnancy, comment, description[], last_write_client_UTC
+	// cycle_1st_day, day_not_observed, observation_paused, comment, description[], last_write_client_UTC
 	// -- everything else in that form, the individual fc_* checkboxes, is client-side scratch
 	// state for building fc_score and was never read server-side either way) -> the JSON body
 	// POST /api/v2/day expects.
@@ -392,7 +391,7 @@ moncycle_app = {
 			sexUnion : get1('union_sex') == '1',
 			cycleFirstDay : get1('cycle_1st_day') == '1',
 			dayNotObserved : get1('day_not_observed') == '1',
-			booleanPregnancyDetected : get1('pregnancy') == '1',
+			observationPaused : get1('observation_paused') == '1',
 			comment : get1('comment') || '',
 			lastWriteClientUtc : get1('last_write_client_UTC') || null,
 		}, codified);
@@ -491,7 +490,7 @@ moncycle_app = {
 	},
 	// what decides how the cycles are laid out: when it changes in the copy, they have to be drawn again
 	structure_of : function (account) {
-		return JSON.stringify([account.allCyclesFirstDay, account.allPregnancyDates, account.timelineAscending, account.method, account.temperatureTracking]);
+		return JSON.stringify([account.allCyclesFirstDay, account.allObservationPausedDates, account.timelineAscending, account.method, account.temperatureTracking]);
 	},
 	// The copy holds the account: draw the page header and the cycles from it.
 	show_account : function () {
@@ -507,14 +506,14 @@ moncycle_app = {
 	cycle_line_length : function () {
 		const DEFAULT = 35, MIN = 30, MAX = 45, STEP = 5, MARGIN = 5, RECENT = 12, MIN_CYCLES = 3, QUANTILE = 0.8;
 		let starts = moncycle_app.constante.all_cycles_1st_day || [];
-		let pregnancies = moncycle_app.constante.all_pregnancy_dates || [];
+		let pauses = moncycle_app.constante.all_observation_paused_dates || [];
 		let lengths = [];
 		// the starts come latest first: starts[c-1] is the day after the end of cycle c, which the latest cycle (still open) lacks
 		for (let c = 1; c < starts.length && lengths.length < RECENT; c++) {
 			let start = moncycle_app.date.parse(starts[c]);
 			let next = moncycle_app.date.parse(starts[c-1]);
-			// a cycle that ended with a pregnancy is not a length
-			if (pregnancies.some(function (d) { return d >= starts[c] && d < starts[c-1]; })) continue;
+			// a cycle that ended with a pause of the observations is not a length
+			if (pauses.some(function (d) { return d >= starts[c] && d < starts[c-1]; })) continue;
 			lengths.push(Math.round((next - start) / (1000*60*60*24)));
 		}
 		if (lengths.length < MIN_CYCLES) return DEFAULT;
@@ -685,11 +684,11 @@ moncycle_app = {
 		let date_cycle = moncycle_app.date.parse(date_cycle_str);
 		date_cycle.setHours(9);
 		let form_nouv_cycle = false;
-		for (let i = 0; i < moncycle_app.constante.all_pregnancy_dates.length; i++) {
-			let gross = moncycle_app.date.parse(moncycle_app.constante.all_pregnancy_dates[i]);
-			gross.setHours(9);
-			if (gross>=date_cycle && gross<=date_fin) {
-				date_fin = gross;
+		for (let i = 0; i < moncycle_app.constante.all_observation_paused_dates.length; i++) {
+			let pause = moncycle_app.date.parse(moncycle_app.constante.all_observation_paused_dates[i]);
+			pause.setHours(9);
+			if (pause>=date_cycle && pause<=date_fin) {
+				date_fin = pause;
 				if (fin_auj) form_nouv_cycle = true;
 			}
 		}
@@ -784,7 +783,7 @@ moncycle_app = {
 			max_date = moncycle_app.date.str(new Date(moncycle_app.date.parse(max_date) - (1000*60*60*24)));
 		}
 		else if (!prepend) {
-			let min_calc = moncycle_app.date.parse(moncycle_app.constante.all_pregnancy_dates[0]);
+			let min_calc = moncycle_app.date.parse(moncycle_app.constante.all_observation_paused_dates[0]);
 			min_calc.setDate(min_calc.getDate()+1);
 			min_date = moncycle_app.date.str(min_calc);
 		}
@@ -981,7 +980,7 @@ moncycle_app = {
 		let o_date = moncycle_app.date.parse(j.date_obs);
 		let o_id = "ro-" + moncycle_app.date.str(o_date);
 		let o_class = "obs";
-		if (j.pregnancy) o_class += " o_gross";
+		if (j.observation_paused) o_class += " o_paused";
 		let day_timeline = $("<div>", {id: o_id, class: o_class, date: moncycle_app.date.str(o_date)});
 		day_timeline.click(moncycle_app.open_menu);
 		let color = "vide";
@@ -1012,10 +1011,10 @@ moncycle_app = {
 				}
 			});
 		}
-		if (j.pregnancy) {
+		if (j.observation_paused) {
 			color = "pink";
-			car_du_milieu = moncycle_app_text.pregnancy_stamp_glyph;
-			car_du_bas = moncycle_app_text.pregnancy_glyph;
+			car_du_milieu = moncycle_app_text.observation_paused_stamp_glyph;
+			car_du_bas = "";
 		}
 		if (j.day_not_observed) {
 			car_du_milieu = moncycle_app_text.not_observed_glyph;
@@ -1025,7 +1024,7 @@ moncycle_app = {
 		day_timeline.append(`<span class='s'>${j.is_peak ? moncycle_app_text.peak_mucus : ""}</span>`);
 		if (moncycle_app.constante.nfp_method==1 || moncycle_app.constante.nfp_method==2) day_timeline.append(`<span class='n'></span>`);
 		day_timeline.append(`<span class='g ${color}'>${car_du_milieu}</span>`);
-		if ((moncycle_app.constante.nfp_method==3 || moncycle_app.constante.nfp_method==4) && !j.pregnancy && !j.day_not_observed && j.fc_score){
+		if ((moncycle_app.constante.nfp_method==3 || moncycle_app.constante.nfp_method==4) && !j.observation_paused && !j.day_not_observed && j.fc_score){
 			recap_note = recap_note.replace('X1','').replace('X2','').replace('X3','');
 			let fc_glaire = recap_note.match(/\d+/);
 			if (fc_glaire) recap_note = recap_note.replace(fc_glaire[0], '');
@@ -1065,7 +1064,7 @@ moncycle_app = {
 		let o_class = "day";
 		if (moncycle_app.constante.nfp_method==3 || moncycle_app.constante.nfp_method==4) o_class += " o_fc";
 		else o_class += " o_mucus";
-		if (j.pregnancy) o_class += " o_gross";
+		if (j.observation_paused) o_class += " o_paused";
 		let day_timeline = $("<div>", {id: o_id, class: o_class, date : moncycle_app.date.str(o_date)});
 		let d_bold = o_date.getDay()==0 ? "bold" : "";
 		day_timeline.append(`<span class='d ${d_bold}'>${moncycle_app_text.date_row(o_date)}</span>`);
@@ -1073,8 +1072,8 @@ moncycle_app = {
 		day_timeline.append(pos);
 		day_timeline.click(moncycle_app.open_menu);
 		let tbd = true;
-		if (j.pregnancy) {
-			day_timeline.append(`<span class='e'>${moncycle_app_text.pregnancy}</span>`);
+		if (j.observation_paused) {
+			day_timeline.append(`<span class='e'>${moncycle_app_text.observation_paused}</span>`);
 			day_timeline.append(`<span class='s'></span>`);
 			day_timeline.append(`<span class='n'></span>`);
 			tbd = false;
@@ -1277,7 +1276,7 @@ moncycle_app = {
 			$("#ev_hidden_counter_start").val(j.counter_start)
 		}
 		if (j.day_not_observed) $("#ev_jesaispas").prop('checked', true);
-		if (j.pregnancy) $("#ev_pregnancy").prop('checked', true);
+		if (j.observation_paused) $("#ev_observation_paused").prop('checked', true);
 		$("#from_com").val(j.comment);
 		moncycle_app.show_last_write(j);
 		$("html, body").css({

@@ -158,7 +158,7 @@ function day_format_filled(array $day, string $field): bool {
 // The day checked against what can be stored and cleaned for day_format_from_json(), its problems added to $issues. A day is its full
 // state: a field left out is empty, not a problem. The types are JSON's: a flag is true or false, a count a whole number.
 function day_format_validate(array $day, array &$issues): array {
-	foreach (['cycleFirstDay', 'dayNotObserved', 'stampBaby', 'isPeak', 'sexUnion', 'booleanPregnancyDetected'] as $field) {
+	foreach (['cycleFirstDay', 'dayNotObserved', 'stampBaby', 'isPeak', 'sexUnion', 'observationPaused'] as $field) {
 		if (array_key_exists($field, $day) && !is_bool($day[$field])) input_wrong_type($issues, $field, $day[$field], "true or false");
 	}
 
@@ -261,7 +261,7 @@ function day_format_to_json(array $day): array {
 		'isPeak' => boolval($day['is_peak'] ?? false),
 		'counterStart' => !empty($day['counter_start']) ? intval($day['counter_start']) : null,
 		'sexUnion' => boolval($day['union_sex'] ?? false),
-		'booleanPregnancyDetected' => boolval($day['pregnancy'] ?? false),
+		'observationPaused' => boolval($day['observation_paused'] ?? false),
 		'freeMucusSensation' => $descriptions[DESCRIPTION_TYPE_SENSATION],
 		'freeMucusObservation' => $descriptions[DESCRIPTION_TYPE_OBSERVATION],
 		'freeOther' => $descriptions[DESCRIPTION_TYPE_UNDEFINED],
@@ -295,7 +295,7 @@ function day_format_from_json(array $json): array {
 		'union_sex' => boolval($json['sexUnion'] ?? false),
 		'cycle_1st_day' => boolval($json['cycleFirstDay'] ?? false),
 		'day_not_observed' => boolval($json['dayNotObserved'] ?? false),
-		'pregnancy' => boolval($json['booleanPregnancyDetected'] ?? false),
+		'observation_paused' => boolval($json['observationPaused'] ?? false),
 		'comment' => $json['comment'] ?? null,
 		'counter_start' => isset($json['counterStart']) && intval($json['counterStart']) > 0 ? intval($json['counterStart']) : null,
 	];

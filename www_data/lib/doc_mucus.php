@@ -59,7 +59,7 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, bool $anonymo
 		$stamps = array_column(array_slice($rows, $first, $count), "stamp");
 		$legend = [];
 		if (in_array("unknown", $stamps, true)) $legend["unknown"] = "jour non observé ou non renseigné";
-		if (in_array("pregnancy", $stamps, true)) $legend["pregnancy"] = "grossesse";
+		if (in_array("paused", $stamps, true)) $legend["paused"] = "pause des observations";
 		doc_mucus_draw_legend($pdf, $legend);
 	}
 
@@ -96,7 +96,7 @@ function doc_mucus_rows(array $days): array {
 
 		// a day not observed and a day never filled in show the same stamp
 		$stamp = null;
-		if ($day["booleanPregnancyDetected"]) $stamp = "pregnancy";
+		if ($day["observationPaused"]) $stamp = "paused";
 		elseif ($day["isGap"] || $day["mucusNotObserved"]) $stamp = "unknown";
 		elseif (!is_null($day["stampColor"])) $stamp = $day["stampColor"];
 
@@ -374,7 +374,7 @@ function doc_mucus_draw_row(DocPdf $pdf, array $row, array $layout, float $y, bo
 	doc_mucus_draw_rule($pdf, $layout, $y + $h);
 }
 
-// The stamp: a square of the day's colour, with the baby on it. Not observed or not filled in is a grey "?", a pregnancy a pink "G".
+// The stamp: a square of the day's colour, with the baby on it. Not observed or not filled in is a grey "?", a pause of the observations a pink "II".
 function doc_mucus_draw_stamp(DocPdf $pdf, ?string $kind, bool $baby, float $x, float $y, float $size): void {
 	if (is_null($kind)) return;
 

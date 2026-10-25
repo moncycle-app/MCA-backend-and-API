@@ -19,7 +19,7 @@
 **
 **  - it holds what the API says, in the API's own JSON (the Day, Description and Account objects of
 **    api/moncycle_app_open_api.yaml), one key per thing: data_day_YYYY-MM-DD, data_descriptions,
-**    data_account (GET /api/v2/account, with the lists of cycles and pregnancies that GET /api/v2/timeline_sync
+**    data_account (GET /api/v2/account, with the lists of cycles and pauses that GET /api/v2/timeline_sync
 **    brings, and the news address that GET /api/v2/server_info gives: the page draws from this one object);
 **  - a change of a day is applied to the copy first, then sent. Until the server has taken it, it
 **    waits in a queue (data_pending, in localStorage too, so closing the page loses nothing) and the
@@ -36,7 +36,7 @@
 const moncycle_store = {
 
 	// Bump it when what is kept in localStorage changes shape: the copy of the versions before is dropped.
-	schema : 6,
+	schema : 7,
 	// The public demo accounts: ACCOUNT_DEMO_IDS of constants.php, change both. Whoever is on one is no one who has an
 	// account yet: the sign-up and the sign-in pages do not send them back to the app.
 	demo_user_ids : [2, 3],
@@ -48,7 +48,7 @@ const moncycle_store = {
 	// the copy, in memory (the same as in localStorage)
 	days : {},          // date -> Day: only the days that hold something, a cleared day is not kept
 	descriptions : [],  // [Description]
-	account : null,     // Account (GET /api/v2/account) + allCyclesFirstDay, allPregnancyDates (GET /api/v2/timeline_sync) + newsUrl (GET /api/v2/server_info)
+	account : null,     // Account (GET /api/v2/account) + allCyclesFirstDay, allObservationPausedDates (GET /api/v2/timeline_sync) + newsUrl (GET /api/v2/server_info)
 	account_etag : null,    // the ETag GET /api/v2/account gave for the account kept
 	news_url : null,    // newsUrl of GET /api/v2/server_info
 	last_sync : null,   // the syncTimestamp of the last merged answer
@@ -329,7 +329,7 @@ const moncycle_store = {
 	blank_day : function (date) {
 		let day = {
 			date : date, cycleStartDate : null, cycleDay : null, cycleFirstDay : false, dayNotObserved : false,
-			stampColor : null, stampBaby : false, isPeak : false, counterStart : null, sexUnion : false, booleanPregnancyDetected : false,
+			stampColor : null, stampBaby : false, isPeak : false, counterStart : null, sexUnion : false, observationPaused : false,
 			freeMucusSensation : [], freeMucusObservation : [], freeOther : [], temperature : null, temperatureTime : null, codifiedArrow : null,
 			comment : "", lastWriteClientUtc : null, lastWriteDb : null,
 		};
@@ -379,18 +379,18 @@ const moncycle_store = {
 		}
 		else if (!member && at >= 0) list.splice(at, 1);
 	},
-	// The account lists the first days and the pregnancies, and every day shows its place in its cycle:
+	// The account lists the first days and the pauses, and every day shows its place in its cycle:
 	// after a day changed, make both agree with it. Returns the dates of the days that changed (the day
 	// itself first) and whether the account's lists did.
 	follow_day : function (date) {
 		let day = moncycle_store.days[date];
 		if (!moncycle_store.account) return {days : [date], account : false};
-		let lists = JSON.stringify([moncycle_store.account.allCyclesFirstDay, moncycle_store.account.allPregnancyDates]);
+		let lists = JSON.stringify([moncycle_store.account.allCyclesFirstDay, moncycle_store.account.allObservationPausedDates]);
 		moncycle_store.set_member(moncycle_store.account.allCyclesFirstDay, date, !!(day && day.cycleFirstDay));
-		moncycle_store.set_member(moncycle_store.account.allPregnancyDates, date, !!(day && day.booleanPregnancyDetected));
+		moncycle_store.set_member(moncycle_store.account.allObservationPausedDates, date, !!(day && day.observationPaused));
 		moncycle_store.write(moncycle_store.keys.account, moncycle_store.account);
 		let moved = moncycle_store.recompute_cycles().filter(function (other) { return other != date; });
-		return {days : [date].concat(moved), account : lists !== JSON.stringify([moncycle_store.account.allCyclesFirstDay, moncycle_store.account.allPregnancyDates])};
+		return {days : [date].concat(moved), account : lists !== JSON.stringify([moncycle_store.account.allCyclesFirstDay, moncycle_store.account.allObservationPausedDates])};
 	},
 	recompute_cycles : function () {
 		let starts = moncycle_store.account.allCyclesFirstDay.slice().sort();
@@ -423,7 +423,7 @@ const moncycle_store = {
 			isPeak : !!body.isPeak,
 			counterStart : body.counterStart > 0 ? body.counterStart : null,
 			sexUnion : !!body.sexUnion,
-			booleanPregnancyDetected : !!body.booleanPregnancyDetected,
+			observationPaused : !!body.observationPaused,
 			freeMucusSensation : (body.freeMucusSensation || []).slice(),
 			freeMucusObservation : (body.freeMucusObservation || []).slice(),
 			freeOther : (body.freeOther || []).slice(),
@@ -794,7 +794,7 @@ const moncycle_store = {
 				let old = moncycle_store.account || {};
 				moncycle_store.account = Object.assign({}, ret.data, {
 					allCyclesFirstDay : old.allCyclesFirstDay || [],
-					allPregnancyDates : old.allPregnancyDates || [],
+					allObservationPausedDates : old.allObservationPausedDates || [],
 					newsUrl : moncycle_store.news_url,
 				});
 				moncycle_store.account_etag = jqXHR.getResponseHeader("ETag");
@@ -850,11 +850,11 @@ const moncycle_store = {
 		if (data.allCyclesFirstDay && moncycle_store.account) {
 			let before = JSON.stringify(moncycle_store.account);
 			moncycle_store.account.allCyclesFirstDay = data.allCyclesFirstDay;
-			moncycle_store.account.allPregnancyDates = data.allPregnancyDates || [];
+			moncycle_store.account.allObservationPausedDates = data.allObservationPausedDates || [];
 			// the answer does not know the days written here since: the lists agree with them
 			Object.keys(moncycle_store.pending).concat(Object.keys(moncycle_store.touched)).forEach(function (date) {
 				moncycle_store.set_member(moncycle_store.account.allCyclesFirstDay, date, !!(moncycle_store.days[date] && moncycle_store.days[date].cycleFirstDay));
-				moncycle_store.set_member(moncycle_store.account.allPregnancyDates, date, !!(moncycle_store.days[date] && moncycle_store.days[date].booleanPregnancyDetected));
+				moncycle_store.set_member(moncycle_store.account.allObservationPausedDates, date, !!(moncycle_store.days[date] && moncycle_store.days[date].observationPaused));
 			});
 			if (before !== JSON.stringify(moncycle_store.account)) changes.account = true;
 			moncycle_store.write(moncycle_store.keys.account, moncycle_store.account);

@@ -21,7 +21,7 @@ declare(strict_types=1);
 // (lib/nfp_export.php) is apart on purpose: a data file widened to whole cycles that writes every stored value.
 
 // The day as every export shows it. On a mucusNotObserved day the mucus fields are empty (DOC_MUCUS_FIELDS), even when old values are
-// stored; the rest (union, counter, peak, temperature, pain, arrow, pregnancy, comment) shows as usual. The descriptions with no type
+// stored; the rest (union, counter, peak, temperature, pain, arrow, pause, comment) shows as usual. The descriptions with no type
 // yet (freeOther) have no column of their own: they follow the comment.
 function doc_display_day(array $day): array {
 	if (!empty($day["mucusNotObserved"])) {

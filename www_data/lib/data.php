@@ -274,7 +274,7 @@ function data_sync_days($db, int $no_user_account, string $from_timestamp): arra
 }
 
 // The cursor for next time (the DB clock, read first, so that what is written meanwhile comes next time), the days, and every
-// description and every first day of a cycle and of a pregnancy: they are few, and coming whole is how a deletion reaches a client.
+// description, first day of a cycle and pause of the observations: they are few, and coming whole is how a deletion reaches a client.
 function data_sync($db, array $user_account, string $from_timestamp): array {
 	$no_user_account = intval($user_account["no_user_account"]);
 	$now = db_querie_select_now($db);
@@ -283,7 +283,7 @@ function data_sync($db, array $user_account, string $from_timestamp): array {
 		"days" => array_map('day_format_to_json', data_sync_days($db, $no_user_account, $from_timestamp)),
 		"descriptions" => array_map('data_description_to_json', db_querie_select_description_with_count($db, $no_user_account)),
 		"allCyclesFirstDay" => db_querie_select_cycles($db, $no_user_account),
-		"allPregnancyDates" => db_querie_select_pregnancies($db, $no_user_account),
+		"allObservationPausedDates" => db_querie_select_observation_paused_dates($db, $no_user_account),
 	];
 }
 

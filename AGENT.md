@@ -288,7 +288,7 @@ refactoring the old code.
   is sent from localStorage, because localStorage survives a reload of the page and the form does not. What enters the queue still
   comes from a form's `submit`.
 - **`store.js` is the local copy** (localStorage, in the API's own JSON): `data_day_YYYY-MM-DD`, `data_account` (the account of
-  `GET /api/v2/account` plus the lists of cycles and pregnancies of the sync plus `newsUrl` of `server_info`), `data_account_etag`,
+  `GET /api/v2/account` plus the lists of cycles and pauses of the sync plus `newsUrl` of `server_info`), `data_account_etag`,
   `data_descriptions`, `data_pending` (the queue of unsent days), `data_pending_descriptions` (descriptions made here that the server
   has not created), `data_last_sync`, `data_version`. It runs the sync (`GET /api/v2/server_info` once for the version, `GET /api/v2/account`
   with its ETag, then `GET /api/v2/timeline_sync?since=`, one answer, not paged), the queue and its retries, and the end of the session

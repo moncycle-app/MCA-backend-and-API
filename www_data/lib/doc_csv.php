@@ -33,12 +33,12 @@ function doc_csv_columns(int $nfp_method): array {
 		return ["date", "cycleDay", "cycleFirstDay", "mucusNotObserved", "stampColor", "stampBaby",
 			"codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation",
 			"codifiedNumberObservations", "codifiedPainObservations", "codifiedArrow",
-			...$temperature, "isPeak", "sexUnion", "booleanPregnancyDetected", "comments"];
+			...$temperature, "isPeak", "sexUnion", "observationPaused", "comments"];
 	}
 
 	return ["date", "cycleDay", "cycleFirstDay", "mucusNotObserved", "stampColor", "stampBaby",
 		"freeMucusSensation", "freeMucusObservation",
-		...$temperature, "isPeak", "counterStart", "sexUnion", "booleanPregnancyDetected", "comments"];
+		...$temperature, "isPeak", "counterStart", "sexUnion", "observationPaused", "comments"];
 }
 
 function doc_csv_cycle($out, array $days, int $nfp_method): void {

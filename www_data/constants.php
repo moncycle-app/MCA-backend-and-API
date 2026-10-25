@@ -223,7 +223,7 @@ const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "oldestDay", "tot
 
 // The names a day body may use (POST /api/v2/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
 const DAY_INPUT_FIELDS = [
-	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "booleanPregnancyDetected",
+	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "observationPaused",
 	"freeMucusSensation", "freeMucusObservation", "freeOther", "temperature", "temperatureTime", "codifiedArrow",
 	"codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations",
 	"comment", "lastWriteClientUtc",
@@ -469,6 +469,11 @@ const NFP_STAMP_COLORS = ["Green", "Red", "Yellow", "White"];
 const NFP_SEX_UNIONS = ["Union", "ReservedUnion", "LastReportedUnion"];
 const NFP_ARROWS = ["Up", "Down", "Right"];
 
+// A pause of the observations: the cycle it ends says so with the format's end-of-cycle reason (this app records no reason, so always
+// "Other"), and its day with this event of codifiedEvents, a custom value the format allows, so that the date survives a round trip.
+const NFP_END_OF_CYCLE_PAUSED = "Other";
+const NFP_EVENT_OBSERVATION_PAUSED = "ObservationPaused";
+
 // The spec's _incompatibleWith list of mucusNotObserved (its "codifiedBloodObservation" read as "codifiedBleedingObservation").
 const NFP_MUCUS_NOT_OBSERVED_INCOMPATIBLE = [
 	"codifiedMucusObservation",
@@ -500,7 +505,6 @@ const NFP_DAY_FIELDS_NOT_STORED = [
 	"codifiedCervixHeight" => "cervix observations are not recorded here",
 	"codifiedTemperatureParasitic" => "no temperature-disturbance field is recorded here",
 	"temperatureCaptureOffset" => "only an absolute temperatureTime is recorded here",
-	"codifiedEvents" => "no pre-defined event list is recorded here",
 	"babyFeedCount" => "no feed count is recorded here",
 	"codifiedManualFertility" => "fertility is computed for display, not stored",
 ];
@@ -519,6 +523,7 @@ const NFP_DAY_FIELDS_STORED = [
 	"temperature",
 	"temperatureTime",
 	"booleanPregnancyDetected",
+	"codifiedEvents",
 	"isPeak",
 	"stampColor",
 	"stampBaby",
@@ -529,15 +534,15 @@ const NFP_DAY_FIELDS_STORED = [
 const NFP_CYCLE_FIELDS_NOT_STORED = [
 	"cycleParticularCases" => "no per-cycle case list is recorded here",
 	"comment" => "only per-day comments are recorded here",
-	"currentCyclePlannedPregnancy" => "pregnancy intention is not recorded here",
-	"nextMonthsPlannedPregnancy" => "pregnancy intention is not recorded here",
-	"endOfCycleFollowUp" => "no end-of-cycle reason is recorded here",
+	"currentCyclePlannedPregnancy" => "no intention is recorded here",
+	"nextMonthsPlannedPregnancy" => "no intention is recorded here",
 	"temperatureUsualTime" => "no usual capture time is recorded here",
 	"temperatureCaptureType" => "no capture type is recorded here",
 	"temperatureThermometerType" => "no thermometer type is recorded here",
 ];
 
 const NFP_CYCLE_FIELDS_STRUCTURAL = ["method", "cycleStartDate", "days"];   // the keys a cycle cannot do without
+const NFP_CYCLE_FIELDS_STORED = ["endOfCycleFollowUp"];                    // read as a pause of the observations
 
 // ===========================================================================
 // CSV AND PDF EXPORTS -- what both charts and the CSV share (lib/doc.php)
@@ -559,7 +564,7 @@ const DOC_MUCUS_FIELDS = [
 ];
 
 const DOC_PDF_MARGIN = 10;                                  // mm kept free on every side of the page, in both charts
-const DOC_PREGNANCY_COLOR = [130, 21, 33];                  // r, g, b of the pregnancy "G" and "GROSSESSE" text, in both charts
+const DOC_PAUSE_COLOR = [130, 21, 33];                      // r, g, b of the pause "II" and "PAUSE" text, in both charts
 const DOC_MUCUS_TEMPERATURE_COLOR = [135, 67, 176];          // r, g, b of the temperature reading, its curve and its points
 
 // style => [font family, font style, size in pt, [r, g, b]]; "mucus.*" for the cervical mucus table, "fc.*" for the FertilityCare grid.
@@ -640,7 +645,7 @@ const DOC_MUCUS_TEXT_COLUMNS = [
 // The stamps that are not a colour of the app: kind => [fill, glyph, glyph colour].
 const DOC_MUCUS_SPECIAL_STAMPS = [
 	"unknown" => [[226, 226, 226], "?", [130, 130, 130]],
-	"pregnancy" => [[255, 226, 230], "G", DOC_PREGNANCY_COLOR],
+	"paused" => [[255, 226, 230], "II", DOC_PAUSE_COLOR],
 ];
 const DOC_MUCUS_STAMP_COLORS = [          // stampColor => r, g, b of the stamp
 	"Red" => [172, 36, 51],
@@ -687,7 +692,7 @@ const DOC_FC_STAMPS = [
 	'RBB' => ['BBR', 190, 0, 0],     // bébé rouge
 	'GBB' => ['BBV', 130, 187, 106], // bébé vert
 	'YBB' => ['BBJ', 255, 255, 9],   // bébé jaune
-	'Gi' => ['G', 255, 236, 238], // pregnancy ("Grossesse") -- TODO: another letter, G reads like Green
+	'pause' => ['II', 255, 236, 238], // observations paused
 ];
 
 // codifiedArrow => its glyph in the Symbol font

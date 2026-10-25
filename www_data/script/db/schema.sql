@@ -50,7 +50,7 @@ CREATE TABLE `day_timeline` (
   `counter_start` tinyint(1) unsigned DEFAULT NULL,
   `union_sex` tinyint(1) unsigned DEFAULT NULL,
   `cycle_1st_day` tinyint(1) unsigned DEFAULT NULL,
-  `pregnancy` tinyint(1) unsigned DEFAULT NULL,
+  `observation_paused` tinyint(1) unsigned DEFAULT NULL,
   `comment` varchar(256) COLLATE utf8mb4_bin DEFAULT NULL,
   `last_write_client_UTC` timestamp NULL DEFAULT NULL,
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),

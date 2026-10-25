@@ -42,9 +42,9 @@ CHANGE `jour_sommet` `is_peak` tinyint(1) unsigned NULL AFTER `time_temp_taken`;
 ALTER TABLE `observation`
 CHANGE `compteur` `counter_start` tinyint(1) unsigned NULL AFTER `is_peak`;
 ALTER TABLE `observation`
-CHANGE `grossesse` `pregnancy` tinyint(1) unsigned NULL AFTER `cycle_1st_day`;
+CHANGE `grossesse` `observation_paused` tinyint(1) unsigned NULL AFTER `cycle_1st_day`;
 ALTER TABLE `observation`
-CHANGE `commentaire` `comment` varchar(256) COLLATE 'utf8mb4_bin' NULL AFTER `pregnancy`;
+CHANGE `commentaire` `comment` varchar(256) COLLATE 'utf8mb4_bin' NULL AFTER `observation_paused`;
 
 
 ALTER TABLE `compte`

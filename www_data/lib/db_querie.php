@@ -422,7 +422,7 @@ function db_querie_select_day_timeline_dates_written_since($db, string $since, i
 function db_querie_select_day_timelines_range($db, string $start_date, ?string $end_date, $no_user_account): array {
 	return db_ops_rows($db,
 		"SELECT no_day, date_obs, day_not_observed, fc_score, fc_arrow, stamp, temperature, time_temp_taken, is_peak, counter_start,
-		union_sex, cycle_1st_day, pregnancy, comment, last_write_client_UTC, last_write_db
+		union_sex, cycle_1st_day, observation_paused, comment, last_write_client_UTC, last_write_db
 		FROM day_timeline
 		WHERE no_user_account = :no_user_account AND date_obs >= :start_date AND (:end_date IS NULL OR date_obs < :end_date)
 		ORDER BY date_obs ASC",
@@ -452,12 +452,12 @@ function db_querie_insert_day_timeline($db, string $date, $no_user_account): str
 function db_querie_update_day_timeline($db, string $date, $no_user_account, string $last_write_client_UTC, array $fields = []): int {
 	$fields += [
 		"stamp" => '', "fc_score" => null, "fc_arrow" => null, "temp" => null, "htemp" => null, "is_peak" => null, "union_sex" => null,
-		"cycle_1st_day" => null, "day_not_observed" => null, "pregnancy" => null, "comment" => null, "counter_start" => null,
+		"cycle_1st_day" => null, "day_not_observed" => null, "observation_paused" => null, "comment" => null, "counter_start" => null,
 	];
 	return db_ops_exec($db,
 		"UPDATE day_timeline SET stamp = :stamp, fc_score = :fc_score, fc_arrow = :fc_arrow, temperature = :temp, time_temp_taken = :htemp,
 		is_peak = :is_peak, union_sex = :union_sex, cycle_1st_day = :cycle_1st_day, day_not_observed = :day_not_observed,
-		pregnancy = :pregnancy, comment = :comment, counter_start = :counter_start, last_write_client_UTC = :last_write_client_UTC,
+		observation_paused = :observation_paused, comment = :comment, counter_start = :counter_start, last_write_client_UTC = :last_write_client_UTC,
 		last_write_db = CURRENT_TIMESTAMP
 		WHERE date_obs = :date AND no_user_account = :no_user_account",
 		$fields + ["last_write_client_UTC" => $last_write_client_UTC, "date" => $date, "no_user_account" => $no_user_account]
@@ -473,8 +473,8 @@ function db_querie_select_cycles($db, $no_user_account): array {
 	return db_ops_column($db, "SELECT date_obs FROM day_timeline WHERE no_user_account = :no_user_account AND cycle_1st_day = 1 ORDER BY date_obs DESC", ["no_user_account" => $no_user_account]);
 }
 
-function db_querie_select_pregnancies($db, $no_user_account): array {
-	return db_ops_column($db, "SELECT date_obs FROM day_timeline WHERE no_user_account = :no_user_account AND pregnancy = 1 ORDER BY date_obs DESC", ["no_user_account" => $no_user_account]);
+function db_querie_select_observation_paused_dates($db, $no_user_account): array {
+	return db_ops_column($db, "SELECT date_obs FROM day_timeline WHERE no_user_account = :no_user_account AND observation_paused = 1 ORDER BY date_obs DESC", ["no_user_account" => $no_user_account]);
 }
 
 // the first day of the cycle a date is in, null before the first cycle
@@ -487,12 +487,13 @@ function db_querie_select_cycle($db, string $date, $no_user_account): ?string {
 // The cron
 // ---------------------------------------------------------------------------
 
-// the accounts whose cycle began two days ago (so the one before is finished) and that receive their cycles (auto_mail_export)
+// the accounts whose cycle began, or whose observations were paused, two days ago (so the cycle before is finished) and that receive
+// their cycles (auto_mail_export)
 function db_querie_select_cycles_finished($db): array {
 	return db_ops_rows($db,
 		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.login_email, c.notification_emails
 		FROM day_timeline AS obs JOIN user_account AS c ON obs.no_user_account = c.no_user_account
-		WHERE obs.date_obs = CURDATE() - INTERVAL 2 DAY AND (obs.cycle_1st_day = 1 OR obs.pregnancy = 1) AND c.auto_mail_export = 1"
+		WHERE obs.date_obs = CURDATE() - INTERVAL 2 DAY AND (obs.cycle_1st_day = 1 OR obs.observation_paused = 1) AND c.auto_mail_export = 1"
 	);
 }
 
@@ -639,12 +640,12 @@ function db_querie_upsert_key_value($db, string $key, int $value): int {
 // demo accounts.
 // ---------------------------------------------------------------------------
 
-// Per week of the last $weeks, by the date of the observation: the days, the accounts that wrote one, the cycles and pregnancies begun.
+// Per week of the last $weeks, by the date of the observation: the days, the accounts that wrote one, the cycles begun and the pauses of the observations.
 // A week with no day has no row. Served by the index on date_obs.
 function db_querie_select_day_timeline_weekly($db, int $weeks): array {
 	return db_ops_rows($db,
 		"SELECT FLOOR((DATEDIFF(CURDATE(), dt.date_obs) - 1) / 7) AS week, COUNT(dt.no_day) AS days, COUNT(DISTINCT dt.no_user_account) AS accounts,
-		COALESCE(SUM(dt.cycle_1st_day = 1), 0) AS cycles, COALESCE(SUM(dt.pregnancy = 1), 0) AS pregnancies
+		COALESCE(SUM(dt.cycle_1st_day = 1), 0) AS cycles, COALESCE(SUM(dt.observation_paused = 1), 0) AS pauses
 		FROM day_timeline AS dt
 		WHERE dt.date_obs >= CURDATE() - INTERVAL :nb_days DAY AND dt.date_obs < CURDATE() AND dt.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
 		GROUP BY week ORDER BY week",

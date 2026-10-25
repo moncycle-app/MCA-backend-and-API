@@ -55,10 +55,10 @@ function weekly_report_method_label(int $nfp_method): string {
 function weekly_report_collect($db): array {
 	$weeks = WEEKLY_REPORT_WEEKS;
 	$today = new DateTimeImmutable(db_querie_select_curdate($db));
-	$empty = ["days" => 0, "writers" => 0, "cycles" => 0, "pregnancies" => 0, "signups" => 0, "verified" => 0];
+	$empty = ["days" => 0, "writers" => 0, "cycles" => 0, "pauses" => 0, "signups" => 0, "verified" => 0];
 	$by_week = array_fill(0, $weeks, $empty);
 	foreach (db_querie_select_day_timeline_weekly($db, $weeks) as $row) {
-		$by_week[intval($row["week"])] = ["days" => intval($row["days"]), "writers" => intval($row["accounts"]), "cycles" => intval($row["cycles"]), "pregnancies" => intval($row["pregnancies"])] + $by_week[intval($row["week"])];
+		$by_week[intval($row["week"])] = ["days" => intval($row["days"]), "writers" => intval($row["accounts"]), "cycles" => intval($row["cycles"]), "pauses" => intval($row["pauses"])] + $by_week[intval($row["week"])];
 	}
 	foreach (db_querie_select_user_account_weekly($db, $weeks) as $row) {
 		$by_week[intval($row["week"])]["signups"] = intval($row["accounts"]);
@@ -371,7 +371,7 @@ function weekly_report_html(array $data, array $figures): string {
 		weekly_report_tile("🌀 Cycles commencés", $n($w0["cycles"]), weekly_report_delta($w0["cycles"], $w1["cycles"], "neutral"), $n($w1["cycles"]) . " la sem. passée"),
 		weekly_report_tile("📝 Jours par compte", $n($per_writer, 1), weekly_report_delta(round($per_writer, 1), round($per_writer_before, 1)), "sur 7 · " . $n($per_writer_before, 1) . " la sem. passée"),
 	]) . weekly_report_bars("Comptes qui ont noté, par semaine", array_column($data["weeks"], "writers"));
-	if ($w0["pregnancies"] > 0) $usage .= "<div style=\"padding:12px 6px 0 6px;font-size:14px;line-height:20px;color:#3d4a42;\">🍼 " . $n($w0["pregnancies"]) . " début" . ($w0["pregnancies"] > 1 ? "s" : "") . " de grossesse noté" . ($w0["pregnancies"] > 1 ? "s" : "") . " cette semaine.</div>";
+	if ($w0["pauses"] > 0) $usage .= "<div style=\"padding:12px 6px 0 6px;font-size:14px;line-height:20px;color:#3d4a42;\">⏸️ " . $n($w0["pauses"]) . " pause" . ($w0["pauses"] > 1 ? "s" : "") . " des observations notée" . ($w0["pauses"] > 1 ? "s" : "") . " cette semaine.</div>";
 
 	$sessions = weekly_report_tiles([
 		weekly_report_tile("🔑 Connexions ≈", $n($data["tokens_ever"][0]), weekly_report_delta($data["tokens_ever"][0], $data["tokens_ever"][1]), "jetons créés · " . $n($data["tokens_ever"][1]) . " la sem. passée"),
