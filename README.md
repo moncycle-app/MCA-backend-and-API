@@ -1,7 +1,8 @@
 # moncycle.app
 
-A menstrual cycle tracking app designed for natural birth control methods (aka natural family planning): a web app and an HTTP API
-that you can host yourself.
+A menstrual cycle tracking app designed for natural birth control methods (aka natural family planning): an HTTP API and a web app
+that you can host yourself. This repository is the API (**MCA-backend-and-API**); the web app is **MCA-web-APP** and the Docker image
+that serves both is **MCA-Docker-image**.
 
 Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-profit organisation.
 
@@ -20,11 +21,12 @@ Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-prof
 
 | Path | What |
 |---|---|
-| `www_data/` | The whole app, and the web server's document root: the web app (static pages and scripts, no build step), the HTTP API (`api/v2/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`). |
-| `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description. |
-| `server_conf/` | What the Docker image runs on: Apache and PHP settings, the entrypoint, the crontabs. `zz-moncycleapp.conf` is the reference for any Apache. |
+| `www_data/` | The API: the HTTP endpoints (`api/v2/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`), the settings (`config*.php`, `constants.php`). |
+| `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description: **the contract** between this API and its clients, the web app included. |
 | `docs/` | Security, deployment, upgrading, monitoring and the log reference. |
-| `Dockerfile`, `docker-compose.exemple.yml` | The image and a compose file to start from. |
+
+The web app (static HTML, CSS and JavaScript) is in **MCA-web-APP**. The image, Apache and PHP settings, the entrypoint, the crontabs and
+the compose example are in **MCA-Docker-image**, whose `build.sh` builds one image from the three folders side by side.
 
 Requirements: **PHP 8.4**, **MariaDB 11.1** (tested with 11.1.3) and an SMTP server (implicit TLS, port 465) for the mails that verify
 an address, reset a password and report new sign-ins.
@@ -33,22 +35,9 @@ an address, reset a password and report new sign-ins.
 
 ### With Docker
 
-The image is [jeanio/moncycle.app](https://hub.docker.com/r/jeanio/moncycle.app). It makes its own schema on the first start, runs the
-daily cron by itself, and serves plain HTTP on port 80.
-
-1. **Create an empty MariaDB database and a user** with all privileges on it. Nothing to load: when the database has no table, the
-   first start of the container makes the schema ([`schema.sql`](www_data/script/db/schema.sql), and the demo accounts if
-   `DEMO_ENABLED`), after waiting up to a minute for the database to answer. A database that has tables is left as it is.
-2. **Copy [`docker-compose.exemple.yml`](docker-compose.exemple.yml)** and set `APP_URL` (with a trailing `/`), the `DB_*` and
-   `SMTP_*` variables and the two secret files (`db_password`, `smtp_password`). The SMTP server is required: sign-up and password
-   links travel by mail. Every setting is in [Settings](#settings).
-3. **Start it:** `docker compose up -d`, then `curl -fsS http://127.0.0.1:8080/api/v2/health_check` must answer
-   `{"data":{"status":"oookkk"}}`.
-4. **Put a reverse proxy in front.** The container serves plain HTTP on `127.0.0.1:8080`: add TLS, and set `TRUSTED_PROXIES` to the
-   proxy's address, or every visitor looks like the same address to the login throttling. See [docs/deployment.md](docs/deployment.md).
-5. **Nothing to do for the cron:** the container runs it every day (see [Cron](#cron)).
-
-Then open `APP_URL`, create an account (a captcha, then a link by mail) and write a first day.
+The image holds the API and the web app: see the README of **MCA-Docker-image** (compose example, volumes, reverse proxy, build). It
+makes its own schema on the first start and runs the daily cron by itself. Every setting is in [Settings](#settings); the container
+takes them as environment variables.
 
 ### Without Docker
 
@@ -68,14 +57,7 @@ is in [Without Docker, in production](docs/deployment.md#without-docker-in-produ
    composer install --no-dev
    ```
 
-   The timeline's chart library comes from outside Composer. Fetch it the way the [`Dockerfile`](Dockerfile) does (same version and
-   checksum; `shasum -a 256` on macOS):
-
-   ```sh
-   mkdir -p vendor/chartjs
-   curl -fsSL -o vendor/chartjs/chart.js https://cdn.jsdelivr.net/npm/chart.js@4.5.1
-   echo "48444a82d4edcb5bec0f1965faacdde18d9c17db3063d042abada2f705c9f54a  vendor/chartjs/chart.js" | sha256sum -c -
-   ```
+   The web app is another project (**MCA-web-APP**: `npm ci`, then serve its `src/`).
 
 2. **Create the database and its user.**
 
@@ -105,8 +87,10 @@ is in [Without Docker, in production](docs/deployment.md#without-docker-in-produ
    database (and the demo accounts if `DEMO_ENABLED`). It leaves a database that has tables as it is; `php auto_upgrade.php` brings an older
    one to the version of the code.
 
-5. **Point your web server at `www_data/`** as its document root and set it up as
-   [deployment.md](docs/deployment.md#without-docker-in-production) describes, then open your `APP_URL`.
+5. **Point your web server at the API**: `www_data/api/` must answer under `/api/` (and `www_data/script/` under `/script/`, for this
+   machine only); the web app's `src/` is the document root of the site. Set it up as
+   [deployment.md](docs/deployment.md#without-docker-in-production) describes (written for one document root: adapt it with an alias),
+   then open your `APP_URL`.
    The app's log goes to `stdout` by default, which PHP-FPM does not keep: set `LOG_OUTPUT` to `stderr` (with `catch_workers_output = yes`)
    or to a file (see [logs](docs/logs.md)).
 
@@ -260,7 +244,7 @@ later makes them at the next full hour.
 - **The API** answers `503 maintenance` on every endpoint before opening the database, downloads included. The exception is
   `GET /api/v2/server_info`, which answers `200` with `"maintenanceMode": true` so a client can tell its user. Static pages stay up.
   **A container healthcheck must accept the 503 of `health_check` as alive**, or the server is restarted as dead (the one in
-  [`docker-compose.exemple.yml`](docker-compose.exemple.yml) does).
+  `docker-compose.exemple.yml` (in MCA-Docker-image) does).
 - **The cron** refuses to run, dry run included, and exits with status 1.
 - **Not affected:** the migrations and `script/stat.php`.
 
@@ -309,14 +293,34 @@ curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/v2/account
 curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST -d '{"stampColor":"Red"}' https://YOUR.HOST/api/v2/day/2026-09-20
 ```
 
+### Versioning
+
+The integer at the start of `APP_VERSION` (`constants.php`: `16`, `16dev`) is the API generation, the database schema and the migration
+`vN` all at once; `GET /api/v2/server_info` tells it as `appVersion`. It goes up when the contract changes in a way an older client
+cannot follow. The contract is [`moncycle_app_open_api.yaml`](www_data/api/moncycle_app_open_api.yaml), which stays in this repository
+(a web app keeps no copy). A web app declares the range of generations it was tested with and compares it with `appVersion`.
+
+### Remote web app
+
+The web app is its own project and can be served from another origin than the API. It then signs in with `POST /token` (no `cookie`),
+keeps the token and sends it as `Authorization: Bearer`; nothing in the contract changes. What the operator sets up:
+
+- **`WEB_APP_ORIGINS`** lists the web app's origin: a browser write (`POST`, `DELETE`) from any other origin gets `403 cross_origin_refused`.
+- **CORS** is answered by the web server, not by PHP (`api/` may hold static files). For nginx, YunoHost or another proxy, for the web app's
+  origin only (never `*`), on every answer of `/api/` including errors, and an `OPTIONS` preflight answered `204` without authentication:
+  `Access-Control-Allow-Origin: <origin>`, `Vary: Origin`, `Access-Control-Allow-Headers: Authorization, Content-Type, If-None-Match`,
+  `Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS`, `Access-Control-Expose-Headers: Content-Disposition, X-Request-Id, ETag`. No
+  `Access-Control-Allow-Credentials`: there is no cookie. The Docker image does it from its `CORS_ALLOWED_ORIGINS` setting (docker repository).
+- **`apiUrl`** in the web app's `config.json` is one of the `servers` of the YAML, e.g. `https://tableau.moncycle.app/api/v2`, never a link
+  without `/api/v2`.
+- **`APP_URL`** is the web app's public URL: it builds the links of the mails and the TOTP image.
+
 ## Development
 
 - **Without Docker:** your own Apache or PHP-FPM on `www_data/` ([deployment](docs/deployment.md#without-docker-in-production)). Set
   `PHP_SECURE_COOKIES` to `false` on plain HTTP, and `DEMO_ENABLED` to `true` to sign in without a mail server.
-- **With Docker:** the image is production by default. For development copy [`dev.env.example`](dev.env.example) to `dev.env` and give
-  it to the container (`docker run --env-file dev.env`, or `env_file: ./dev.env` in compose): PHP errors shown, assertions on, no
-  cache, cookies over plain HTTP, `debug` logs in `text` format. The code is baked into the image, so a deploy is a rebuild; for
-  development, bind-mount `www_data`. Update dependencies on purpose with `composer update` and commit the lock.
+- **With Docker:** see the README of **MCA-Docker-image** (production by default; `dev.env` for development; bind-mount `www_data` over
+  `/var/www/html` and the web app's `src` over `/var/www/webapp`). Update dependencies on purpose with `composer update` and commit the lock.
 - **Conventions and layout:** [AGENT.md](AGENT.md) describes where code goes and the rules the codebase keeps, for people as much as
   for coding agents.
 - There is no automated test suite in this repository: check a change by calling the endpoints.

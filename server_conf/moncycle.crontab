@@ -1,3 +1,0 @@
-# The daily job of the image (CRON_ENABLED, README "Cron"), run by supercronic as the web user. Fields: minute
-# hour day-of-month month day-of-week. The hour is the container's time zone (TZ, UTC when it is not set).
-30 3 * * * php /var/www/html/script/cron.php

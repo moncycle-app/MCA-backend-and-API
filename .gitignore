@@ -1,4 +1,3 @@
-docker-compose.yml
 www_data/config.php
 www_data/info.php
 www_data/test.php
@@ -11,10 +10,8 @@ gitignore
 *.bak
 *.bak.*
 *.swp
-*.pw
 .DS_Store
 .vscode
 TODO.md
 CLAUDE.md
-dev.env
 SECURITY_AUDIT.md

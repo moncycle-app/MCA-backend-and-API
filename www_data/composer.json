@@ -6,7 +6,6 @@
 	"require": {
 		"phpmailer/phpmailer": "7.*",
 		"fpdf/fpdf" : "1.*",
-		"components/jquery" : "4.0.*",
 		"swagger-api/swagger-ui" : "5.*",
 		"spomky-labs/otphp" : "11.*",
 		"bacon/bacon-qr-code" : "3.*",

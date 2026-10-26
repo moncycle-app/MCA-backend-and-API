@@ -161,7 +161,7 @@ Content-Security-Policy has `script-src 'self'`: no inline script runs.
   `*.sql` and `*.md`.
 - `script/` (cron, stats, migrations) answers only to the machine itself: `APP_SCRIPT_ALLOW` (default `127.0.0.1 ::1`). Behind a
   reverse proxy Apache sees the proxy's address, so do not open it to an IP unless Apache gets the real client address.
-- `disable_functions` and `open_basedir` in [`server_conf/moncycleapp_php.ini`](../server_conf/moncycleapp_php.ini) are defence in
+- `disable_functions` and `open_basedir` in `server_conf/moncycleapp_php.ini` (in MCA-Docker-image) are defence in
   depth, not a sandbox.
 - The app writes nothing to its disk, except its log file if you ask for one.
 

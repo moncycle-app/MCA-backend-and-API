@@ -177,7 +177,7 @@ Every key the code can write. The first block is on every line.
 | `http.request` | info | `m`, `p`, `st`, `ms`, `err`, `n`, `nds`, `full` | The end of every request that reached the app, with the ids the request named (`uid`, `sid`, `day`, `dsc`, `rev`). A read is this line with a `GET`, the `uid`, the path and `n` (and `nds` for a sync); `full` is true for `GET /api/v2/timeline_sync` from the start. `GET /api/v2/day/{date}` names the `day` when it was ever written, and `n` is 0 or 1. |
 
 `account.refused` and `auth.login_failed` are the only lines whose volume an attacker controls (`rate_limited`): the reverse proxy's rate
-limit ([deployment.md](deployment.md#reverse-proxy)) bounds it. The health check of [docker-compose.exemple.yml](../docker-compose.exemple.yml)
+limit ([deployment.md](deployment.md#reverse-proxy)) bounds it. The health check of docker-compose.exemple.yml (in MCA-Docker-image)
 calls `/api/v2/health_check` every 30 s; it is not logged unless it fails.
 
 ## To a file

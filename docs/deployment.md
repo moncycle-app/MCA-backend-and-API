@@ -15,7 +15,7 @@ The Docker image serves plain HTTP and is made to sit behind a reverse proxy. Th
 
 - **Terminate TLS** and redirect http to https. The image sends `Strict-Transport-Security` itself when the request carries
   `X-Forwarded-Proto: https`: make the proxy set that header. If the proxy already sends HSTS, remove that line from
-  [`server_conf/zz-moncycleapp.conf`](../server_conf/zz-moncycleapp.conf) to avoid a duplicate.
+  `server_conf/zz-moncycleapp.conf` (in MCA-Docker-image) to avoid a duplicate.
 - **Rate-limit** `/api/v2/token`, `/api/v2/register`, `/api/v2/recover_password`, `/api/v2/verify_email` and `/api/v2/captcha`.
   The app counts failed attempts, but it cannot limit requests it is never asked to check (a captcha costs a JPEG to draw), and these
   endpoints hold a worker for a while on purpose: `recover_password` sleeps 1 to 5 s, a password check takes about 240 ms and 46 MiB
@@ -43,7 +43,7 @@ address) becomes one limit for everyone, and the `ip` of the log is the proxy.
 
 ## Limits
 
-Set in [`server_conf/`](../server_conf/); they are part of the image.
+Set in `server_conf/` (in MCA-Docker-image); they are part of the image.
 
 - **Apache:** request body 10 MB, 30 s `Timeout`, 30 workers of about 21 MB each. A request to `/api/` with a larger
   `Content-Length` gets `413 file_too_large` before PHP starts. `LimitRequestBody` is the same wall for a body sent in chunks.
@@ -94,7 +94,7 @@ Pages served by anything else need the same policy from their own server. Swagge
 The [README](../README.md#without-docker) installs the code, the database and `config.php` (every setting is a `define()` line there, so
 no environment variable and no Docker is needed). The web server is yours: Apache with `mod_php` or PHP-FPM, or nginx with PHP-FPM,
 with `www_data/` as its document root, doing what the Docker image's Apache does.
-[`server_conf/zz-moncycleapp.conf`](../server_conf/zz-moncycleapp.conf) is the reference.
+`server_conf/zz-moncycleapp.conf` (in MCA-Docker-image) is the reference.
 
 1. **Serve the pages and the API without their extension.** `/auth` is `auth.html`, `/api/v2/token` is `api/v2/token.php`, and what
    follows the script name is its `PATH_INFO`: `/api/v2/day/2026-03-10` runs `api/v2/day.php` with `PATH_INFO=/2026-03-10`. Apache does it
@@ -106,7 +106,7 @@ with `www_data/` as its document root, doing what the Docker image's Apache does
 4. **Cap the body at 10 MB** and set `post_max_size = 10M` (see [Limits](#limits)).
 5. **Send the security headers**: the Content-Security-Policy above, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`
    and, over HTTPS, `Strict-Transport-Security`. Send `Cache-Control: no-store` on `/api/`.
-6. **PHP settings** worth keeping from [`server_conf/moncycleapp_php.ini`](../server_conf/moncycleapp_php.ini): `date.timezone = UTC`
+6. **PHP settings** worth keeping from `server_conf/moncycleapp_php.ini` (in MCA-Docker-image): `date.timezone = UTC`
    (the app stores UTC), `display_errors = Off` with `log_errors = On`, `expose_php = Off`, `memory_limit = 64M`,
    `max_execution_time = 30`, `file_uploads = Off`, and `open_basedir` set to the app's directory (add the directory of the log file,
    if any, and your secrets directory). The file's `${VAR:-default}` values are filled from the container's environment; outside
