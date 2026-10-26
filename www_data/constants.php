@@ -19,7 +19,7 @@ declare(strict_types=1);
 // with are the schema's version: the row 'schema_version' of key_value (schema.sql inserts it, every migration sets it) must say that integer
 // or nothing is served (503 schema_mismatch); upgrade_schema_version() reads it. The newest migration is script/migration/v<N - 1>_to_v<N>.*;
 // GET /api/v2/server_info tells the whole string as appVersion. The version of the API contract is the v2 of the URL (api/v2/), not this one.
-const APP_VERSION = "15";
+const APP_VERSION = "16dev";
 
 // The commit the image was built from (8 hex digits, or "unknown"): the Dockerfile replaces "dev" below at build time. Not in server_info.
 const APP_COMMIT = "dev";

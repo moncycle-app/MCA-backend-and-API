@@ -125,4 +125,4 @@ CREATE TABLE `key_value` (
 
 -- 'schema_version' must be APP_VERSION (constants.php): the code serves nothing from a database that says another number.
 INSERT INTO `key_value` (`key`, `value`) VALUES
-('schema_version',	15);
+('schema_version',	16);
