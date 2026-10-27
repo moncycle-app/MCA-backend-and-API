@@ -13,7 +13,7 @@
 ** https://www.moncycle.app
 ** https://github.com/moncycle-app/backend-api-web-app
 -->
-<html lang="fr" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="{{lang}}" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -123,7 +123,7 @@
 						<p class="mc-heading" style="margin:0 0 14px 0;font-size:17px;line-height:26px;font-weight:600;color:#14231a;">{{greeting}}</p>
 					</td></tr>
 
-					<!-- The body of the mail: HTML made by the code, with the components of mail/README.md. -->
+					<!-- The body of the mail: HTML made by the code, with the components of docs/mail.md. -->
 					<tr><td class="mc-pad mc-text" style="padding:0 40px;font-size:16px;line-height:26px;color:#3b4a41;">
 						{{{content}}}
 					</td></tr>
@@ -148,7 +148,7 @@
 					<tr><td class="mc-pad" style="padding:18px 40px 0 40px;">
 						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 							<td class="mc-panel" bgcolor="#f4f8f5" style="background:#f4f8f5;border:1px solid #e3ebe5;border-radius:12px;padding:14px 16px;font-size:13px;line-height:19px;">
-								<span class="mc-muted" style="color:#5f6e65;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur&nbsp;:</span><br />
+								<span class="mc-muted" style="color:#5f6e65;">{{button_fallback}}</span><br />
 								<a class="mc-link" href="{{button_url}}" style="color:#178048;word-break:break-all;text-decoration:underline;">{{button_url}}</a>
 							</td>
 						</tr></table>
@@ -159,7 +159,7 @@
 						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td class="mc-divider" style="border-top:1px solid #e6ece8;font-size:0;line-height:0;">&nbsp;</td></tr></table>
 					</td></tr>
 					<tr><td class="mc-pad mc-text" style="padding:20px 40px 0 40px;font-size:16px;line-height:26px;color:#3b4a41;">
-						À bientôt,<br />
+						{{signoff}}<br />
 						<a href="{{site_url}}" class="mc-heading" style="color:#14231a;font-weight:700;text-decoration:none;">mon<span style="color:#32be73;">cycle</span>.app</a>
 					</td></tr>
 					{{#ps}}
@@ -171,13 +171,13 @@
 
 			<!-- Footer: why this mail came. -->
 			<tr><td class="mc-muted" align="center" style="padding:22px 24px 0 24px;font-size:12px;line-height:18px;color:#5f6e65;text-align:center;">
-				Ce mail a été envoyé automatiquement par MONCYCLE.APP, merci de ne pas y répondre.<br />
+				{{footer_auto}}<br />
 				{{why}}
 			</td></tr>
 			<tr><td class="mc-muted" align="center" style="padding:12px 24px 0 24px;font-size:12px;line-height:18px;color:#5f6e65;text-align:center;">
 				<a class="mc-link" href="{{site_url}}" style="color:#178048;text-decoration:none;font-weight:600;">moncycle.app</a>
 				&nbsp;·&nbsp;
-				<a class="mc-link" href="mailto:hello@tech4fertility.org" style="color:#178048;text-decoration:none;font-weight:600;">hello@tech4fertility.org</a>
+				<a class="mc-link" href="mailto:{{contact_email}}" style="color:#178048;text-decoration:none;font-weight:600;">{{contact_email}}</a>
 			</td></tr>
 		</table>
 		<!--[if mso]></td></tr></table><![endif]-->

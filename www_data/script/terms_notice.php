@@ -77,7 +77,7 @@ if (!is_null($test_email)) {
 }
 
 $accounts = db_querie_select_user_account_to_notify(db_ops_open());
-echo "terms of service {$url}, in force " . mail_french_date($date) . ": " . count($accounts) . " accounts" . PHP_EOL;
+echo "terms of service {$url}, in force " . mail_long_date($date) . ": " . count($accounts) . " accounts" . PHP_EOL;
 $sent = $failed = 0;
 foreach ($accounts as $account) {
 	log_context(["uid" => intval($account["no_user_account"])]);

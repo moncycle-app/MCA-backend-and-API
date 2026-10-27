@@ -53,6 +53,7 @@ SMTP (`SMTP_HOST=127.0.0.1 SMTP_PORT=1`), the default password policy, and a dat
 | `api/moncycle.py` | what the tests share: HTTP client, `Account`, assertions |
 | `support/router.php` | the test server's router: Apache's MultiViews, and the fixtures under `/_test/` |
 | `support/reset_db.php` | empties the `test_*` database before `db_init.php` rebuilds it |
+| `mail_preview/run.sh` | renders every mail to `mail_preview/out/index.html` (light, dark, phone), sends nothing; checks the language file against the code |
 | `static/check_structure.php` | the layout rules of AGENT.md |
 
 ## Reading and writing a test

@@ -133,8 +133,6 @@ const AUTH_TOKEN_SCOPE_NAMES = [
 // "expiresInDays" of POST /api/v2/token: such a token dies on that day whatever its use.
 const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
 const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
-// How much of the user agent the "new login" mail quotes.
-const MAIL_USER_AGENT_CHARS = 120;
 // A token made without "expiresInDays" dies after this many days, or after this many days unused (db_querie_purge_auth_token()).
 const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
 const AUTH_TOKEN_IDLE_DAYS = 40;
@@ -169,6 +167,23 @@ const ACCOUNT_UNVERIFIED_DELETE_DAYS = 7;
 const ACCOUNT_INACTIVITY_DELETE_YEARS = 4;
 // ... and gets a warning email this many days before that deletion.
 const ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE = 10;
+
+// ===========================================================================
+// MAIL -- the mails to users (lib/mail.php; the template and its words: docs/mail.md)
+// ===========================================================================
+
+// The frame of every mail to a user, in HTML and in plain text, filled by mail_render().
+const MAIL_LAYOUT = __DIR__ . "/mail/layout.html";
+const MAIL_LAYOUT_TEXT = __DIR__ . "/mail/layout.txt";
+// The language of the mails: mail/lang/<MAIL_LANG>.php holds every word they say (mail_t()).
+const MAIL_LANG = "fr";
+const MAIL_LANG_DIR = __DIR__ . "/mail/lang";
+// Where an answer to any mail goes, and the address the mails give to write to the team.
+const MAIL_REPLY_TO = "hello@tech4fertility.org";
+// The site the logo and the sign-off link to.
+const MAIL_SITE_URL = "https://www.moncycle.app";
+// How much of the user agent the "new login" mail quotes.
+const MAIL_USER_AGENT_CHARS = 120;
 
 // ===========================================================================
 // DATABASE SCRIPTS -- the SQL files that make the database (lib/data.php)

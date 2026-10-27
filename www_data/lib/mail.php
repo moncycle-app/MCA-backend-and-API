@@ -15,7 +15,8 @@
 
 declare(strict_types=1);
 
-// The mails of the app. A name or an address comes from a user: it is escaped before it reaches the HTML.
+// The mails of the app. A name or an address comes from a user: it is escaped before it reaches the HTML. No word a user reads is in
+// this file: they are in mail/lang/<MAIL_LANG>.php, read through mail_t().
 
 use PHPMailer\PHPMailer\PHPMailer;
 
@@ -23,9 +24,11 @@ require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/log.php";
 
 // Sends one mail. $kind names it in the log, which keeps nothing else of it but how many addresses and files (never an address, a
-// subject or a body: several hold a link that opens an account). Empty addresses are skipped; $attachments is [file name => content];
-// $log_fields is what the caller adds to the log line. True when the SMTP server took it; never throws.
-function mail_send(string $kind, array $to, string $subject, string $html, string $text, array $attachments = [], array $log_fields = []): bool {
+// subject or a body: several hold a link that opens an account). $body is the slots of the template (the subject added), or a whole HTML
+// page of its own (the weekly report). $text is the plain-text part: with slots, its body only (the frame adds greeting, link, sign-off
+// and footer, layout.txt), otherwise the whole text. Empty addresses are skipped; $attachments is [file name => content];
+// $log_fields is what the caller adds to the log line. An answer goes to MAIL_REPLY_TO. True when the SMTP server took it; never throws.
+function mail_send(string $kind, array $to, string $subject, array|string $body, string $text, array $attachments = [], array $log_fields = []): bool {
 	$log = ["kind" => $kind, "to" => count(array_filter($to)), "fil" => count($attachments)] + $log_fields;
 	try {
 		$mail = new PHPMailer();
@@ -39,12 +42,13 @@ function mail_send(string $kind, array $to, string $subject, string $html, strin
 		$mail->Timeout    = 10;   // seconds; PHPMailer's 300 would hold a worker for minutes on a stalled server
 		$mail->CharSet    = 'UTF-8';
 		$mail->setFrom(SMTP_MAIL, 'MONCYCLE.APP');
+		$mail->addReplyTo(MAIL_REPLY_TO, 'MONCYCLE.APP');
 
 		foreach (array_filter($to) as $address) $mail->addAddress($address, $address);
 		$mail->isHTML(true);
 		$mail->Subject = $subject;
-		$mail->Body = $html;
-		$mail->AltBody = $text;
+		$mail->Body = is_array($body) ? mail_render(["subject" => $subject] + $body) : $body;
+		$mail->AltBody = is_array($body) ? mail_render(["text" => $text] + mail_text_slots($body), false) : $text;
 		foreach ($attachments as $file_name => $content) $mail->addStringAttachment($content, $file_name);
 
 		if ($mail->send()) {
@@ -59,21 +63,116 @@ function mail_send(string $kind, array $to, string $subject, string $html, strin
 	}
 }
 
-// The frame of every mail but the cycle's: the greeting, the content, the sign-off, an optional $ps (HTML) right after it, and why it was sent.
-function mail_html(string $greeting, string $content, string $why, string $ps = ""): string {
-	if ($ps !== "") $ps = "<p style=\"font-size:.85em\">{$ps}</p>";
-	return <<<HTML
-	<div style='font-family: sans-serif;'>{$greeting}<br />
-	<br />
-	{$content}
-	À bientôt,<br />
-	<br />
-	<a href='https://www.moncycle.app' style='color: unset; text-decoration:none'>mon<span style='color: #1e824c;font-weight:bold'>cycle</span>.app</a><br />
-	{$ps}<br />
-	<p style="color:gray;font-size:.85em;font-style: italic;">Merci d'utiliser MONCYCLE.APP! Ce mail a été envoyé automatiquement, merci de ne pas y répondre. {$why}</p><br />
-	</div>
-	HTML;
+// ---------------------------------------------------------------------------
+// The words (MAIL_LANG_DIR) and the template (MAIL_LAYOUT, MAIL_LAYOUT_TEXT)
+// ---------------------------------------------------------------------------
+
+// Every word of the language of the mails: [key => string, or a list].
+function mail_words(): array {
+	static $words = null;
+	$words ??= require MAIL_LANG_DIR . "/" . MAIL_LANG . ".php";
+	return $words;
 }
+
+// A string of the language file, its {name} marks replaced by $vars. The caller escapes what it passes for HTML, and passes plain text
+// for a slot the template escapes.
+function mail_t(string $key, array $vars = []): string {
+	$text = mail_words()[$key] ?? throw new RuntimeException("mail text missing: {$key}");
+	if (!is_string($text)) throw new RuntimeException("mail text is not a string: {$key}");
+	$marks = [];
+	foreach ($vars as $name => $value) $marks["{" . $name . "}"] = (string) $value;
+	return strtr($text, $marks);
+}
+
+// MAIL_LAYOUT ($html) or MAIL_LAYOUT_TEXT filled with $slots. The sections are resolved on the layout alone, then every tag in one pass: a
+// value is never read again for tags, so a nickname holding "{{why}}" stays as it is. HTML: a {{tag}} is escaped, the comments of the
+// file go (Outlook's conditional ones stay); plain text: nothing is escaped.
+function mail_render(array $slots, bool $html = true): string {
+	static $layouts = [];
+	$layout = $layouts[$html] ??= mail_layout($html);
+	$slots += [
+		"site_url" => MAIL_SITE_URL,
+		"contact_email" => MAIL_REPLY_TO,
+		"lang" => mail_t("layout.lang"),
+		"signoff" => mail_t("layout.signoff"),
+		"button_fallback" => mail_t("layout.button_fallback"),
+		"footer_auto" => mail_t("layout.footer_auto"),
+	];
+	$value = fn(string $name): string => (string) ($slots[$name] ?? "");
+	$out = preg_replace_callback('/\{\{#(\w+)\}\}(.*?)\{\{\/\1\}\}/s', fn(array $m): string => $value($m[1]) === "" ? "" : $m[2], $layout);
+	// {{{name}}} leaves $m[2] unset, {{name}} sets it.
+	$out = preg_replace_callback('/\{\{\{(\w+)\}\}\}|\{\{(\w+)\}\}/',
+		fn(array $m): string => isset($m[2]) ? ($html ? htmlspecialchars($value($m[2])) : $value($m[2])) : $value($m[1]), $out);
+	// A section left out leaves its lines behind: one blank line between blocks is enough.
+	return $html ? $out : trim(preg_replace("/\n{3,}/", "\n\n", $out)) . "\n";
+}
+
+// A layout file ready to fill; the comments of the HTML one go, Outlook's conditional ones stay.
+function mail_layout(bool $html): string {
+	$file = file_get_contents($html ? MAIL_LAYOUT : MAIL_LAYOUT_TEXT);
+	if ($file === false) throw new RuntimeException("mail layout unreadable");
+	return $html ? preg_replace('/<!--(?!\[if).*?-->\s*/s', "", $file) : $file;
+}
+
+// The slots of a mail for its plain text: "ps" is HTML, so it is stripped to text, unless the mail gives its own "ps_text".
+function mail_text_slots(array $slots): array {
+	$slots["ps"] = $slots["ps_text"] ?? html_entity_decode(strip_tags($slots["ps"] ?? ""), ENT_QUOTES | ENT_HTML5, "UTF-8");
+	return $slots;
+}
+
+// The pieces below are the components of docs/mail.md: their classes are what the dark theme of the layout hooks on. Their $html is the
+// caller's, escaped by it.
+
+function mail_p(string $html): string {
+	return "<p style=\"margin:0 0 16px 0;\">{$html}</p>";
+}
+
+// A link in the text ($url escaped here).
+function mail_a(string $url, string $html): string {
+	$url = htmlspecialchars($url);
+	return "<a class=\"mc-link\" href=\"{$url}\" style=\"color:#178048;text-decoration:underline;\">{$html}</a>";
+}
+
+// The team's address, as a link.
+function mail_contact(): string {
+	return mail_a("mailto:" . MAIL_REPLY_TO, MAIL_REPLY_TO);
+}
+
+// A short code, a token prefix (escaped here).
+function mail_code(string $text): string {
+	$text = htmlspecialchars($text);
+	return "<code class=\"mc-code\" style=\"background:#e9efeb;color:#14231a;border-radius:6px;padding:2px 6px;font-family:Menlo,Consolas,monospace;font-size:13px;\">{$text}</code>";
+}
+
+// A panel of [label => value] rows (the label is plain text of the language file, the value HTML).
+function mail_facts(array $rows): string {
+	$html = "";
+	foreach ($rows as $label => $value) {
+		$label = htmlspecialchars((string) $label);
+		$html .= "<tr><td class=\"mc-fact-label mc-muted\" width=\"42%\" style=\"padding:8px 12px 8px 0;font-size:14px;line-height:20px;color:#5f6e65;\">{$label}</td>"
+			. "<td class=\"mc-fact-value mc-heading\" style=\"padding:8px 0;font-size:14px;line-height:20px;font-weight:600;color:#14231a;\">{$value}</td></tr>";
+	}
+	return "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:4px 0 20px 0;\"><tr>"
+		. "<td class=\"mc-panel\" bgcolor=\"#f4f8f5\" style=\"background:#f4f8f5;border:1px solid #e3ebe5;border-radius:12px;padding:8px 18px;\">"
+		. "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">{$html}</table></td></tr></table>";
+}
+
+// A box: "info" (green, a tip) or "warn" (amber: "if this is not you", an erasure ahead).
+function mail_callout(string $kind, string $html): string {
+	[$background, $border, $color] = $kind === "warn" ? ["#fff7e0", "#e0a800", "#5a4300"] : ["#eaf8f0", "#32be73", "#14402a"];
+	return "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:4px 0 20px 0;\"><tr>"
+		. "<td class=\"mc-callout-{$kind}\" bgcolor=\"{$background}\" style=\"background:{$background};border-left:4px solid {$border};border-radius:8px;padding:14px 18px;font-size:15px;line-height:23px;color:{$color};\">{$html}</td>"
+		. "</tr></table>";
+}
+
+// The warning of the security mails: "this is not you" and what to do.
+function mail_not_you(string $html): string {
+	return mail_callout("warn", mail_t("callout.not_you", ["html" => $html]));
+}
+
+// ---------------------------------------------------------------------------
+// What every mail shares
+// ---------------------------------------------------------------------------
 
 // Who gets what the owner is meant to read (the cycles, the reminder, the warning before an erasure): the login address and the
 // notification list, once each.
@@ -82,27 +181,57 @@ function mail_recipients(array $account): array {
 	return array_values(array_unique(array_filter(array_merge([$account["login_email"]], $list))));
 }
 
-// $because completes "Vous le recevez car ...".
-function mail_why(string $because = "vous possédez un compte sur MONCYCLE.APP"): string {
-	return "Vous le recevez car $because. La réception d'emails est nécessaire au bon fonctionnement de l'application. Si vous ne souhaitez plus recevoir d'emails de notre part, merci de ne plus utiliser MONCYCLE.APP.";
+// The greeting: the nickname as it is (the template escapes it), or none.
+function mail_greeting(?string $name): string {
+	return $name === null ? mail_t("greeting.anonymous") : mail_t("greeting.named", ["name" => $name]);
+}
+
+// $reason is the key of what completes "Vous le recevez car ...".
+function mail_why(string $reason = "why.account"): string {
+	return mail_t("why.default", ["because" => mail_t($reason)]);
 }
 
 // Short moment for a subject: "16/10 14:32". Every subject is short and carries a detail of its own (this moment, or what the mail is
 // about: a token prefix, an erasure date), so that two mails of a kind never share one and a mailbox does not stack them. It holds no
 // address and no text of a user: a subject crosses servers in clear.
 function mail_when(): string {
-	return date("d/m H:i");
+	return date(mail_t("format.when"));
 }
 
-// A page of the app with the address filled in.
-function mail_link(string $email, string $page, string $text): string {
-	return "<a style='color: #1e824c' href='" . rtrim(APP_URL, "/") . "/" . $page . "?login_email=" . urlencode($email) . "'>" . $text . "</a>";
+// "15 novembre 2026" for "2026-11-15".
+function mail_long_date(string $ymd): string {
+	$date = new DateTimeImmutable($ymd);
+	$day = $date->format("j") === "1" ? mail_t("date.first") : $date->format("j");
+	return $day . " " . mail_words()["months"][intval($date->format("n")) - 1] . " " . $date->format("Y");
 }
+
+// How long a link lives, in words: "3 jours", "5 heures".
+function mail_lifetime(int $minutes): string {
+	return match (true) {
+		$minutes % 1440 === 0 => mail_t($minutes > 1440 ? "lifetime.days" : "lifetime.day", ["n" => $minutes / 1440]),
+		$minutes % 60 === 0 => mail_t($minutes > 60 ? "lifetime.hours" : "lifetime.hour", ["n" => $minutes / 60]),
+		default => mail_t("lifetime.minutes", ["n" => $minutes]),
+	};
+}
+
+// The URL of a page of the app with the address filled in.
+function mail_page(string $email, string $page): string {
+	return rtrim(APP_URL, "/") . "/" . $page . "?login_email=" . urlencode($email);
+}
+
+// A link to that page.
+function mail_link(string $email, string $page, string $text): string {
+	return mail_a(mail_page($email, $page), $text);
+}
+
+// ---------------------------------------------------------------------------
+// The mails
+// ---------------------------------------------------------------------------
 
 // The mail of a link (lib/email_token.php), $kind: "verify_email" (a new account; it is erased after ACCOUNT_UNVERIFIED_DELETE_DAYS
 // unproved), "account_exists" (a sign-up with an address that has an account: a new password may be chosen), "reset_password", or
-// "confirm_email" (to the new address of a change). The link is shown in full as its own text, so that any mail reader lets it be
-// copied whole; the token is in its fragment, which no server, log or Referer sees.
+// "confirm_email" (to the new address of a change). The template shows the link in full under the button, so that any mail reader lets
+// it be copied whole; the token is in its fragment, which no server, log or Referer sees.
 function mail_send_link(string $kind, string $email, string $name, string $token): bool {
 	$purpose = match ($kind) {
 		"verify_email" => EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION,
@@ -110,145 +239,109 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 		default => EMAIL_TOKEN_PURPOSE_RESET_PASSWORD,
 	};
 	$url = rtrim(APP_URL, "/") . "/verify_email#purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
-	$shown = htmlspecialchars($url);
-	$link = "<a style='color: #1e824c; word-break: break-all' href='{$shown}'>{$shown}</a>";
-	$label = match ($kind) {
-		"verify_email" => "💃🕺 Confirmer mon adresse !",
-		"account_exists", "reset_password" => "🔑 Choisir un nouveau mot de passe",
-		"confirm_email" => "📬 Confirmer la nouvelle adresse",
-	};
-	$button = "<a href='{$shown}' style='display:inline-block;padding:12px 22px;border-radius:8px;background:#1e824c;color:#ffffff;font-weight:bold;text-decoration:none'>{$label}</a>";
-	$minutes = EMAIL_TOKEN_LIFETIME_MINUTES[$purpose];
-	$lifetime = match (true) {
-		$minutes % 1440 === 0 => ($minutes / 1440) . ($minutes > 1440 ? " jours" : " jour"),
-		$minutes % 60 === 0 => ($minutes / 60) . ($minutes > 60 ? " heures" : " heure"),
-		default => $minutes . " minutes",
-	};
-	$name = htmlspecialchars($name);
-	$days = ACCOUNT_UNVERIFIED_DELETE_DAYS;
-	$ps = "PS: si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur:<br />{$link}";
+	$lifetime = mail_lifetime(EMAIL_TOKEN_LIFETIME_MINUTES[$purpose]);
+	$text = mail_t("{$kind}.text");
 
-	[$subject, $greeting, $content, $why, $text] = match ($kind) {
-		"verify_email" => ['Confirmez votre adresse (' . mail_when() . ')', "Bonjour {$name},", <<<HTML
-			Bienvenue sur MONCYCLE.APP!<br />
-			<br />
-			Pour activer votre compte, confirmez votre adresse e-mail:<br />
-			<br />
-			{$button}<br />
-			<br />
-			Ce lien est valable {$lifetime}. Sans confirmation, le compte est supprimé au bout de {$days} jours.<br />
-			<br />
-			Une fois connecté, pensez à activer l'authentification multifacteur pour protéger vos données.<br />
-			<br />
-			HTML, mail_why("un compte a été créé sur MONCYCLE.APP avec cette adresse"),
-			"Bienvenue sur MONCYCLE.APP!\n\nPour activer votre compte, confirmez votre adresse e-mail en ouvrant ce lien:\n"],
-		"account_exists" => ['Vous avez déjà un compte (' . mail_when() . ')', "Bonjour {$name},", <<<HTML
-			Quelqu'un vient de demander la création d'un compte avec cette adresse, mais vous en avez déjà un.<br />
-			<br />
-			Si c'est vous et que vous avez perdu votre mot de passe, vous pouvez en choisir un nouveau (lien valable {$lifetime}):<br />
-			<br />
-			{$button}<br />
-			<br />
-			Sinon, ignorez ce message: votre compte et votre mot de passe n'ont pas changé.<br />
-			<br />
-			HTML, mail_why(), "Vous avez déjà un compte sur MONCYCLE.APP.\n\nPour choisir un nouveau mot de passe, ouvrez ce lien:\n"],
-		"reset_password" => ['Nouveau mot de passe (' . mail_when() . ')', "Bonjour {$name},", <<<HTML
-			Vous avez demandé à changer votre mot de passe. Pour en choisir un nouveau, cliquez ici:<br />
-			<br />
-			{$button}<br />
-			<br />
-			Ce lien est valable {$lifetime} et ne peut servir qu'une fois.<br />
-			<br />
-			Si ce n'est pas vous, ignorez ce message: votre mot de passe n'a pas changé.<br />
-			<br />
-			HTML, mail_why(), "Pour choisir un nouveau mot de passe, ouvrez ce lien:\n"],
-		"confirm_email" => ['Confirmez la nouvelle adresse (' . mail_when() . ')', "Bonjour,", <<<HTML
-			Le compte de {$name} sur MONCYCLE.APP va utiliser cette adresse pour se connecter et recevoir ses cycles.<br />
-			<br />
-			Pour le confirmer (lien valable {$lifetime}):<br />
-			<br />
-			{$button}<br />
-			<br />
-			Sinon, ignorez ce message: rien ne sera changé.<br />
-			<br />
-			HTML, mail_why("quelqu'un a demandé à utiliser cette adresse pour un compte MONCYCLE.APP"),
-			"Pour confirmer cette adresse comme adresse de connexion de votre compte moncycle.app, ouvrez ce lien:\n"],
+	$content = match ($kind) {
+		"verify_email" => mail_p(mail_t("verify_email.intro")) . mail_callout("info", mail_t("verify_email.tip")),
+		"account_exists" => mail_p(mail_t("account_exists.intro")) . mail_p(mail_t("account_exists.forgotten")),
+		"reset_password" => mail_p(mail_t("reset_password.intro")),
+		"confirm_email" => mail_p(mail_t("confirm_email.intro", ["name" => htmlspecialchars($name)])),
 	};
-	return mail_send($kind, [$email], $subject, mail_html($greeting, $content, $why, $ps), $text . $url);
+	$slots = [
+		"preheader" => mail_t("{$kind}.preheader"),
+		"eyebrow" => mail_t("{$kind}.eyebrow"),
+		"title" => mail_t("{$kind}.title"),
+		"greeting" => $kind === "confirm_email" ? mail_greeting(null) : mail_greeting($name),
+		"content" => $content,
+		"button_url" => $url,
+		"button_label" => mail_t("{$kind}.button"),
+		"button_note" => match ($kind) {
+			"verify_email" => mail_t("link.note_unverified", ["lifetime" => $lifetime, "days" => ACCOUNT_UNVERIFIED_DELETE_DAYS]),
+			"confirm_email" => mail_t("link.note_lifetime", ["lifetime" => $lifetime]),
+			default => mail_t("link.note_once", ["lifetime" => $lifetime]),
+		},
+		"ps" => match ($kind) {
+			"verify_email" => "",
+			"account_exists" => mail_t("link.ps_ignore_account"),
+			"reset_password" => mail_t("link.ps_ignore_password"),
+			"confirm_email" => mail_t("link.ps_ignore_email"),
+		},
+		"why" => match ($kind) {
+			"verify_email" => mail_why("why.account_created"),
+			"confirm_email" => mail_why("why.address_asked"),
+			default => mail_why(),
+		},
+	];
+	return mail_send($kind, [$email], mail_t("{$kind}.subject", ["when" => mail_when()]), $slots, $text);
 }
 
 // A password replaced by a link: the sessions already open stay open, so this mail is how the owner learns of it.
 function mail_send_password_changed(string $email, string $name): bool {
-	$name = htmlspecialchars($name);
-	$login = mail_link($email, "auth", "connectez-vous");
-	$content = <<<HTML
-	Le mot de passe de votre compte vient d'être changé.<br />
-	<br />
-	Si ce n'est pas vous, {$login}, changez votre mot de passe depuis la page "⚙️ Réglages" et déconnectez vos autres appareils.<br />
-	<br />
-	HTML;
-	return mail_send('password_changed', [$email], 'Mot de passe changé (' . mail_when() . ')', mail_html("Bonjour {$name},", $content, mail_why()),
-		'Le mot de passe de votre compte moncycle.app vient d\'être changé. Si ce n\'est pas vous, changez-le et déconnectez vos autres appareils.');
+	$login = mail_link($email, "auth", mail_t("password_changed.login"));
+	return mail_send('password_changed', [$email], mail_t("password_changed.subject", ["when" => mail_when()]), [
+		"preheader" => mail_t("password_changed.preheader"),
+		"eyebrow" => mail_t("password_changed.eyebrow"),
+		"title" => mail_t("password_changed.title"),
+		"greeting" => mail_greeting($name),
+		"content" => mail_p(mail_t("password_changed.intro")) . mail_not_you(mail_t("password_changed.not_you", ["login" => $login])),
+		"why" => mail_why(),
+	], mail_t("password_changed.text"));
 }
 
 // To the current address: a change to $new_email was asked for, and happens once the new address is confirmed.
 function mail_send_email_change_requested(string $email, string $new_email, string $name): bool {
-	$name = htmlspecialchars($name);
-	$new = htmlspecialchars($new_email);
-	$content = <<<HTML
-	Le changement de l'adresse de connexion de votre compte vers <b>{$new}</b> a été demandé. Il ne sera effectif qu'une fois la nouvelle adresse confirmée.<br />
-	<br />
-	Si ce n'est pas vous, demandez un nouveau mot de passe avec « mot de passe perdu » sur la page de connexion: cela annule la demande. Changez ensuite votre mot de passe.<br />
-	<br />
-	HTML;
-	return mail_send('email_change_requested', [$email], 'Changement d\'adresse demandé (' . mail_when() . ')', mail_html("Bonjour {$name},", $content, mail_why()),
-		'Le changement de votre adresse de connexion vers ' . $new_email . ' a été demandé. Si ce n\'est pas vous, utilisez « mot de passe perdu » pour l\'annuler.');
+	return mail_send('email_change_requested', [$email], mail_t("email_change_requested.subject", ["when" => mail_when()]), [
+		"preheader" => mail_t("email_change_requested.preheader"),
+		"eyebrow" => mail_t("email_change_requested.eyebrow"),
+		"title" => mail_t("email_change_requested.title"),
+		"greeting" => mail_greeting($name),
+		"content" => mail_p(mail_t("email_change_requested.intro", ["new" => htmlspecialchars($new_email)]))
+			. mail_not_you(mail_t("email_change_requested.not_you")),
+		"why" => mail_why(),
+	], mail_t("email_change_requested.text", ["new" => $new_email]));
 }
 
 // To an address that has an account, asked for another one: nothing changes, and nobody is told which.
 function mail_send_email_change_taken(string $email): bool {
-	$content = <<<HTML
-	Quelqu'un a demandé à utiliser cette adresse comme adresse de connexion d'un autre compte, mais elle est déjà celle de votre compte.<br />
-	<br />
-	Rien n'a été modifié. Si ce n'est pas vous, ignorez ce message.<br />
-	<br />
-	HTML;
-	return mail_send('email_change_taken', [$email], 'Adresse déjà utilisée (' . mail_when() . ')', mail_html("Bonjour,", $content, mail_why()),
-		'Quelqu\'un a demandé à utiliser cette adresse pour un autre compte, mais elle est déjà celle de votre compte. Rien n\'a changé.');
+	return mail_send('email_change_taken', [$email], mail_t("email_change_taken.subject", ["when" => mail_when()]), [
+		"preheader" => mail_t("email_change_taken.preheader"),
+		"eyebrow" => mail_t("email_change_taken.eyebrow"),
+		"title" => mail_t("email_change_taken.title"),
+		"greeting" => mail_greeting(null),
+		"content" => mail_p(mail_t("email_change_taken.intro")) . mail_p(mail_t("email_change_taken.nothing")),
+		"why" => mail_why(),
+	], mail_t("email_change_taken.text"));
 }
 
 // To the address the account just left.
 function mail_send_email_changed(string $email, string $new_email, string $name): bool {
-	$name = htmlspecialchars($name);
-	$new = htmlspecialchars($new_email);
-	$content = <<<HTML
-	L'adresse de connexion de votre compte est maintenant <b>{$new}</b>. Cette adresse-ci ne reçoit plus rien de votre compte.<br />
-	<br />
-	Si ce n'est pas vous, quelqu'un d'autre utilise votre compte: contactez-nous depuis <a style='color: #1e824c' href='https://www.moncycle.app'>moncycle.app</a>.<br />
-	<br />
-	HTML;
-	return mail_send('email_changed', [$email], 'Adresse de connexion changée (' . mail_when() . ')',
-		mail_html("Bonjour {$name},", $content, mail_why("vous possédiez un compte sur MONCYCLE.APP avec cette adresse")),
-		'L\'adresse de connexion de votre compte moncycle.app est maintenant ' . $new_email . '.');
+	return mail_send('email_changed', [$email], mail_t("email_changed.subject", ["when" => mail_when()]), [
+		"preheader" => mail_t("email_changed.preheader"),
+		"eyebrow" => mail_t("email_changed.eyebrow"),
+		"title" => mail_t("email_changed.title"),
+		"greeting" => mail_greeting($name),
+		"content" => mail_p(mail_t("email_changed.intro", ["new" => htmlspecialchars($new_email)]))
+			. mail_not_you(mail_t("email_changed.not_you", ["contact" => mail_contact()])),
+		"why" => mail_why("why.account_left"),
+	], mail_t("email_changed.text", ["new" => $new_email, "contact" => MAIL_REPLY_TO]));
 }
 
 // To the login address: the addresses that receive every cycle changed ("" = emptied), which whoever holds the account must see.
 function mail_send_notification_emails_changed(string $email, string $new_list): bool {
 	$listed = str_replace(ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR, ", ", $new_list);
-	$shown = htmlspecialchars($listed);
 	$what = $new_list === ""
-		? "La liste des adresses de votre compte qui reçoivent vos cycles par e-mail a été <b>vidée</b>."
-		: "Les adresses de votre compte qui reçoivent vos cycles par e-mail, avec votre adresse de connexion, sont maintenant: <b>{$shown}</b>.";
-	$login = mail_link($email, "auth", "connectez-vous");
-	$content = <<<HTML
-	{$what}<br />
-	Si ce n'est pas vous, {$login} et changez votre mot de passe depuis la page "⚙️ Réglages".<br />
-	<br />
-	HTML;
-	return mail_send('notification_emails', [$email], 'Adresses des cycles modifiées (' . mail_when() . ')', mail_html("Bonjour,", $content, mail_why()),
-		$new_list === ""
-			? 'La liste des adresses de votre compte qui reçoivent vos cycles a été vidée.'
-			: 'Les adresses de votre compte qui reçoivent vos cycles, avec votre adresse de connexion, sont maintenant: ' . $listed . '.');
+		? mail_t("notification_emails.emptied")
+		: mail_t("notification_emails.listed", ["list" => htmlspecialchars($listed)]);
+	$login = mail_link($email, "auth", mail_t("notification_emails.login"));
+	return mail_send('notification_emails', [$email], mail_t("notification_emails.subject", ["when" => mail_when()]), [
+		"preheader" => mail_t("notification_emails.preheader"),
+		"eyebrow" => mail_t("notification_emails.eyebrow"),
+		"title" => mail_t("notification_emails.title"),
+		"greeting" => mail_greeting(null),
+		"content" => mail_p($what) . mail_not_you(mail_t("notification_emails.not_you", ["login" => $login])),
+		"why" => mail_why(),
+	], $new_list === "" ? mail_t("notification_emails.text_emptied") : mail_t("notification_emails.text_listed", ["list" => $listed]));
 }
 
 // To the account's own address at every sign-in, a browser's or a custom token's: a custom token outlives the session it is made from,
@@ -257,227 +350,123 @@ function mail_send_notification_emails_changed(string $email, string $new_list):
 // "Y-m-d H:i:s" UTC, null for the rule of the cron.
 function mail_send_new_login(array $account, string $name, string $prefix, string $scope, ?string $user_agent, ?string $expires_at): bool {
 	$email = $account["login_email"];
-	$account_name = htmlspecialchars($account["name"]);
-	$token_name = htmlspecialchars($name);
-	$token_prefix = htmlspecialchars($prefix);
-	$agent = is_null($user_agent) ? "inconnu" : htmlspecialchars(mb_substr($user_agent, 0, MAIL_USER_AGENT_CHARS));
-	$when = date("d/m/Y à H:i");
-	$access = $scope === "readOnly" ? "lecture seule" : "lecture et écriture";
-	$until = is_null($expires_at) ? "" : "<br />Valable jusqu'au <b>" . gmdate("d/m/Y", strtotime($expires_at . " UTC")) . "</b>";
-	$login = mail_link($email, "auth", "connectez-vous");
-	$content = <<<HTML
-	Une nouvelle connexion à votre compte vient d'avoir lieu.<br />
-	<br />
-	Date: <b>{$when}</b><br />
-	Nom: <b>{$token_name}</b><br />
-	Début du jeton: <b><code>{$token_prefix}</code></b><br />
-	Accès: <b>{$access}</b>{$until}<br />
-	Navigateur ou application: <b>{$agent}</b><br />
-	<br />
-	Si c'est vous, il n'y a rien à faire. Sinon, {$login}, changez votre mot de passe depuis la page "⚙️ Réglages" et cochez "Déconnecter tous mes autres appareils": la liste de vos connexions s'y trouve aussi.<br />
-	<br />
-	HTML;
-	return mail_send('new_login', [$email], "Nouvelle connexion, jeton {$prefix}", mail_html("Bonjour {$account_name},", $content, mail_why()),
-		"Une nouvelle connexion à votre compte moncycle.app vient d'avoir lieu ($name, le {$when}, début du jeton {$prefix}). Si ce n'est pas vous, changez votre mot de passe.");
+	$when = date(mail_t("format.date_time"));
+	$facts = [
+		mail_t("new_login.fact_date") => $when,
+		mail_t("new_login.fact_name") => htmlspecialchars($name),
+		mail_t("new_login.fact_token") => mail_code($prefix),
+		mail_t("new_login.fact_access") => mail_t($scope === "readOnly" ? "new_login.access_read_only" : "new_login.access_read_write"),
+	];
+	if (!is_null($expires_at)) $facts[mail_t("new_login.fact_until")] = gmdate(mail_t("format.date"), strtotime($expires_at . " UTC"));
+	$facts[mail_t("new_login.fact_agent")] = is_null($user_agent) ? mail_t("new_login.agent_unknown") : htmlspecialchars(mb_substr($user_agent, 0, MAIL_USER_AGENT_CHARS));
+	$login = mail_link($email, "auth", mail_t("new_login.login"));
+	return mail_send('new_login', [$email], mail_t("new_login.subject", ["prefix" => $prefix]), [
+		"preheader" => mail_t("new_login.preheader"),
+		"eyebrow" => mail_t("new_login.eyebrow"),
+		"title" => mail_t("new_login.title"),
+		"greeting" => mail_greeting($account["name"]),
+		"content" => mail_p(mail_t("new_login.intro")) . mail_facts($facts)
+			. mail_p(mail_t("new_login.nothing_to_do"))
+			. mail_not_you(mail_t("new_login.not_you", ["login" => $login])),
+		"why" => mail_why(),
+	], mail_t("new_login.text", ["name" => $name, "when" => $when, "prefix" => $prefix]));
 }
 
+// To an account whose chart has had no new day for a while (db_querie_select_user_account_inactive()), once: a door back in, and a
+// way to tell us what went wrong.
 function mail_send_reminder(array $account): bool {
-	$name = htmlspecialchars($account["name"]);
 	$email = $account["login_email"];
-	$reset = mail_link($email, "register", "Réinitialisez votre mot de passe");
-	$login = mail_link($email, "auth", "C'est par ici");
-	$content = <<<HTML
-	Cela fait un moment qu'il n'y a pas eu d'activité dans votre tableau.<br />
-	<br />
-	Tout va bien? Comment pouvons-nous vous aider?<br />
-	<ol type='a'>
-		<li>Vous avez perdu votre mot de passe?<br />{$reset}</li>
-		<li style="margin-top: 10px">L'application ne vous plaît pas?<br /><a style='color: #1e824c' href='https://forms.gle/aA3GrFHAAx8SFdd47'>Dîtes-nous tout</a></li>
-		<li style="margin-top: 10px">Vous souhaitez simplement vous connecter?<br />{$login}</li>
-		<li style="margin-top: 10px">Un problème? Besoin d'aide?<br />Envoyez-nous un mail à <a style='color: #1e824c' href='mailto:bonjour@moncycle.app'>bonjour@moncycle.app</a></li>
-		<li style="margin-top: 10px">Vous ne souhaitez plus utiliser MONCYCLE.APP?<br />Ignorez ce mail, vous n'en recevrez plus d'autre.</li>
-	</ol>
-	HTML;
-	$why = "Vous le recevez car vous possédez un compte sur MONCYCLE.APP. La réception d'emails est nécessaire au bon fonctionnement de l'application. Si vous ne souhaitez plus recevoir d'emails de notre part, ignorez ce mail, vous n'en recevrez plus d'autre.";
-	return mail_send('reminder', mail_recipients($account), "Comment allez-vous? (" . mail_when() . ")", mail_html("Bonjour {$name},", $content, $why),
-		"Cela fait longtemps que l'on ne vous a pas vu sur moncycle.app, tout va bien?");
+	$reset = mail_link($email, "register", mail_t("reminder.reset_link"));
+	return mail_send('reminder', mail_recipients($account), mail_t("reminder.subject", ["when" => mail_when()]), [
+		"preheader" => mail_t("reminder.preheader"),
+		"eyebrow" => mail_t("reminder.eyebrow"),
+		"title" => mail_t("reminder.title"),
+		"greeting" => mail_greeting($account["name"]),
+		"content" => mail_p(mail_t("reminder.quiet")) . mail_p(mail_t("reminder.pause", ["reset" => $reset]))
+			. mail_callout("info", mail_t("reminder.feedback", ["contact" => mail_contact()])),
+		"button_url" => mail_page($email, "auth"),
+		"button_label" => mail_t("reminder.button"),
+		"ps" => mail_t("reminder.ps"),
+		"why" => mail_t("why.reminder"),
+	], mail_t("reminder.text", ["reset" => mail_page($email, "register"), "contact" => MAIL_REPLY_TO]));
 }
 
 function mail_send_deletion_warning(array $account, int $days): bool {
-	$name = htmlspecialchars($account["name"]);
 	$email = $account["login_email"];
-	$login = mail_link($email, "auth", "connectez-vous");
-	$reset = mail_link($email, "register", "Réinitialisez-le");
-	$content = <<<HTML
-	Nous n'avons constaté aucune activité sur votre compte MONCYCLE.APP depuis longtemps.<br />
-	<br />
-	Conformément à notre politique de conservation des données (RGPD), votre compte et toutes les données associées seront <b>définitivement supprimés dans {$days} jours</b> si aucune activité n'est détectée d'ici là.<br />
-	<br />
-	Pour conserver votre compte, il vous suffit de vous connecter:<br />
-	{$login}<br />
-	<br />
-	Mot de passe oublié?<br />{$reset}<br />
-	<br />
-	Un problème? Besoin d'aide? Envoyez-nous un mail à <a style='color: #1e824c' href='mailto:bonjour@moncycle.app'>bonjour@moncycle.app</a><br />
-	<br />
-	HTML;
-	$why = "Vous le recevez car vous possédez un compte inactif sur MONCYCLE.APP; ce mail est nécessaire pour vous informer, conformément au RGPD, de la suppression prochaine de vos données en l'absence d'activité.";
-	return mail_send('deletion_warning', mail_recipients($account), "Suppression de votre compte le " . date("d/m/Y", strtotime("+$days days")),
-		mail_html("Bonjour {$name},", $content, $why),
-		"Faute d'activité, votre compte moncycle.app sera supprimé dans $days jours. Connectez-vous pour le conserver.");
-}
-
-// "15 novembre 2026" for "2026-11-15".
-function mail_french_date(string $ymd): string {
-	$months = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
-	$date = new DateTimeImmutable($ymd);
-	return ($date->format("j") === "1" ? "1er" : $date->format("j")) . " " . $months[intval($date->format("n")) - 1] . " " . $date->format("Y");
+	$reset = mail_link($email, "register", mail_t("deletion_warning.reset_link"));
+	return mail_send('deletion_warning', mail_recipients($account), mail_t("deletion_warning.subject", ["date" => date(mail_t("format.date"), strtotime("+$days days"))]), [
+		"preheader" => mail_t("deletion_warning.preheader", ["days" => $days]),
+		"eyebrow" => mail_t("deletion_warning.eyebrow"),
+		"title" => mail_t("deletion_warning.title"),
+		"greeting" => mail_greeting($account["name"]),
+		"content" => mail_p(mail_t("deletion_warning.intro"))
+			. mail_callout("warn", mail_t("deletion_warning.warning", ["days" => $days]))
+			. mail_p(mail_t("deletion_warning.keep", ["reset" => $reset])),
+		"button_url" => mail_page($email, "auth"),
+		"button_label" => mail_t("deletion_warning.button"),
+		"ps" => mail_t("deletion_warning.ps", ["contact" => mail_contact()]),
+		"why" => mail_t("why.deletion"),
+	], mail_t("deletion_warning.text", ["days" => $days]));
 }
 
 // The notice of new terms of service to the whole account (login address and notifications). $url and $effective_date ("YYYY-MM-DD") are
-// the caller's, checked by it (script/terms_notice.php): the URL is escaped here all the same.
+// the caller's, checked by it (script/terms_notice.php): the template escapes the URL all the same.
 function mail_send_terms_update(array $account, string $url, string $effective_date): bool {
-	$name = htmlspecialchars($account["name"]);
-	$link = htmlspecialchars($url);
-	$day = mail_french_date($effective_date);
-	$content = <<<HTML
-	Nous mettons à jour les conditions générales d'utilisation de MONCYCLE.APP.<br />
-	<br />
-	Les nouvelles conditions entrent en vigueur le <b>{$day}</b>. Vous pouvez les lire ici:<br />
-	<a style='color: #1e824c' href='{$link}'>{$link}</a><br />
-	<br />
-	En continuant à utiliser MONCYCLE.APP après cette date, vous acceptez ces modifications. Si vous ne les acceptez pas, merci de ne plus utiliser l'application: vous pouvez supprimer votre compte depuis la page "⚙️ Réglages".<br />
-	<br />
-	HTML;
-	$why = mail_why("vous possédez un compte sur MONCYCLE.APP et que nous devons vous informer de ce changement");
-	return mail_send('terms_update', mail_recipients($account), "Conditions d'utilisation: nouveautés au {$day}", mail_html("Bonjour {$name},", $content, $why),
-		"Les conditions générales d'utilisation de moncycle.app changent et entrent en vigueur le {$day}: {$url}\nEn continuant à utiliser l'application après cette date, vous acceptez ces modifications.");
+	$day = mail_long_date($effective_date);
+	return mail_send('terms_update', mail_recipients($account), mail_t("terms_update.subject", ["day" => $day]), [
+		"preheader" => mail_t("terms_update.preheader", ["day" => $day]),
+		"eyebrow" => mail_t("terms_update.eyebrow"),
+		"title" => mail_t("terms_update.title"),
+		"greeting" => mail_greeting($account["name"]),
+		"content" => mail_p(mail_t("terms_update.intro", ["day" => $day])) . mail_p(mail_t("terms_update.accept")),
+		"button_url" => $url,
+		"button_label" => mail_t("terms_update.button"),
+		"why" => mail_why("why.terms"),
+	], mail_t("terms_update.text", ["day" => $day]));
 }
 
 // ---------------------------------------------------------------------------
-// The mail of a finished cycle: a layout of its own (a card, the cycle in figures, a row per attachment), and no "mails are needed"
-// footer, since the user can turn this one off.
+// The mail of a finished cycle: the cycle in figures, a row per attachment, and no "mails are needed" footer, since the user can turn
+// this one off.
 // ---------------------------------------------------------------------------
 
-// What each attachment is for, and how to turn the mail off as the account page words it: shared by the HTML and the text.
-function mail_cycle_words(): array {
-	return [
-		"pdf" => "Le graphique de votre cycle, à partager avec votre moniteur ou votre instructrice.",
-		"csv" => "Vos observations jour par jour, à ouvrir dans LibreOffice ou Microsoft Excel pour une analyse plus détaillée.",
-		"nfp" => "Le fichier NFP contient toutes les données de ce cycle dans un format d’échange : conservez-le comme sauvegarde, vous pourrez le réimporter dans moncycle.app depuis « ⚙️ Réglages », section « Importer un fichier NFP ». Il est également compatible avec d’autres applications si vous souhaitez migrer vos données.",
-		"opt_out" => "Cet envoi est automatique. Vous pouvez le désactiver à tout moment : ouvrez « Réglages », section « Cycles par e-mail », puis décochez « Recevoir chaque cycle par e-mail ».",
-	];
-}
-
-// An escaped sentence with French typography: no line break inside « », nor before a colon.
-function mail_cycle_typography(string $text): string {
-	return str_replace(["« ", " »", " :"], ["«&nbsp;", "&nbsp;»", "&nbsp;:"], htmlspecialchars($text));
-}
-
-// One attachment: a badge with its format, and what it is for ($about escaped by the caller).
+// One attachment: a badge with its format, and what it is for ($about is plain text).
 function mail_cycle_file(string $format, string $color, string $tint, string $about): string {
+	$about = htmlspecialchars($about);
 	return <<<HTML
 	<tr>
-		<td width="52" valign="top" style="padding:0 14px 18px 0;">
+		<td width="52" valign="top" style="padding:0 14px 16px 0;">
 			<div style="width:52px;line-height:30px;text-align:center;border-radius:8px;background:{$tint};color:{$color};font-size:12px;font-weight:700;letter-spacing:.6px;">{$format}</div>
 		</td>
-		<td valign="top" style="padding:0 0 18px 0;font-size:14px;line-height:21px;color:#3d4a42;">{$about}</td>
+		<td valign="top" class="mc-text" style="padding:4px 0 16px 0;font-size:14px;line-height:21px;color:#3b4a41;">{$about}</td>
 	</tr>
 	HTML;
 }
 
-function mail_cycle_html(string $name, string $first_day, string $last_day, int $nb_days): string {
-	$name = htmlspecialchars($name);
-	$settings_url = APP_URL . "settings#notifications";
-	$words = mail_cycle_words();
-	$files = mail_cycle_file("PDF", "#b03a2e", "#fbeceb", mail_cycle_typography($words["pdf"]))
-		. mail_cycle_file("CSV", "#1e824c", "#e6f4ec", mail_cycle_typography($words["csv"]))
-		. mail_cycle_file("NFP", "#3949ab", "#eaecf8", mail_cycle_typography($words["nfp"]));
-	$opt_out = mail_cycle_typography($words["opt_out"]);
-	$wordmark = "mon<span style='color:#1e824c;'>cycle</span>.app";
-	return <<<HTML
-	<!DOCTYPE html>
-	<html lang="fr">
-	<head>
-		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="color-scheme" content="light only" />
-		<meta name="supported-color-schemes" content="light only" />
-		<title>Votre cycle est terminé</title>
-	</head>
-	<body style="margin:0;padding:0;background:#f1f5f2;">
-	<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#f1f5f2;font-size:1px;line-height:1px;">Votre cycle de {$nb_days} jours est terminé : PDF, CSV et NFP en pièces jointes.</div>
-	<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f5f2" style="background:#f1f5f2;">
-	<tr><td align="center" style="padding:28px 12px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
-		<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
-			<tr><td style="padding:0 6px 14px 6px;font-size:20px;font-weight:700;letter-spacing:-.2px;color:#1b2a21;">{$wordmark}</td></tr>
-			<tr><td bgcolor="#ffffff" style="background:#ffffff;border:1px solid #e1e9e3;border-radius:16px;overflow:hidden;">
-				<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-					<tr><td height="6" bgcolor="#1e824c" style="height:6px;line-height:6px;font-size:0;background:#1e824c;">&nbsp;</td></tr>
-					<tr><td style="padding:32px 32px 6px 32px;">
-						<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#1e824c;">Cycle terminé</div>
-						<div style="padding-top:8px;font-size:24px;line-height:30px;font-weight:700;color:#1b2a21;">Bonjour {$name},</div>
-						<div style="padding-top:10px;font-size:15px;line-height:23px;color:#3d4a42;">Voici l’export complet de votre cycle, dans trois formats, pour le consulter, le partager ou le conserver.</div>
-					</td></tr>
-					<tr><td style="padding:22px 32px 6px 32px;">
-						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#eef7f1" style="background:#eef7f1;border-radius:12px;">
-							<tr>
-								<td style="padding:18px 22px;">
-									<div style="font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:#5b7566;">Cycle</div>
-									<div style="padding-top:3px;font-size:17px;line-height:23px;font-weight:600;color:#17301f;">du {$first_day} au {$last_day}</div>
-								</td>
-								<td align="right" style="padding:18px 22px;">
-									<div style="font-size:34px;line-height:36px;font-weight:700;color:#1e824c;">{$nb_days}</div>
-									<div style="font-size:12px;letter-spacing:.8px;text-transform:uppercase;color:#5b7566;">jours</div>
-								</td>
-							</tr>
-						</table>
-					</td></tr>
-					<tr><td style="padding:26px 32px 0 32px;">
-						<div style="padding-bottom:16px;font-size:16px;font-weight:700;color:#1b2a21;">Dans les pièces jointes</div>
-						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-							{$files}
-						</table>
-					</td></tr>
-					<tr><td style="padding:6px 32px 8px 32px;">
-						<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f6f7f6" style="background:#f6f7f6;border-radius:12px;">
-							<tr><td style="padding:16px 20px;font-size:13px;line-height:20px;color:#4b574f;">
-								{$opt_out}
-								<div style="padding-top:12px;"><a href="{$settings_url}" style="display:inline-block;padding:9px 16px;border-radius:8px;background:#1e824c;color:#ffffff;font-size:13px;font-weight:600;text-decoration:none;">Gérer cet envoi</a></div>
-							</td></tr>
-						</table>
-					</td></tr>
-					<tr><td style="padding:22px 32px 30px 32px;font-size:15px;line-height:23px;color:#3d4a42;">À bientôt sur <a href="https://www.moncycle.app" style="color:#1b2a21;font-weight:700;text-decoration:none;">{$wordmark}</a></td></tr>
-				</table>
-			</td></tr>
-			<tr><td style="padding:16px 10px 0 10px;font-size:12px;line-height:18px;color:#7a867f;text-align:center;">
-				Ce mail a été envoyé automatiquement par MONCYCLE.APP, merci de ne pas y répondre.<br />
-				Vous le recevez car l’envoi automatique des cycles est activé sur votre compte.
-			</td></tr>
-		</table>
-	</td></tr>
-	</table>
-	</body>
-	</html>
-	HTML;
-}
-
-function mail_cycle_text(string $name, string $first_day, string $last_day, int $nb_days): string {
-	$settings_url = APP_URL . "settings#notifications";
-	$words = mail_cycle_words();
-	return "Bonjour {$name},\n\n"
-		. "Votre cycle est terminé : du {$first_day} au {$last_day}, {$nb_days} jours. Voici son export complet, en pièces jointes.\n\n"
-		. "- PDF : {$words["pdf"]}\n"
-		. "- CSV : {$words["csv"]}\n"
-		. "- NFP : {$words["nfp"]}\n\n"
-		. "{$words["opt_out"]}\n{$settings_url}\n\n"
-		. "À bientôt sur moncycle.app\n\n"
-		. "Ce mail a été envoyé automatiquement par MONCYCLE.APP, merci de ne pas y répondre. Vous le recevez car l'envoi automatique des cycles est activé sur votre compte.";
-}
-
 // The export of a finished cycle (a row of db_querie_select_cycles_finished()), with $files: [file name => content].
 function mail_send_cycle(array $account, string $first_day, string $last_day, int $nb_days, array $files, int $rows_read): bool {
-	return mail_send('cycle', mail_recipients($account), "Votre cycle du $first_day au $last_day ($nb_days jours)",
-		mail_cycle_html($account["name"], $first_day, $last_day, $nb_days),
-		mail_cycle_text($account["name"], $first_day, $last_day, $nb_days), $files, ["n" => $rows_read]);
+	$about = ["pdf" => mail_t("cycle.about_pdf"), "csv" => mail_t("cycle.about_csv"), "nfp" => mail_t("cycle.about_nfp")];
+	$opt_out = mail_t("cycle.opt_out");
+	$settings_url = APP_URL . "settings#notifications";
+	$marks = ["first" => $first_day, "last" => $last_day, "n" => $nb_days];
+	$files_html = mail_cycle_file("PDF", "#b03a2e", "#fbeceb", $about["pdf"])
+		. mail_cycle_file("CSV", "#178048", "#e3f6eb", $about["csv"])
+		. mail_cycle_file("NFP", "#3949ab", "#eaecf8", $about["nfp"]);
+	$text = mail_t("cycle.text", $marks + ["pdf" => $about["pdf"], "csv" => $about["csv"], "nfp" => $about["nfp"]]);
+	return mail_send('cycle', mail_recipients($account), mail_t("cycle.subject", $marks), [
+		"preheader" => mail_t("cycle.preheader", $marks),
+		"eyebrow" => mail_t("cycle.eyebrow"),
+		"title" => mail_t("cycle.title"),
+		"greeting" => mail_greeting($account["name"]),
+		"content" => mail_p(mail_t("cycle.intro"))
+			. mail_facts([
+				mail_t("cycle.fact_cycle") => htmlspecialchars(mail_t("cycle.range", $marks)),
+				mail_t("cycle.fact_duration") => htmlspecialchars(mail_t("cycle.duration", $marks)),
+			])
+			. "<div class=\"mc-heading\" style=\"padding:4px 0 14px 0;font-size:16px;font-weight:700;color:#14231a;\">" . htmlspecialchars(mail_t("cycle.attachments")) . "</div>"
+			. "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">{$files_html}</table>",
+		"ps" => htmlspecialchars($opt_out) . " " . mail_a($settings_url, htmlspecialchars(mail_t("cycle.manage"))),
+		"ps_text" => $opt_out . "\n" . $settings_url,
+		"why" => mail_t("why.cycle"),
+	], $text, $files, ["n" => $rows_read]);
 }
