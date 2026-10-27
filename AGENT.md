@@ -24,6 +24,7 @@ web app that uses it. The source is in `www_data/`, the web server's document ro
 framework and no build step: PHP files, one script per endpoint. The web app (jQuery, no framework) is the repository MCA-web-APP.
 
 - `www_data/api/v2/*.php` the endpoints, `www_data/api/moncycle_app_open_api.yaml` the contract
+- `tests/` the API regression tests, committed (see [Running and checking a change](#running-and-checking-a-change))
 - `www_data/lib/*.php` every function and class
 - `www_data/script/` cron, statistics, migrations (`script/migration/`), `db_init.php`, `auto_upgrade.php`, `demo_reset.php`; `script/db/` holds
   `schema.sql` (the canonical schema) and `demo.sql`
@@ -177,13 +178,17 @@ require_once __DIR__ . "/../../lib/input.php";   // plus the lib files the endpo
 - A new constant goes in `constants.php`. Two live in `lib/` on purpose, next to the code that runs them: `NFP_FILE_SCHEMA` and
   `DB_SQL_USER_ACCOUNT_LAST_ACTIVITY`.
 - A new setting goes in `config.php`, `config.docker.php` and `config.exemple.php`, and in the README's settings table.
-- Changing an endpoint's contract: update `www_data/api/moncycle_app_open_api.yaml` in the same change. Every operation has an
-  `operationId`.
+- Changing an endpoint's contract (only when the task asks for it, see "The API contract"): update
+  `www_data/api/moncycle_app_open_api.yaml` in the same change, and the tests. Every operation has an `operationId`.
 
 ## The API contract
 
 [`moncycle_app_open_api.yaml`](www_data/api/moncycle_app_open_api.yaml) is the contract; its introduction states the rules for
-clients. The rules for the server side:
+clients. **It is the one and only contract between the server and every client (the web app, the mobile apps, third parties), so it
+is READ-ONLY by default: do not edit it, and do not change an endpoint's behaviour in a way it does not describe, unless the task is
+precisely a change of the contract.** A change of it is deliberate and additive (a breaking one is a new `api/v3/`, see Versions);
+the code follows the file, never the other way round, and a refactor, a fix or a test must leave it byte for byte as it is.
+`tests/api/test_contract.py` holds the server to it. The rules for the server side:
 
 - **Envelope.** `{"data": ...}` on success (a list is a bare array; an optional sibling `meta`), `{"error": {"code", "message", "details"?}}`
   on failure. JSON keys are camelCase, DB columns snake_case, error codes snake_case, URL paths snake_case (`server_info`,
@@ -321,7 +326,10 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
 
 ## Running and checking a change
 
-There is no test suite in the repository: a change is checked by running the app and calling it.
+The API tests are in `tests/` ([tests/README.md](tests/README.md)): `tests/run.sh` (about 130 tests, 8 seconds, needs Docker and
+Python 3, runs on a database of its own) and `tests/static_checks.sh` (syntax, layout rules). Run both after any change to `lib/`,
+`api/v2/`, `script/` or `constants.php`. A new endpoint, field or rule gets its tests in `tests/api/`, written in the style of the
+neighbours (one behaviour per test, named as a sentence). Beyond that, a change is checked by running the app and calling it.
 
 - **Run it** with Docker (the MCA-Docker-image repository: `dev.env.example`, `docker-compose.exemple.yml`) or without it, on your own Apache or PHP-FPM
   (README, "Without Docker"; docs/deployment.md). Set `DEMO_ENABLED` to sign in with the demo accounts and no mail
@@ -338,8 +346,8 @@ There is no test suite in the repository: a change is checked by running the app
 - **Behaviour:** call the endpoints with `curl`. Get a token with `POST /api/v2/token` and send it as `Authorization: Bearer <token>`.
   Test anything behind authentication over HTTP: `sec_token_authenticate()` needs `getallheaders()`, which the command line does not have.
   Day JSON uses `comment` (singular); the NFP format uses `comments`.
-- **A refactor must not change behaviour:** record the answers of the endpoints you touched (and the exports) before the change and
-  compare them after.
+- **A refactor must not change behaviour:** `tests/run.sh` is green before and after; for what it does not cover, record the answers
+  of the endpoints you touched (and the exports) before the change and compare them after.
 - **Side effects to avoid** on a database that holds real data: `POST /api/v2/token` mails the account's owner at **every** sign-in (the
   demo accounts excepted); `POST /api/v2/register` and `POST /api/v2/recover_password` send real mail through the configured SMTP;
   `script/cron.php` mails users and **deletes** accounts that have been inactive for years. Use a throwaway database and a dead SMTP
@@ -348,11 +356,7 @@ There is no test suite in the repository: a change is checked by running the app
 - **The image's PHP is locked down** (`server_conf/moncycleapp_php.ini`): `disable_functions` (among them `exec`, `system`,
   `shell_exec`, `proc_open`, `popen`, `curl_exec`, `parse_ini_file`, `ini_set`, `mail`) and `open_basedir`. Code that needs one of them
   fails inside the image even when it works elsewhere; `allow_url_fopen` is off too.
-- **Link previews** (Open Graph and X tags at the top of every page's `<head>`): `python3 tools/og_check.py` checks every `.html` of
-  `www_data/` and the files it names (one `og:image`, 1200 x 630 JPEG under 300 KB, absolute https URLs, the 180 px PNG
-  `apple-touch-icon`). A new image gets a new file name (`img/preview-fr.<first 8 hex of its SHA-256>.jpg`): the platforms cache an
-  image by its URL. Its source is outside the repository.
-- **The OpenAPI file** must stay valid YAML with unique `operationId`s and every `$ref` resolving; every route has an entry.
+- **The OpenAPI file** is read-only (see "The API contract"); it must stay valid YAML with unique `operationId`s and every `$ref` resolving, and every route has an entry (`tests/api/test_contract.py` checks the routes and the operation ids).
 - **Server settings are coupled:** `REQUEST_BODY_MAX_BYTES` (`config*.php`; the entrypoint gives it to `post_max_size` and to the wall of `zz-moncycleapp.conf`, and
   `http_exit_if_body_refused()` applies it in PHP) and `memory_limit` (30 workers x 64M under the `mem_limit` of the compose file) change together or not at all.
 
