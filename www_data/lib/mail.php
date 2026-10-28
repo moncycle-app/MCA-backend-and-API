@@ -16,7 +16,7 @@
 declare(strict_types=1);
 
 // The mails of the app. A name or an address comes from a user: it is escaped before it reaches the HTML. No word a user reads is in
-// this file: they are in mail/lang/<MAIL_LANG>.php, read through mail_t().
+// this file: they are in mail/lang/<language>.php, read through mail_t().
 
 use PHPMailer\PHPMailer\PHPMailer;
 
@@ -64,14 +64,23 @@ function mail_send(string $kind, array $to, string $subject, array|string $body,
 }
 
 // ---------------------------------------------------------------------------
-// The words (MAIL_LANG_DIR) and the template (MAIL_LAYOUT, MAIL_LAYOUT_TEXT)
+// The words (MAIL_LANG_DIR, one file per language of an account) and the template (MAIL_LAYOUT, MAIL_LAYOUT_TEXT)
 // ---------------------------------------------------------------------------
 
-// Every word of the language of the mails: [key => string, or a list].
+// The language of the mails being made, an ACCOUNT_LANGUAGES code. Every mail_send_*() sets it from the language of the account it is for
+// (user_account.language) before it says a word; a code that is not a language of the app is the default one.
+function mail_language(?string $code = null): string {
+	static $current = ACCOUNT_DEFAULT_LANGUAGE;
+	if (!is_null($code)) $current = in_array($code, ACCOUNT_LANGUAGES, true) ? $code : ACCOUNT_DEFAULT_LANGUAGE;
+	return $current;
+}
+
+// Every word of the current language of the mails: [key => string, or a list].
 function mail_words(): array {
-	static $words = null;
-	$words ??= require MAIL_LANG_DIR . "/" . MAIL_LANG . ".php";
-	return $words;
+	static $words = [];
+	$language = mail_language();
+	$words[$language] ??= require MAIL_LANG_DIR . "/" . strtolower($language) . ".php";
+	return $words[$language];
 }
 
 // A string of the language file: a {@other.key} is replaced by that string (a phrase said in several mails is written once), then its
@@ -264,7 +273,8 @@ function mail_link(string $email, string $page, string $text): string {
 // unproved), "account_exists" (a sign-up with an address that has an account: a new password may be chosen), "reset_password", or
 // "confirm_email" (to the new address of a change). The template shows the link in full under the button, so that any mail reader lets
 // it be copied whole; the token is in its fragment, which no server, log or Referer sees.
-function mail_send_link(string $kind, string $email, string $name, string $token): bool {
+function mail_send_link(string $kind, string $email, string $name, string $token, string $language): bool {
+	mail_language($language);
 	$purpose = match ($kind) {
 		"verify_email" => EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION,
 		"confirm_email" => EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL,
@@ -308,7 +318,8 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 }
 
 // A password replaced by a link: the sessions already open stay open, so this mail is how the owner learns of it.
-function mail_send_password_changed(string $email, string $name): bool {
+function mail_send_password_changed(string $email, string $name, string $language): bool {
+	mail_language($language);
 	return mail_send('password_changed', [$email], mail_subject(mail_t("password_changed.title")), [
 		"preheader" => mail_t("password_changed.preheader"),
 		"eyebrow" => mail_t("eyebrow.security"),
@@ -320,7 +331,8 @@ function mail_send_password_changed(string $email, string $name): bool {
 }
 
 // To the current address: a change to $new_email was asked for, and happens once the new address is confirmed.
-function mail_send_email_change_requested(string $email, string $new_email, string $name): bool {
+function mail_send_email_change_requested(string $email, string $new_email, string $name, string $language): bool {
+	mail_language($language);
 	return mail_send('email_change_requested', [$email], mail_subject(mail_t("email_change_requested.title")), [
 		"preheader" => mail_t("email_change_requested.preheader"),
 		"eyebrow" => mail_t("eyebrow.security"),
@@ -333,7 +345,8 @@ function mail_send_email_change_requested(string $email, string $new_email, stri
 }
 
 // To an address that has an account, asked for another one: nothing changes, and nobody is told which.
-function mail_send_email_change_taken(string $email): bool {
+function mail_send_email_change_taken(string $email, string $language): bool {
+	mail_language($language);
 	return mail_send('email_change_taken', [$email], mail_subject(mail_t("email_change_taken.title")), [
 		"preheader" => mail_t("email_change_taken.preheader"),
 		"eyebrow" => mail_t("eyebrow.email"),
@@ -345,7 +358,8 @@ function mail_send_email_change_taken(string $email): bool {
 }
 
 // To the address the account just left.
-function mail_send_email_changed(string $email, string $new_email, string $name): bool {
+function mail_send_email_changed(string $email, string $new_email, string $name, string $language): bool {
+	mail_language($language);
 	return mail_send('email_changed', [$email], mail_subject(mail_t("email_changed.title")), [
 		"preheader" => mail_t("email_changed.preheader"),
 		"eyebrow" => mail_t("eyebrow.security"),
@@ -358,7 +372,8 @@ function mail_send_email_changed(string $email, string $new_email, string $name)
 }
 
 // To the login address: the addresses that receive every cycle changed ("" = emptied), which whoever holds the account must see.
-function mail_send_notification_emails_changed(string $email, string $new_list): bool {
+function mail_send_notification_emails_changed(string $email, string $new_list, string $language): bool {
+	mail_language($language);
 	$listed = str_replace(ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR, ", ", $new_list);
 	$what = $new_list === ""
 		? mail_t("notification_emails.emptied")
@@ -378,6 +393,7 @@ function mail_send_notification_emails_changed(string $email, string $new_list):
 // mail crosses servers in clear. $prefix (shown on the account page too) tells which connection of the list this is. $expires_at:
 // "Y-m-d H:i:s" UTC, null for the rule of the cron.
 function mail_send_new_login(array $account, string $name, string $prefix, string $scope, ?string $user_agent, ?string $expires_at): bool {
+	mail_language($account["language"]);
 	$email = $account["login_email"];
 	$when = date(mail_t("format.date_time"));
 	$facts = [
@@ -403,6 +419,7 @@ function mail_send_new_login(array $account, string $name, string $prefix, strin
 // To an account whose chart has had no new day for a while (db_querie_select_user_account_inactive()), once: a door back in, and a
 // way to tell us what went wrong.
 function mail_send_reminder(array $account): bool {
+	mail_language($account["language"]);
 	$email = $account["login_email"];
 	return mail_send('reminder', mail_recipients($account), mail_t("reminder.subject", ["when" => mail_when()]), [
 		"preheader" => mail_t("reminder.preheader"),
@@ -419,6 +436,7 @@ function mail_send_reminder(array $account): bool {
 }
 
 function mail_send_deletion_warning(array $account, int $days): bool {
+	mail_language($account["language"]);
 	$email = $account["login_email"];
 	return mail_send('deletion_warning', mail_recipients($account), mail_t("deletion_warning.subject", ["date" => date(mail_t("format.date"), strtotime("+$days days"))]), [
 		"preheader" => mail_t("deletion_warning.preheader", ["days" => $days]),
@@ -438,6 +456,7 @@ function mail_send_deletion_warning(array $account, int $days): bool {
 // The notice of new terms of service to the whole account (login address and notifications). $url and $effective_date ("YYYY-MM-DD") are
 // the caller's, checked by it (script/terms_notice.php): the template escapes the URL all the same.
 function mail_send_terms_update(array $account, string $url, string $effective_date): bool {
+	mail_language($account["language"]);
 	$day = mail_long_date($effective_date);
 	return mail_send('terms_update', mail_recipients($account), mail_t("terms_update.subject", ["day" => $day]), [
 		"preheader" => mail_t("terms_update.preheader", ["day" => $day]),
@@ -471,6 +490,7 @@ function mail_cycle_file(string $format, string $color, string $tint, string $ab
 
 // The export of a finished cycle (a row of db_querie_select_cycles_finished()), with $files: [file name => content].
 function mail_send_cycle(array $account, string $first_day, string $last_day, int $nb_days, array $files, int $rows_read): bool {
+	mail_language($account["language"]);
 	$about = ["pdf" => mail_t("cycle.about_pdf"), "csv" => mail_t("cycle.about_csv"), "nfp" => mail_t("cycle.about_nfp")];
 	$opt_out = mail_t("cycle.opt_out");
 	$settings_url = APP_URL . "settings#notifications";

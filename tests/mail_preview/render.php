@@ -34,7 +34,8 @@ namespace {
 	@mkdir($dir, 0777, true);
 	PHPMailer\PHPMailer\PHPMailer::$dir = $dir;
 	// A nickname that holds HTML and a template tag: it must come out as text, and the tag must stay a tag.
-	$account = ["login_email" => "alice@exemple.fr", "notification_emails" => "bob@exemple.fr", "name" => "Alice <b>{{why}}</b> & co"];
+	$language = getenv("MAIL_PREVIEW_LANGUAGE") ?: "FR";
+	$account = ["login_email" => "alice@exemple.fr", "notification_emails" => "bob@exemple.fr", "name" => "Alice <b>{{why}}</b> & co", "language" => $language];
 	$token = "Zk3pQ8vX2mR7tY1wB4nC6dF9gH0jK5lLzz";
 	$sent = [];
 	$run = function (string $name, callable $send) use (&$sent) {
@@ -45,12 +46,12 @@ namespace {
 		$sent[] = $name;
 		echo str_pad($name, 26), $ok ? "ok" : "FAILED", "\n";
 	};
-	foreach (["verify_email", "account_exists", "reset_password", "confirm_email"] as $kind) $run($kind, fn() => mail_send_link($kind, "alice@exemple.fr", $account["name"], $token));
-	$run("password_changed", fn() => mail_send_password_changed("alice@exemple.fr", $account["name"]));
-	$run("email_change_requested", fn() => mail_send_email_change_requested("alice@exemple.fr", "new@exemple.fr", $account["name"]));
-	$run("email_change_taken", fn() => mail_send_email_change_taken("alice@exemple.fr"));
-	$run("email_changed", fn() => mail_send_email_changed("alice@exemple.fr", "new@exemple.fr", $account["name"]));
-	$run("notification_emails", fn() => mail_send_notification_emails_changed("alice@exemple.fr", "bob@exemple.fr;carol@exemple.fr"));
+	foreach (["verify_email", "account_exists", "reset_password", "confirm_email"] as $kind) $run($kind, fn() => mail_send_link($kind, "alice@exemple.fr", $account["name"], $token, $language));
+	$run("password_changed", fn() => mail_send_password_changed("alice@exemple.fr", $account["name"], $language));
+	$run("email_change_requested", fn() => mail_send_email_change_requested("alice@exemple.fr", "new@exemple.fr", $account["name"], $language));
+	$run("email_change_taken", fn() => mail_send_email_change_taken("alice@exemple.fr", $language));
+	$run("email_changed", fn() => mail_send_email_changed("alice@exemple.fr", "new@exemple.fr", $account["name"], $language));
+	$run("notification_emails", fn() => mail_send_notification_emails_changed("alice@exemple.fr", "bob@exemple.fr;carol@exemple.fr", $language));
 	$run("new_login", fn() => mail_send_new_login($account, "Firefox sur Mac", "a1b2c3", "readWrite", "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) Firefox/131.0", "2027-10-27 10:00:00"));
 	$run("reminder", fn() => mail_send_reminder($account));
 	$run("deletion_warning", fn() => mail_send_deletion_warning($account, 10));

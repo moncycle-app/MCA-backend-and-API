@@ -22,11 +22,11 @@ require_once __DIR__ . "/../lib/db_querie.php";
 require_once __DIR__ . "/../lib/mail.php";
 
 // Tells every user that the terms of service change, when they take effect, and that using the app after that date means accepting them.
-//   php terms_notice.php --url=https://... --date=2026-12-01 --test-email=me@example.org   a trial: ONE mail, to that address only, nobody else
+//   php terms_notice.php --url=https://... --date=2026-12-01 --test-email=me@example.org[ --language=FR]   a trial: ONE mail, to that address only, nobody else
 //   php terms_notice.php --url=https://... --date=2026-12-01 --send                         the real run: one mail per account (login address and notification list)
 // From a browser (script/ answers this machine only, see zz-moncycleapp.conf): terms_notice.php?url=...&date=...&test_email=...  or  ...&send=1
 // The URL is the one given here, whatever TERMS_OF_SERVICE_URL says. Neither --test-email nor --send is refused, and so is any other
-// argument: a typo must not turn a trial into a mailing. The trial mail is addressed to "Test". A real run mails everyone again if it is
+// argument: a typo must not turn a trial into a mailing. The trial mail is addressed to "Test", in the language of --language (default ACCOUNT_DEFAULT_LANGUAGE); a real run uses each account's own. A real run mails everyone again if it is
 // run twice (nothing is remembered): read its list of failures, do not rerun it whole.
 $is_cli = PHP_SAPI === "cli";
 if (!$is_cli) header("Content-Type: text/plain; charset=utf-8");
@@ -46,9 +46,11 @@ $url = $options["url"] ?? "";
 $date = date_parse_ymd($options["date"] ?? null);
 $test_email = $options["test-email"] ?? null;
 $send = isset($options["send"]);
+$language = $options["language"] ?? ACCOUNT_DEFAULT_LANGUAGE;
 
 $problems = [];
-if (array_diff(array_keys($options), ["url", "date", "test-email", "send"])) $problems[] = "unknown argument";
+if (array_diff(array_keys($options), ["url", "date", "test-email", "send", "language"])) $problems[] = "unknown argument";
+if (!in_array($language, ACCOUNT_LANGUAGES, true)) $problems[] = "language is not one of " . implode(", ", ACCOUNT_LANGUAGES);
 if (!preg_match('#^https://[^\s<>"\']+$#', $url) || filter_var($url, FILTER_VALIDATE_URL) === false) $problems[] = "url must be an https address";
 if (is_null($date)) $problems[] = "date must be YYYY-MM-DD";
 elseif ($date < date("Y-m-d")) $problems[] = "date is in the past";
@@ -71,7 +73,7 @@ if (MAINTENANCE_MODE) {
 }
 
 if (!is_null($test_email)) {
-	$sent = mail_send_terms_update(["name" => "Test", "login_email" => $test_email, "notification_emails" => ""], $url, $date);
+	$sent = mail_send_terms_update(["name" => "Test", "login_email" => $test_email, "notification_emails" => "", "language" => $language], $url, $date);
 	echo ($sent ? "trial mail sent to " : "COULD NOT send the trial mail to ") . $test_email . PHP_EOL;
 	exit($sent ? 0 : 1);
 }

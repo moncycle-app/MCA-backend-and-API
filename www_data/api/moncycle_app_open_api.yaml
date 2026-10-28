@@ -569,7 +569,7 @@ paths:
         | `captcha` | string | Yes | The text read in the picture (purpose `register`). |
         | `captchaToken` | string | Yes | The `token` that came with the picture. |
         | `method` | `cervicalMucus` or `fertilityCare` | No | Default `cervicalMucus`. |
-        | `language` | `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | No | Default `EN`. Stored only: the app and its mails are in French. |
+        | `language` | `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | No | Default `EN`. The mails the server sends to the account are written in it. |
         | `temperatureTracking` | boolean | No | Also record basal body temperature. Default `false`. |
         | `discoveredComment` | string (max 255) | No | How the user found the app. |
         | `okForResearch` | boolean | No | Consent to share anonymous data with research. Default `false`. |
@@ -618,7 +618,7 @@ paths:
                   type: string
                   enum: [EN, FR, ES, DE, IT, PL, PT]
                   default: EN
-                  description: "The language of the account. Stored only: the app and its mails are in French."
+                  description: "The language of the account. The mails the server sends to the account are written in it."
                 temperatureTracking:
                   type: boolean
                   default: false
@@ -2869,7 +2869,7 @@ components:
         language:
           type: string
           enum: [EN, FR, ES, DE, IT, PL, PT]
-          description: "The language of the account. Stored only: the app and its mails are in French."
+          description: "The language of the account. The mails the server sends to the account are written in it."
         nickname:
           type: string
           description: The user's nickname, their initials for instance (the app does not collect the identity of its users).
@@ -3786,7 +3786,7 @@ components:
         language:
           type: string
           enum: [EN, FR, ES, DE, IT, PL, PT]
-          description: "The language of the account. Stored only: the app and its mails are in French."
+          description: "The language of the account. The mails the server sends to the account are written in it."
         timelineAscending:
           type: boolean
           description: 'Display preference only: `true` puts today at the top of the table. The API always returns days in ascending order.'

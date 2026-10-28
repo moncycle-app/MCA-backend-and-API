@@ -42,7 +42,7 @@ sec_captcha_exit_unless_ok($db, $attempt, $recovery["captcha"], "recover_passwor
 // sleep, so that a worker killed meanwhile does not lose it. The link is committed: the mail goes now.
 if (!is_null($recovery["account"])) {
 	log_context(["uid" => intval($recovery["account"]["no_user_account"])]);
-	mail_send_link("reset_password", $email, $recovery["account"]["name"], $recovery["token"]);
+	mail_send_link("reset_password", $email, $recovery["account"]["name"], $recovery["token"], $recovery["account"]["language"]);
 	sleep(rand(1, 4));
 }
 else {

@@ -15,7 +15,7 @@
 
 declare(strict_types=1);
 
-// Every word of the mails to users, in Polish (MAIL_LANG; read by mail_t() in lib/mail.php; how to add a language: docs/mail.md).
+// Every word of the mails to users, in Polish (one file per ACCOUNT_LANGUAGES code; read by mail_t() in lib/mail.php; how to add a language: docs/mail.md).
 // A string is plain text or light HTML (<strong>, no attribute) with {name} marks the code fills. The no-break space is written \u{a0}.
 // The slots the template escapes (title, greeting, why, button_*...) get plain text here, the ones it keeps (content, ps) may hold HTML.
 // The reader is addressed as "Ty" (capitalised, as in a letter), and never in the past tense of the second person, which would

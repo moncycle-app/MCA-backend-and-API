@@ -15,7 +15,7 @@
 
 declare(strict_types=1);
 
-// Every word of the mails to users, in Italian (MAIL_LANG; read by mail_t() in lib/mail.php; how to add a language: docs/mail.md).
+// Every word of the mails to users, in Italian (one file per ACCOUNT_LANGUAGES code; read by mail_t() in lib/mail.php; how to add a language: docs/mail.md).
 // A string is plain text or light HTML (<strong>, no attribute) with {name} marks the code fills. The no-break space is written \u{a0}.
 // The slots the template escapes (title, greeting, why, button_*...) get plain text here, the ones it keeps (content, ps) may hold HTML.
 // The reader is addressed as "tu", in wording that does not depend on the reader's gender. A long date takes no article

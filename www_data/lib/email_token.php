@@ -121,11 +121,11 @@ function email_token_complete($db, array $body, array $issues = []): array {
 	log_context(["uid" => intval($account["no_user_account"])]);
 	if ($purpose === EMAIL_TOKEN_PURPOSE_RESET_PASSWORD) {
 		log_event("account.password_reset");
-		mail_send_password_changed($account["login_email"], $account["name"]);
+		mail_send_password_changed($account["login_email"], $account["name"], $account["language"]);
 	}
 	elseif ($purpose === EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL) {
 		log_event("account.email_changed");
-		mail_send_email_changed($account["login_email"], $used["result"]["loginEmail"], $account["name"]);
+		mail_send_email_changed($account["login_email"], $used["result"]["loginEmail"], $account["name"], $account["language"]);
 	}
 	else log_event("account.email_verified");
 
@@ -143,7 +143,7 @@ function email_token_request_email_change($db, array $user_account, string $new_
 		return email_token_issue($db, $no_user_account, EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL, $new_email);
 	});
 
-	if (is_null($token)) return mail_send_email_change_taken($new_email);
-	mail_send_email_change_requested($user_account["login_email"], $new_email, $user_account["name_user_account"]);
-	return mail_send_link("confirm_email", $new_email, $user_account["name_user_account"], $token);
+	if (is_null($token)) return mail_send_email_change_taken($new_email, $user_account["language"]);
+	mail_send_email_change_requested($user_account["login_email"], $new_email, $user_account["name_user_account"], $user_account["language"]);
+	return mail_send_link("confirm_email", $new_email, $user_account["name_user_account"], $token, $user_account["language"]);
 }

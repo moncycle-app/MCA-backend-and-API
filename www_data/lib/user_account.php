@@ -107,7 +107,7 @@ function user_account_notification_emails_parse(mixed $value): ?string {
 // A new address gets an account that cannot be used until the address is proved, and the link that proves it. An address that has an
 // account (proved or not) is left exactly as it is, and its owner gets a link to choose a new password: nothing a stranger types reaches
 // an account, and the answer is the same either way. $new: nickname, email, password, birth_year, nfp_method, comment, research, language.
-// Answers ["captcha" => verdict, "account" => [no_user_account, name, login_email] or null, "token" => for the mail or null,
+// Answers ["captcha" => verdict, "account" => [no_user_account, name, login_email, language] or null, "token" => for the mail or null,
 // "created" => bool]; the mail is the caller's, once this has committed. The captcha is checked first (a refused one costs no hash),
 // and again under the lock of an existing account: of requests that come together with one captcha, one mail.
 function user_account_register($db, array $new, mixed $captcha_token, mixed $captcha_answer, string $ip): array {
@@ -131,7 +131,7 @@ function user_account_register($db, array $new, mixed $captcha_token, mixed $cap
 				log_context(["uid" => intval($no_user_account)]);
 				log_event("account.registered", ["nfp" => $new["nfp_method"]]);
 				return [
-					"captcha" => "ok", "created" => true, "account" => ["no_user_account" => $no_user_account, "name" => $new["nickname"], "login_email" => $new["email"]],
+					"captcha" => "ok", "created" => true, "account" => ["no_user_account" => $no_user_account, "name" => $new["nickname"], "login_email" => $new["email"], "language" => $new["language"]],
 					"token" => email_token_issue($db, intval($no_user_account), EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION),
 				];
 			}
@@ -311,7 +311,7 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	if (!empty($closed_sessions)) log_context(["rev" => $closed_sessions]);
 	if (!empty($changed)) log_event("account.settings_changed", ["fld" => $changed]);
 	if (!is_null($new_password)) log_event("account.password_changed", ["out" => $logged_out_devices]);
-	if (!is_null($new_notification_emails)) mail_send_notification_emails_changed($user_account["login_email"], $new_notification_emails);
+	if (!is_null($new_notification_emails)) mail_send_notification_emails_changed($user_account["login_email"], $new_notification_emails, $user_account["language"]);
 
 	$meta = ["fieldsUpdated" => is_null($new_password) ? $changed : array_merge($changed, ["password"])];
 	if (!is_null($new_password)) $meta["loggedOutDevices"] = $logged_out_devices;

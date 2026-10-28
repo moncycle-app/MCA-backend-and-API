@@ -137,7 +137,7 @@ Also:
   the mail of a link, by kind (verify_email, account_exists, reset_password, confirm_email). The links are
   `APP_URL` + `verify_email#purpose=..&t=..` (the page `verify_email.html` and `js/verify_email.js` post the fragment to
   `POST /api/v2/verify_email`). A mail never holds a password. Every mail to a user is the template `www_data/mail/layout.html`
-  (`MAIL_LAYOUT`; its plain-text part is `layout.txt`) and says its words through `mail_t()` from `www_data/mail/lang/fr.php` (`MAIL_LANG`): **no word a user reads is in `mail.php`**,
+  (`MAIL_LAYOUT`; its plain-text part is `layout.txt`) and says its words through `mail_t()` from `www_data/mail/lang/<language>.php` (the language of the account the mail is for, `mail_language()`): **no word a user reads is in `mail.php`**,
   none in the layout (see `docs/mail.md`): `mail_send()` takes its slots and `mail_render()` fills it; the body is made
   of `mail_p()`, `mail_facts()`, `mail_callout()`... never of hand-written HTML. Every mail has `Reply-To: MAIL_REPLY_TO`.
 - **`log.php`** the app's own log: see [The log](#the-log).

@@ -175,8 +175,7 @@ const ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE = 10;
 // The frame of every mail to a user, in HTML and in plain text, filled by mail_render().
 const MAIL_LAYOUT = __DIR__ . "/mail/layout.html";
 const MAIL_LAYOUT_TEXT = __DIR__ . "/mail/layout.txt";
-// The language of the mails: mail/lang/<MAIL_LANG>.php holds every word they say (mail_t()).
-const MAIL_LANG = "fr";
+// The words of the mails: mail/lang/<language of the account, lower case>.php holds every word they say (mail_t()).
 const MAIL_LANG_DIR = __DIR__ . "/mail/lang";
 // Where an answer to any mail goes, and the address the mails give to write to the team.
 const MAIL_REPLY_TO = "hello@tech4fertility.org";

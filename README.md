@@ -219,7 +219,7 @@ not verified within 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`, `ACCOUNT_UNVERIFI
   (`docker exec <container> php /var/www/html/script/weekly_report.php --html > report.html`).
 - **`script/terms_notice.php`** mails every user (verified accounts, login address and notification list, demo accounts excepted) that
   the terms of service change, from which date, and that using the app afterwards means accepting them. `--url=https://...` and
-  `--date=YYYY-MM-DD` are required, then either `--test-email=ADDRESS` (ONE trial mail to that address) or `--send` (everyone). Nothing
+  `--date=YYYY-MM-DD` are required, then either `--test-email=ADDRESS` (ONE trial mail to that address, in `--language=XX`, default `EN`) or `--send` (everyone, each in the language of the account). Nothing
   is remembered: do not run `--send` twice.
 
 ### Demo accounts

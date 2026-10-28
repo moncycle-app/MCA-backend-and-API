@@ -3,6 +3,7 @@
 # Renders every mail of lib/mail.php to tests/mail_preview/out/ (nothing is sent, no database is touched) and checks the language file.
 #
 #   tests/mail_preview/run.sh        then open tests/mail_preview/out/index.html: each mail in light, dark and phone width
+#   MAIL_PREVIEW_LANGUAGE=DE tests/mail_preview/run.sh    the mails in another language (default FR)
 #
 # Runs in the dev container (macbook_moncycle_app, see CLAUDE.md), whose www_data holds the code. out/ is not committed.
 set -u
@@ -15,20 +16,24 @@ docker ps >/dev/null 2>&1 || { echo "Docker is not running" >&2; exit 3; }
 
 # The language file and the code agree: every key a mail asks for is defined, every key defined is asked for. A key with {$kind} in
 # it stands for the four mails of a link; a {@key} in fr.php counts as asking for it.
+status=0
 kinds="verify_email account_exists reset_password confirm_email"
 used=$( { grep -oE 'mail_t\("[^"]+"' "$ROOT/www_data/lib/mail.php" | sed -E 's/mail_t\("//; s/"$//' | grep -v '{\$kind}'
   for k in $kinds; do grep -oE 'mail_t\("\{\$kind\}\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | sed -E "s/mail_t\\(\"\\{\\\$kind\\}/$k/; s/\"\$//"; done; } | sort -u)
 defined=$(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$ROOT/www_data/mail/lang/fr.php" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u)
+# the other languages carry the same keys as fr.php
+for f in "$ROOT"/www_data/mail/lang/*.php; do
+  diff <(echo "$defined") <(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$f" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u) >/dev/null || { echo "$(basename "$f") DOES NOT HAVE THE KEYS OF fr.php"; status=1; }
+done
 refs=$(grep -oE '\{@[a-z_.]+\}' "$ROOT/www_data/mail/lang/fr.php" | sed -E 's/^\{@//; s/\}$//')
 literals=$( { echo "$used"; echo "$refs"; grep -oE '"[a-z_]+\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | tr -d '"'; } | sort -u)
 missing=$(comm -23 <(echo "$used") <(echo "$defined"))
 unused=$(comm -13 <(echo "$literals") <(echo "$defined") | grep -v '^months$')
-status=0
 [ -n "$missing" ] && { echo "KEYS ASKED FOR BUT NOT IN fr.php:"; echo "$missing"; status=1; }
 [ -n "$unused" ] && { echo "KEYS IN fr.php THAT NOTHING ASKS FOR:"; echo "$unused"; status=1; }
 
 rm -rf "$OUT" && mkdir -p "$OUT"
-docker exec -i -e MAIL_PREVIEW_DIR=/tmp/mail_preview "$C" php -d open_basedir= < "$HERE/render.php" | grep -v '^{"ts"'
+docker exec -i -e MAIL_PREVIEW_DIR=/tmp/mail_preview -e MAIL_PREVIEW_LANGUAGE="${MAIL_PREVIEW_LANGUAGE:-FR}" "$C" php -d open_basedir= < "$HERE/render.php" | grep -v '^{"ts"'
 docker cp "$C:/tmp/mail_preview/." "$OUT/" >/dev/null && docker exec "$C" rm -rf /tmp/mail_preview
 
 {

@@ -67,6 +67,6 @@ sec_captcha_exit_unless_ok($db, $attempt, $registration["captcha"], "register");
 // The same answer whether the address was new or had an account; the mail is not: a link to prove the address, or to choose a new password.
 $account = $registration["account"];
 $sent = !is_null($account) && !is_null($registration["token"])
-	&& mail_send_link($registration["created"] ? "verify_email" : "account_exists", $account["login_email"], $account["name"], $registration["token"]);
+	&& mail_send_link($registration["created"] ? "verify_email" : "account_exists", $account["login_email"], $account["name"], $registration["token"], $account["language"]);
 
 http_data(202, ["sent" => $sent]);

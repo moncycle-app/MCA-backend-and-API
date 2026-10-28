@@ -95,7 +95,7 @@ function db_querie_update_user_account_email_token_clear($db, $no_user_account, 
 
 function db_querie_select_user_account_by_email_token($db, string $token_hash): ?array {
 	return db_ops_row($db,
-		"SELECT u.no_user_account, u.name, u.login_email, u.email_verified_at, u.email_token_purpose, u.email_token_new_email,
+		"SELECT u.no_user_account, u.name, u.login_email, u.email_verified_at, u.email_token_purpose, u.email_token_new_email, u.language,
 		(u.email_token_expires_at <= NOW()) AS email_token_expired
 		FROM user_account AS u WHERE u.email_token_hash = :hash",
 		["hash" => $token_hash]
@@ -111,7 +111,7 @@ function db_querie_update_user_account_login_email($db, $no_user_account, string
 // Every account that can sign in (address proved), the demo accounts excepted: whom a notice to all users goes to.
 function db_querie_select_user_account_to_notify($db): array {
 	return db_ops_rows($db,
-		"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails FROM user_account AS u
+		"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails, u.language FROM user_account AS u
 		WHERE u.email_verified_at IS NOT NULL AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
 		ORDER BY u.no_user_account"
 	);
@@ -491,7 +491,7 @@ function db_querie_select_cycle($db, string $date, $no_user_account): ?string {
 // their cycles (auto_mail_export)
 function db_querie_select_cycles_finished($db): array {
 	return db_ops_rows($db,
-		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.login_email, c.notification_emails
+		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.login_email, c.notification_emails, c.language
 		FROM day_timeline AS obs JOIN user_account AS c ON obs.no_user_account = c.no_user_account
 		WHERE obs.date_obs = CURDATE() - INTERVAL 2 DAY AND (obs.cycle_1st_day = 1 OR obs.observation_paused = 1) AND c.auto_mail_export = 1"
 	);
@@ -500,10 +500,10 @@ function db_querie_select_cycles_finished($db): array {
 // the accounts with no day written for 35 days, registered for more than that, not yet reminded
 function db_querie_select_user_account_inactive($db): array {
 	return db_ops_rows($db,
-		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.login_email, c.notification_emails, c.inscription_date
+		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.login_email, c.notification_emails, c.language, c.inscription_date
 		FROM user_account AS c LEFT JOIN day_timeline AS o ON c.no_user_account = o.no_user_account
 		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0 AND c.email_verified_at IS NOT NULL
-		GROUP BY c.no_user_account, c.name, c.login_email, c.notification_emails, c.inscription_date
+		GROUP BY c.no_user_account, c.name, c.login_email, c.notification_emails, c.language, c.inscription_date
 		HAVING (DATE(last_day_written) < DATE(NOW()) - INTERVAL 35 DAY OR last_day_written IS NULL) AND c.inscription_date < DATE(NOW()) - INTERVAL 35 DAY
 		ORDER BY last_day_written DESC LIMIT 20"
 	);
@@ -513,7 +513,7 @@ function db_querie_select_user_account_inactive($db): array {
 // table is reduced to one MAX() per account in a derived table, joined once, rather than a subquery per account. Without the demo
 // accounts. The retention is re-evaluated on every run, so no "warned" flag exists: any activity takes the account out of both lists.
 const DB_SQL_USER_ACCOUNT_LAST_ACTIVITY =
-	"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails,
+	"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails, u.language,
 	GREATEST(u.inscription_date, COALESCE(u.last_auth_date, u.inscription_date), COALESCE(dt.last_activity, u.inscription_date),
 		COALESCE(de.last_activity, u.inscription_date), COALESCE(at.last_activity, u.inscription_date)) AS last_activity
 	FROM user_account u

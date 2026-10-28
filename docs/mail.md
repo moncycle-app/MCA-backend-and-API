@@ -82,7 +82,7 @@ answer to a mail reaches the team.
 
 ## The words, and a new language
 
-`mail_t($key, $vars)` reads a string of `mail/lang/<MAIL_LANG>.php` (a PHP file that returns `[key => string]`) and replaces its `{name}`
+`mail_t($key, $vars)` reads a string of `mail/lang/<language>.php` (the language of the account the mail is for: `user_account.language`, lower case) (a PHP file that returns `[key => string]`) and replaces its `{name}`
 marks. Rules for the file:
 
 - A key is `<mail>.<part>` (`reminder.title`), or `layout.*`, `why.*`, `format.*`, `greeting.*`, `lifetime.*`, `app.*`, `action.*`, `eyebrow.*`,
@@ -96,9 +96,12 @@ marks. Rules for the file:
 - A value the code passes in is escaped by the code for an HTML string, and raw for a slot the template escapes.
 - The date formats (`format.*`), the month names and the plural forms (`lifetime.*`) are words too: they are in the file.
 
-To add a language: copy `fr.php` to `<code>.php`, translate the values (keep the keys and the `{marks}`), set `MAIL_LANG` in
-`constants.php`, run `tests/mail_preview/run.sh`. The language is one for the whole server today: choosing it per account is a later
-step (an account setting, then `mail_t()` and `mail_render()` taking the language).
+To add a language: copy `fr.php` to `<code>.php` (lower case), translate the values (keep the keys and the `{marks}`), add the code to
+`ACCOUNT_LANGUAGES` in `constants.php`, run `tests/mail_preview/run.sh` (`MAIL_PREVIEW_LANGUAGE=DE` renders another language).
+Every `mail_send_*()` sets the language from the account it is for (`mail_language()`): the row it is given has `language`, or the
+caller passes it. A mail sent to an address that is not (yet) an account of its own uses the language of the account that asked for it
+(the new address of a change of login) or the one stored by the sign-up. A code that is not in `ACCOUNT_LANGUAGES` falls back to
+`ACCOUNT_DEFAULT_LANGUAGE`.
 
 The mails reuse words the web app shows («⚙️ Réglages», «Cycles par e-mail»): a translation must follow the app's.
 
