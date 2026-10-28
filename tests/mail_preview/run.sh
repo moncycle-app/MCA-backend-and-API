@@ -14,12 +14,13 @@ OUT="$HERE/out"
 docker ps >/dev/null 2>&1 || { echo "Docker is not running" >&2; exit 3; }
 
 # The language file and the code agree: every key a mail asks for is defined, every key defined is asked for. A key with {$kind} in
-# it stands for the four mails of a link.
+# it stands for the four mails of a link; a {@key} in fr.php counts as asking for it.
 kinds="verify_email account_exists reset_password confirm_email"
 used=$( { grep -oE 'mail_t\("[^"]+"' "$ROOT/www_data/lib/mail.php" | sed -E 's/mail_t\("//; s/"$//' | grep -v '{\$kind}'
   for k in $kinds; do grep -oE 'mail_t\("\{\$kind\}\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | sed -E "s/mail_t\\(\"\\{\\\$kind\\}/$k/; s/\"\$//"; done; } | sort -u)
 defined=$(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$ROOT/www_data/mail/lang/fr.php" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u)
-literals=$( { echo "$used"; grep -oE '"[a-z_]+\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | tr -d '"'; } | sort -u)
+refs=$(grep -oE '\{@[a-z_.]+\}' "$ROOT/www_data/mail/lang/fr.php" | sed -E 's/^\{@//; s/\}$//')
+literals=$( { echo "$used"; echo "$refs"; grep -oE '"[a-z_]+\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | tr -d '"'; } | sort -u)
 missing=$(comm -23 <(echo "$used") <(echo "$defined"))
 unused=$(comm -13 <(echo "$literals") <(echo "$defined") | grep -v '^months$')
 status=0

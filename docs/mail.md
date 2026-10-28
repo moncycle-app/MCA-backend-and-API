@@ -69,10 +69,11 @@ Made by `lib/mail.php`, never written by hand: their classes are what the dark t
 ### The plain-text part
 
 Every mail also carries a plain-text alternative, made by the same `mail_render()` from `layout.txt` (`MAIL_LAYOUT_TEXT`), with the same
-slots, nothing escaped, and one blank line between blocks. The mail gives only the body of it (`text`, `<mail>.text` in the language
-file); the frame adds the greeting, the button as its label and link, the note, the PS, the sign-off and the footer. So a text body
-never repeats what the frame says: no greeting, no link, no sign-off. `ps` is HTML: its text part is the same with the tags stripped,
-or the `ps_text` the mail gives (the cycle mail, whose PS links to a page).
+slots, nothing escaped, and one blank line between blocks. The mail gives no text of its own: `mail_text_from_html()` makes it from the
+`content` slot (a paragraph or a row on its own line, the cells of a row joined by `: `, a link as `label (url)`), so that no sentence
+is written twice; the frame adds the greeting, the button as its label and link, the note, the PS, the sign-off and the footer. `ps`
+is HTML and is made text the same way, or is the `ps_text` the mail gives (the cycle mail, whose PS links to a page).
+`mail_send()` takes a `$text` only for a page of its own (the weekly report).
 
 ### Contact
 
@@ -84,9 +85,13 @@ answer to a mail reaches the team.
 `mail_t($key, $vars)` reads a string of `mail/lang/<MAIL_LANG>.php` (a PHP file that returns `[key => string]`) and replaces its `{name}`
 marks. Rules for the file:
 
-- A key is `<mail>.<part>` (`reminder.title`), or `layout.*`, `why.*`, `format.*`, `greeting.*`, `lifetime.*` for what several mails share.
+- A key is `<mail>.<part>` (`reminder.title`), or `layout.*`, `why.*`, `format.*`, `greeting.*`, `lifetime.*`, `app.*`, `action.*`, `eyebrow.*`,
+  `notice.*`, `contact.*`, `forgot.*`, `not_you.*` for what several mails share.
+- A word or a sentence said twice is written once and used as `{@other.key}` (`mail_t()` replaces it by that string, then fills the
+  `{name}` marks): the name of a settings page, "Not you?", the way to reach the team. A subject is the title and the moment
+  (`subject.when`), unless a mail needs its own (`<mail>.subject`).
 - A string is plain text, or light HTML (`<strong>`, no attribute) for the slots the template keeps (`content`, `ps`). The slots it
-  escapes (`title`, `greeting`, `why`, `button_*`) get plain text. Text parts (`*.text`) are plain text.
+  escapes (`title`, `greeting`, `why`, `button_*`) get plain text. 
 - The no-break space is written `\u{a0}` (before `?` `:` `!` and inside « », in French).
 - A value the code passes in is escaped by the code for an HTML string, and raw for a slot the template escapes.
 - The date formats (`format.*`), the month names and the plural forms (`lifetime.*`) are words too: they are in the file.
