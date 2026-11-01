@@ -280,7 +280,7 @@ function mail_send_link(string $kind, string $email, string $name, string $token
 		"confirm_email" => EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL,
 		default => EMAIL_TOKEN_PURPOSE_RESET_PASSWORD,
 	};
-	$url = rtrim(APP_URL, "/") . "/verify_email#purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
+	$url = rtrim(APP_URL, "/") . "/#/verify_email?purpose=" . EMAIL_TOKEN_PURPOSE_NAMES[$purpose] . "&t=" . $token;
 	$lifetime = mail_lifetime(EMAIL_TOKEN_LIFETIME_MINUTES[$purpose]);
 
 	$content = match ($kind) {

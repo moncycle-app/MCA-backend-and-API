@@ -787,7 +787,7 @@ paths:
 
         ### The link
 
-        A link is a page of the app: `APP_URL` + `verify_email#purpose=<purpose>&t=<token>`. The page posts both values here;
+        A link is a page of the app: `APP_URL` + `/#/verify_email?purpose=<purpose>&t=<token>`. The page posts both values here;
         a client that is not a web page reads them from the link and does the same.
 
         - A link works **once** and only for its purpose.

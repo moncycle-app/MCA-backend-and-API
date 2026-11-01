@@ -69,7 +69,7 @@ password (a wrong one still gets `401 invalid_credentials`), and counted as no f
 `POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
 (`newPassword` for `resetPassword` only).
 
-- The link is a page of the app with the purpose and token in its **fragment** (`APP_URL` + `verify_email#purpose=...&t=...`). A
+- The link is a page of the app with the purpose and token in its **fragment** (`APP_URL` + `/#/verify_email?purpose=...&t=...`). A
   fragment reaches no server, log or `Referer`, and a mail scanner that only fetches the link runs no script, so it uses nothing up.
 - The token is 32 random bytes; the database keeps its SHA-256, its purpose, its expiry (3 days to verify, 5 hours to reset a
   password, 1 day to change the address) and, for a change of address, the new address.
