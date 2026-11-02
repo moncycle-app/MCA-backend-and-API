@@ -25,7 +25,7 @@ require_once __DIR__ . "/sec_token.php";
 require_once __DIR__ . "/server.php";
 
 // The log of the request, a JSON answer, and an exception nobody catches logged and answered 500 "unexpected_error" with a message that
-// tells nothing. All that GET /api/v2/server_info does, as it answers in maintenance.
+// tells nothing. All that GET /api/v3/server_info does, as it answers in maintenance.
 function api_start_open(): void {
 	log_start(sec_client_ip());
 	set_exception_handler(function (\Throwable $e) {

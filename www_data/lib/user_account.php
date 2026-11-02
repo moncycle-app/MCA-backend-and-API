@@ -15,7 +15,7 @@
 
 declare(strict_types=1);
 
-// The account: its method, the sign-up and the password recovery, GET and POST /api/v2/account.
+// The account: its method, the sign-up and the password recovery, GET and POST /api/v3/account.
 
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db_ops.php";
@@ -28,6 +28,7 @@ require_once __DIR__ . "/mail.php";
 require_once __DIR__ . "/sec.php";
 require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/sec_token.php";
+require_once __DIR__ . "/user_setting.php";
 
 // ---------------------------------------------------------------------------
 // nfp_method: one 1-4 int in the DB, a method name and a temperature flag everywhere else (NFP_METHOD_BY_ID)
@@ -101,7 +102,7 @@ function user_account_notification_emails_parse(mixed $value): ?string {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/v2/register, POST /api/v2/recover_password
+// POST /api/v3/register, POST /api/v3/recover_password
 // ---------------------------------------------------------------------------
 
 // A new address gets an account that cannot be used until the address is proved, and the link that proves it. An address that has an
@@ -170,17 +171,13 @@ function user_account_recover_password($db, string $email, mixed $token, mixed $
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/v2/account, POST /api/v2/account
+// GET /api/v3/account, POST /api/v3/account
 // ---------------------------------------------------------------------------
 
-// The settings of a POST /api/v2/account body that need no password: [the values db_querie_update_user_account_settings() takes, the JSON names
-// of those that change]. A field absent keeps its value.
+// The mandatory settings (the columns of user_account) of a POST /api/v3/account body that need no password: [the values
+// db_querie_update_user_account_settings() takes, the JSON names of those that change]. A field absent keeps its value.
 function user_account_check_settings(array $account, array $body, array &$issues): array {
-	$new = [
-		"name" => $account["name_user_account"], "notification_emails" => $account["notification_emails"], "nfp_method" => $account["nfp_method"],
-		"age" => $account["age"], "sponsor" => $account["sponsor"], "timeline_asc" => $account["timeline_asc"], "research" => $account["research"],
-		"auto_mail_export" => $account["auto_mail_export"], "language" => $account["language"],
-	];
+	$new = ["name" => $account["name_user_account"], "nfp_method" => $account["nfp_method"], "age" => $account["age"], "research" => $account["research"], "language" => $account["language"]];
 	$changed = [];
 
 	$nickname = day_format_body_text($body, "nickname", ACCOUNT_LIMIT_NICKNAME_CHARS, $issues);
@@ -198,21 +195,19 @@ function user_account_check_settings(array $account, array $body, array &$issues
 	$language = input_choice($body, "language", ACCOUNT_LANGUAGES, $issues, false);
 	if (!is_null($language)) [$new["language"], $changed[]] = [$language, "language"];
 
-	foreach (["timelineAscending" => "timeline_asc", "research" => "research", "sponsor" => "sponsor", "autoMailExport" => "auto_mail_export"] as $json => $column) {
-		$flag = input_bool_field($body, $json, $issues);
-		if (is_null($flag)) continue;
-		$new[$column] = $flag ? 1 : 0;
-		$changed[] = $json;
-	}
+	$research = input_bool_field($body, "research", $issues);
+	if (!is_null($research)) [$new["research"], $changed[]] = [$research ? 1 : 0, "research"];
 
 	return [$new, $changed];
 }
 
-// The whole of POST /api/v2/account, partial. $issues are the ones the endpoint found (unknown names); every problem of a value is added, and
+// The whole of POST /api/v3/account, partial. $issues are the ones the endpoint found (unknown names); every problem of a value is added, and
 // one 400 tells them all. Three changes want the current password ("password"), because a session must not be able to hand the account
 // or its cycles to someone else: "newPassword" (with "logoutOtherDevices" to close the other sessions), "notificationEmails" and
 // "loginEmail" (which also wants the TOTP "code" when the account has one). The first two are made at once; the third sends a link to the
 // NEW address and happens when it is used. Everything is checked before anything is written, so a refused request changes nothing.
+// The optional settings and the keys of third parties (USER_SETTINGS, "customSettings") are checked by lib/user_setting.php and written to user_setting
+// with the account's row, in one transaction; null puts a setting back to its default.
 // Answers ["status" => 200, "data" => user_account_to_json(), "meta" => ["fieldsUpdated", "loggedOutDevices"?, "loginEmailLinkSent"?]]
 // or ["status" => 4xx, "code", "message"].
 function user_account_update($db, array $user_account, array $body, array $issues = []): array {
@@ -220,19 +215,24 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	$no_user_account = intval($user_account["no_user_account"]);
 
 	[$new, $changed] = user_account_check_settings($user_account, $body, $issues);
+	$setting_rows = user_setting_load($db, $no_user_account);
+	$settings = user_setting_check_body($body, $setting_rows, $new["language"], $issues);
+	$custom = user_setting_check_custom($body["customSettings"] ?? null, $setting_rows, $issues);
 
 	$new_notification_emails = null;
 	if (array_key_exists("notificationEmails", $body)) {
 		$separator = ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR;
-		if (!is_string($body["notificationEmails"])) input_wrong_type($issues, "notificationEmails", $body["notificationEmails"], "a string of addresses separated by '$separator' (or an empty string)");
+		if (is_null($body["notificationEmails"])) $new_notification_emails = "";   // back to the default: no address
+		elseif (!is_string($body["notificationEmails"])) input_wrong_type($issues, "notificationEmails", $body["notificationEmails"], "a string of addresses separated by '$separator' (or an empty string)");
 		else {
 			$parsed = user_account_notification_emails_parse($body["notificationEmails"]);
 			if (is_null($parsed)) {
 				$issues[] = input_issue("notificationEmails", "invalid_value", "'notificationEmails' must be at most " . ACCOUNT_NOTIFICATION_EMAILS_MAX . " valid e-mail addresses separated by '$separator', "
 					. ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS . " characters in all (or an empty string to clear the list).");
 			}
-			elseif ($parsed !== (user_account_notification_emails_parse($user_account["notification_emails"] ?? "") ?? "")) $new_notification_emails = $parsed;
+			else $new_notification_emails = $parsed;
 		}
+		if ($new_notification_emails === (user_account_notification_emails_parse($setting_rows["notification_emails"]["str"] ?? "") ?? "")) $new_notification_emails = null;
 	}
 
 	$new_login_email = input_email($body, "loginEmail", $issues, false);
@@ -294,11 +294,16 @@ function user_account_update($db, array $user_account, array $body, array $issue
 
 	// the settings and the password together, then the mails, then the link
 	if (!is_null($new_notification_emails)) {
-		$new["notification_emails"] = $new_notification_emails;
-		$changed[] = "notificationEmails";
+		if ($new_notification_emails === "") $settings["reset"][] = "notification_emails";
+		else $settings["write"]["notification_emails"] = ["int" => null, "str" => $new_notification_emails];
+		$settings["changed"][] = "notificationEmails";
 	}
-	$closed_sessions = db_ops_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $last_write_client_UTC, $new_password, $logout_other_devices) {
+	$changed = array_merge($changed, $settings["changed"], $custom["changed"]);
+	$closed_sessions = db_ops_transaction($db, function () use ($db, $no_user_account, $user_account, $new, $changed, $settings, $custom, $last_write_client_UTC, $new_password, $logout_other_devices) {
+		db_querie_select_user_account_for_update($db, $no_user_account);   // one writer per account
 		if (!empty($changed)) db_querie_update_user_account_settings($db, $no_user_account, $new, $last_write_client_UTC);
+		user_setting_save($db, $no_user_account, $settings);
+		user_setting_save($db, $no_user_account, $custom);
 		if (is_null($new_password)) return null;
 
 		db_querie_update_password($db, sec_password_hash($new_password), $no_user_account);
@@ -309,7 +314,8 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	$logged_out_devices = is_null($closed_sessions) ? null : count($closed_sessions);
 
 	if (!empty($closed_sessions)) log_context(["rev" => $closed_sessions]);
-	if (!empty($changed)) log_event("account.settings_changed", ["fld" => $changed]);
+	// a key of third parties is their text, not ours: only that some changed is logged
+	if (!empty($changed)) log_event("account.settings_changed", ["fld" => array_values(array_unique(array_map(fn($field) => str_starts_with($field, "customSettings.") ? "customSettings" : $field, $changed)))]);
 	if (!is_null($new_password)) log_event("account.password_changed", ["out" => $logged_out_devices]);
 	if (!is_null($new_notification_emails)) mail_send_notification_emails_changed($user_account["login_email"], $new_notification_emails, $user_account["language"]);
 
@@ -320,17 +326,17 @@ function user_account_update($db, array $user_account, array $body, array $issue
 	// the account as it is now: the row the request started from, with what was written
 	$after = array_merge($user_account, $new, ["name_user_account" => $new["name"]]);
 	if (!empty($changed)) $after["last_write_client_UTC"] = $last_write_client_UTC;
-	return ["status" => 200, "data" => user_account_to_json($after, db_querie_select_day_timeline_oldest_date($db, $user_account["no_user_account"])), "meta" => $meta];
+	return ["status" => 200, "data" => user_account_to_json($after, db_querie_select_day_timeline_oldest_date($db, $no_user_account), user_setting_load($db, $no_user_account)), "meta" => $meta];
 }
 
-// The account as a client starts from it ($user_account: the row of sec_token_authenticate()). Nothing secret. The cycles are in the
-// sync, the news banner in GET /api/v2/server_info.
-function user_account_to_json(array $user_account, ?string $oldest_day): array {
+// The account as a client starts from it ($user_account: the row of sec_token_authenticate(); $setting_rows: user_setting_load()). Nothing
+// secret. The mandatory fields are flat; "settings" holds the optional ones with their default, "customSettings" the keys of third
+// parties. The cycles are in the sync, the news banner in GET /api/v3/server_info.
+function user_account_to_json(array $user_account, ?string $oldest_day, array $setting_rows): array {
 	$nfp_method = intval($user_account["nfp_method"]);
 	return [
 		"userId" => intval($user_account["no_user_account"]),
 		"loginEmail" => $user_account["login_email"],
-		"notificationEmails" => $user_account["notification_emails"],
 		"method" => user_account_method_name($nfp_method),
 		"temperatureTracking" => user_account_tracks_temperature($nfp_method),
 		"birthYear" => $user_account["age"],
@@ -338,11 +344,10 @@ function user_account_to_json(array $user_account, ?string $oldest_day): array {
 		"nickname" => $user_account["name_user_account"],
 		"inscriptionDate" => http_iso8601($user_account["inscription_date"]),
 		"oldestDay" => $oldest_day,
-		"sponsor" => boolval($user_account["sponsor"]),
 		"research" => boolval($user_account["research"]),
-		"timelineAscending" => boolval($user_account["timeline_asc"]),
-		"autoMailExport" => boolval($user_account["auto_mail_export"]),
 		"totpState" => sec_totp_state_name($user_account["totp_state"]),
 		"lastWriteClientUtc" => http_iso8601($user_account["last_write_client_UTC"]),
+		"settings" => user_setting_to_json($setting_rows, $user_account["language"]),
+		"customSettings" => (object) user_setting_custom_to_json($setting_rows),
 	];
 }

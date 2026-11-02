@@ -89,11 +89,12 @@ function input_check_names(array $given, array $known, array &$issues, array $re
 // ---------------------------------------------------------------------------
 
 // The JSON body, its names checked. $ignored are accepted and dropped (the output-only fields of a day sent back as it was read),
-// $read_only refused with their own code. A field set to null is a field not sent: it is dropped too.
-function input_body(array $known, array &$issues, array $ignored = [], array $read_only = []): array {
+// $read_only refused with their own code. A field set to null is a field not sent: it is dropped too, except the $keep_null ones, where
+// null means something (a setting put back to its default).
+function input_body(array $known, array &$issues, array $ignored = [], array $read_only = [], array $keep_null = []): array {
 	$body = http_json_body();
 	input_check_names($body, array_merge($known, $ignored), $issues, $read_only);
-	return array_filter(array_diff_key($body, array_flip($ignored)), fn($value) => !is_null($value));
+	return array_filter(array_diff_key($body, array_flip($ignored)), fn($value, $name) => !is_null($value) || in_array($name, $keep_null, true), ARRAY_FILTER_USE_BOTH);
 }
 
 function input_check_no_body(array &$issues): void {
@@ -258,7 +259,7 @@ function input_query_date(array $query, string $name, array &$issues): ?string {
 // The path after the endpoint's name
 // ---------------------------------------------------------------------------
 
-// /api/v2/day/2026-03-10 -> ["2026-03-10"], empty segments dropped.
+// /api/v3/day/2026-03-10 -> ["2026-03-10"], empty segments dropped.
 function input_path(): array {
 	$info = $_SERVER['PATH_INFO'] ?? "";
 	return array_values(array_filter(explode("/", is_string($info) ? $info : ""), fn($segment) => $segment !== ""));

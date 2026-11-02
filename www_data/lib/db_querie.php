@@ -45,8 +45,21 @@ function db_querie_release_lock($db, string $name): void {
 // Accounts
 // ---------------------------------------------------------------------------
 
+// The row of user_account, and from user_setting the two-factor state and secret and the notification addresses (the keys of the row of
+// a session): the sign-in and the mails read them with the account.
+function db_querie_sql_user_account_with_settings(): string {
+	return "SELECT u.*, ts.value_int AS totp_state, tk.value_str AS totp_secret, ne.value_str AS notification_emails FROM user_account AS u"
+		. db_querie_sql_setting_join("u", "ts", USER_SETTING_TOTP_STATE) . db_querie_sql_setting_join("u", "tk", USER_SETTING_TOTP_SECRET) . db_querie_sql_setting_join("u", "ne", "notification_emails");
+}
+
+// LEFT JOIN of the setting $name of the accounts of table alias $account, under alias $alias: $alias.value_int / .value_str, NULL with no row.
+// $name is a constant of the app, never a client's text.
+function db_querie_sql_setting_join(string $account, string $alias, string $name): string {
+	return " LEFT JOIN user_setting AS $alias ON $alias.no_user_account = $account.no_user_account AND $alias.name = '$name'";
+}
+
 function db_querie_select_user_account($db, $no_user_account): ?array {
-	return db_ops_row($db, "SELECT * FROM user_account WHERE no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
+	return db_ops_row($db, db_querie_sql_user_account_with_settings() . " WHERE u.no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
 }
 
 // Holds the account's row until the end of the transaction, so that its writes go one after the other: two that read, find a row
@@ -56,7 +69,7 @@ function db_querie_select_user_account_for_update($db, $no_user_account): bool {
 }
 
 function db_querie_select_user_account_by_email($db, string $email): ?array {
-	return db_ops_row($db, "SELECT * FROM user_account WHERE login_email = :login_email", ["login_email" => $email]);
+	return db_ops_row($db, db_querie_sql_user_account_with_settings() . " WHERE u.login_email = :login_email", ["login_email" => $email]);
 }
 
 // The new id, null when the address has an account. The terms are accepted now: the sign-up refuses a request that does not accept them.
@@ -111,7 +124,8 @@ function db_querie_update_user_account_login_email($db, $no_user_account, string
 // Every account that can sign in (address proved), the demo accounts excepted: whom a notice to all users goes to.
 function db_querie_select_user_account_to_notify($db): array {
 	return db_ops_rows($db,
-		"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails, u.language FROM user_account AS u
+		"SELECT u.no_user_account, u.name, u.login_email, ne.value_str AS notification_emails, u.language FROM user_account AS u"
+		. db_querie_sql_setting_join("u", "ne", "notification_emails") . "
 		WHERE u.email_verified_at IS NOT NULL AND u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")
 		ORDER BY u.no_user_account"
 	);
@@ -127,14 +141,37 @@ function db_querie_select_user_account_unverified_old($db, int $days): array {
 	);
 }
 
-// $fields: name, notification_emails, nfp_method, age, sponsor, timeline_asc, research, auto_mail_export, language
+// $fields: name, nfp_method, age, research, language
 function db_querie_update_user_account_settings($db, $no_user_account, array $fields, string $last_write_client_UTC): int {
 	return db_ops_exec($db,
-		"UPDATE user_account SET `name` = :name, notification_emails = :notification_emails, nfp_method = :nfp_method, age = :age, sponsor = :sponsor,
-		timeline_asc = :timeline_asc, research = :research, auto_mail_export = :auto_mail_export, `language` = :language, last_write_client_UTC = :last_write_client_UTC
+		"UPDATE user_account SET `name` = :name, nfp_method = :nfp_method, age = :age, research = :research, `language` = :language, last_write_client_UTC = :last_write_client_UTC
 		WHERE no_user_account = :no_user_account",
 		$fields + ["last_write_client_UTC" => $last_write_client_UTC, "no_user_account" => $no_user_account]
 	);
+}
+
+// ---------------------------------------------------------------------------
+// Settings (user_setting)
+// ---------------------------------------------------------------------------
+
+function db_querie_select_user_settings($db, int $no_user_account): array {
+	return db_ops_rows($db,
+		"SELECT s.name, s.value_int, s.value_str FROM user_setting AS s WHERE s.no_user_account = :no_user_account ORDER BY s.name",
+		["no_user_account" => $no_user_account]
+	);
+}
+
+// The setting is created, or its value replaced: a number in $value_int and no text, or the other way round.
+function db_querie_upsert_user_setting($db, int $no_user_account, string $name, ?int $value_int, ?string $value_str): int {
+	return db_ops_exec($db,
+		"INSERT INTO user_setting (no_user_account, name, value_int, value_str) VALUES (:no_user_account, :name, :value_int, :value_str)
+		ON DUPLICATE KEY UPDATE value_int = VALUES(value_int), value_str = VALUES(value_str)",
+		["no_user_account" => $no_user_account, "name" => $name, "value_int" => $value_int, "value_str" => $value_str]
+	);
+}
+
+function db_querie_delete_user_setting($db, int $no_user_account, string $name): int {
+	return db_ops_exec($db, "DELETE FROM user_setting WHERE no_user_account = :no_user_account AND name = :name", ["no_user_account" => $no_user_account, "name" => $name]);
 }
 
 function db_querie_update_password($db, string $password_hash, $no_user_account): int {
@@ -151,8 +188,8 @@ function db_querie_count_days_of_account($db, $no_user_account): int {
 	return intval(db_ops_value($db, "SELECT COUNT(dt.no_day) FROM day_timeline AS dt WHERE dt.no_user_account = :no_user_account", ["no_user_account" => $no_user_account]));
 }
 
-function db_querie_count_descriptions_of_account($db, $no_user_account): int {
-	return intval(db_ops_value($db, "SELECT COUNT(d.no_description) FROM description AS d WHERE d.no_user_account = :no_user_account", ["no_user_account" => $no_user_account]));
+function db_querie_count_day_descriptions_of_account($db, $no_user_account): int {
+	return intval(db_ops_value($db, "SELECT COUNT(d.no_day_description) FROM day_description AS d WHERE d.no_user_account = :no_user_account", ["no_user_account" => $no_user_account]));
 }
 
 function db_querie_delete_user_account($db, $no_user_account): int {
@@ -161,11 +198,6 @@ function db_querie_delete_user_account($db, $no_user_account): int {
 
 function db_querie_update_is_inactive($db, $no_user_account, int $is_inactive): int {
 	return db_ops_exec($db, "UPDATE user_account SET is_inactive = :is_inactive WHERE no_user_account = :no_user_account", ["is_inactive" => $is_inactive, "no_user_account" => $no_user_account]);
-}
-
-function db_querie_update_user_account_totp($db, $no_user_account, int $totp_state, ?string $totp_secret): int {
-	return db_ops_exec($db, "UPDATE user_account SET totp_state = :totp_state, totp_secret = :totp_secret WHERE no_user_account = :no_user_account",
-		["totp_state" => $totp_state, "totp_secret" => $totp_secret, "no_user_account" => $no_user_account]);
 }
 
 // ---------------------------------------------------------------------------
@@ -177,10 +209,11 @@ function db_querie_select_user_account_auth_token($db, string $auth_token_str): 
 	return db_ops_row($db,
 		"SELECT J.no_user_account, J.no_auth_token, J.auth_token_prefix AS prefix_auth_token, C.name AS name_user_account, J.contry_code, J.name AS name_auth_token,
 		J.scope AS scope_auth_token, " . db_querie_sql_old_auth_token("J.") . " AS expired_auth_token,
-		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.login_email, C.notification_emails,
-		C.nb_connection_attempts, C.last_failed_attempt, C.sponsor, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
-		C.last_password_change, C.register_comment, C.totp_secret, C.totp_state, C.research, C.timeline_asc, C.auto_mail_export, C.language, C.last_write_client_UTC
-		FROM auth_token AS J INNER JOIN user_account AS C ON J.no_user_account = C.no_user_account
+		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.login_email, ne.value_str AS notification_emails,
+		C.nb_connection_attempts, C.last_failed_attempt, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
+		C.last_password_change, C.register_comment, tk.value_str AS totp_secret, ts.value_int AS totp_state, C.research, C.language, C.last_write_client_UTC
+		FROM auth_token AS J INNER JOIN user_account AS C ON J.no_user_account = C.no_user_account"
+		. db_querie_sql_setting_join("C", "ts", USER_SETTING_TOTP_STATE) . db_querie_sql_setting_join("C", "tk", USER_SETTING_TOTP_SECRET) . db_querie_sql_setting_join("C", "ne", "notification_emails") . "
 		WHERE auth_token_str = :auth_token_str LIMIT 1",
 		["auth_token_str" => $auth_token_str]
 	);
@@ -190,7 +223,7 @@ function db_querie_select_auth_tokens($db, $no_user_account): array {
 	return db_ops_rows($db, "SELECT * FROM auth_token WHERE no_user_account = :no_user_account ORDER BY no_auth_token", ["no_user_account" => $no_user_account]);
 }
 
-// GET /api/v2/token, the newest first: everything but the hash, and no token past its expiry date.
+// GET /api/v3/token, the newest first: everything but the hash, and no token past its expiry date.
 function db_querie_select_auth_tokens_listing($db, $no_user_account): array {
 	return db_ops_rows($db,
 		"SELECT J.no_auth_token, J.auth_token_prefix, J.name, J.scope, J.expire, J.date_expire, J.date_creation, J.date_use,
@@ -297,97 +330,97 @@ function db_querie_purge_login_attempt_ip($db, bool $dry_run): int {
 // Descriptions: the free-text labels of a day, and their links to the days
 // ---------------------------------------------------------------------------
 
-function db_querie_select_description($db, $no_description, $no_user_account): ?array {
-	return db_ops_row($db, "SELECT no_description, name, type FROM description WHERE no_description = :no_description AND no_user_account = :no_user_account",
-		["no_description" => $no_description, "no_user_account" => $no_user_account]);
+function db_querie_select_day_description($db, $no_day_description, $no_user_account): ?array {
+	return db_ops_row($db, "SELECT no_day_description, name, type FROM day_description WHERE no_day_description = :no_day_description AND no_user_account = :no_user_account",
+		["no_day_description" => $no_day_description, "no_user_account" => $no_user_account]);
 }
 
 // is the name taken by another description of the account?
-function db_querie_select_description_name_exists($db, string $name, $no_user_account, $no_description): bool {
-	return boolval(db_ops_value($db, "SELECT COUNT(no_description) > 0 FROM description WHERE name = :name AND no_user_account = :no_user_account AND no_description != :no_description",
-		["name" => $name, "no_user_account" => $no_user_account, "no_description" => $no_description]));
+function db_querie_select_day_description_name_exists($db, string $name, $no_user_account, $no_day_description): bool {
+	return boolval(db_ops_value($db, "SELECT COUNT(no_day_description) > 0 FROM day_description WHERE name = :name AND no_user_account = :no_user_account AND no_day_description != :no_day_description",
+		["name" => $name, "no_user_account" => $no_user_account, "no_day_description" => $no_day_description]));
 }
 
 // The labels with the number of days each is on.
-function db_querie_select_description_with_count($db, $no_user_account): array {
+function db_querie_select_day_description_with_count($db, $no_user_account): array {
 	return db_ops_rows($db,
-		"SELECT d.no_description, d.name, d.type, COUNT(ld.no_day) AS use_count
-		FROM description AS d LEFT JOIN link_day_timeline_description AS ld ON ld.no_description = d.no_description
+		"SELECT d.no_day_description, d.name, d.type, COUNT(ld.no_day) AS use_count
+		FROM day_description AS d LEFT JOIN link_day_timeline_day_description AS ld ON ld.no_day_description = d.no_day_description
 		WHERE d.no_user_account = :no_user_account
-		GROUP BY d.no_description, d.name, d.type ORDER BY use_count DESC, d.name DESC",
+		GROUP BY d.no_day_description, d.name, d.type ORDER BY use_count DESC, d.name DESC",
 		["no_user_account" => $no_user_account]
 	);
 }
 
-function db_querie_select_description_exact_name($db, $no_user_account, string $name): ?array {
-	return db_ops_row($db, "SELECT no_description, name, type FROM description WHERE no_user_account = :no_user_account AND name = :name LIMIT 1",
+function db_querie_select_day_description_exact_name($db, $no_user_account, string $name): ?array {
+	return db_ops_row($db, "SELECT no_day_description, name, type FROM day_description WHERE no_user_account = :no_user_account AND name = :name LIMIT 1",
 		["no_user_account" => $no_user_account, "name" => $name]);
 }
 
-function db_querie_select_description_name_type($db, $no_user_account): array {
-	return db_ops_rows($db, "SELECT name, type FROM description WHERE no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
+function db_querie_select_day_description_name_type($db, $no_user_account): array {
+	return db_ops_rows($db, "SELECT name, type FROM day_description WHERE no_user_account = :no_user_account", ["no_user_account" => $no_user_account]);
 }
 
-function db_querie_insert_description($db, $no_user_account, string $name, int $type, string $last_write_client_UTC): string {
+function db_querie_insert_day_description($db, $no_user_account, string $name, int $type, string $last_write_client_UTC): string {
 	return db_ops_insert($db,
-		"INSERT INTO description (no_user_account, name, type, last_write_client_UTC) VALUES (:no_user_account, :name, :type, :last_write_client_UTC)",
+		"INSERT INTO day_description (no_user_account, name, type, last_write_client_UTC) VALUES (:no_user_account, :name, :type, :last_write_client_UTC)",
 		["no_user_account" => $no_user_account, "name" => $name, "type" => $type, "last_write_client_UTC" => $last_write_client_UTC]
 	);
 }
 
-function db_querie_update_description_name_type($db, $no_user_account, $no_description, string $name, int $type, string $last_write_client_UTC): int {
+function db_querie_update_day_description_name_type($db, $no_user_account, $no_day_description, string $name, int $type, string $last_write_client_UTC): int {
 	return db_ops_exec($db,
-		"UPDATE description SET name = :name, type = :type, last_write_client_UTC = :last_write_client_UTC
-		WHERE no_description = :no_description AND no_user_account = :no_user_account",
-		["name" => $name, "type" => $type, "last_write_client_UTC" => $last_write_client_UTC, "no_description" => $no_description, "no_user_account" => $no_user_account]
+		"UPDATE day_description SET name = :name, type = :type, last_write_client_UTC = :last_write_client_UTC
+		WHERE no_day_description = :no_day_description AND no_user_account = :no_user_account",
+		["name" => $name, "type" => $type, "last_write_client_UTC" => $last_write_client_UTC, "no_day_description" => $no_day_description, "no_user_account" => $no_user_account]
 	);
 }
 
-function db_querie_delete_descriptions($db, $no_description, $no_user_account): int {
-	return db_ops_exec($db, "DELETE FROM description WHERE no_description = :no_description AND no_user_account = :no_user_account",
-		["no_description" => $no_description, "no_user_account" => $no_user_account]);
+function db_querie_delete_day_descriptions($db, $no_day_description, $no_user_account): int {
+	return db_ops_exec($db, "DELETE FROM day_description WHERE no_day_description = :no_day_description AND no_user_account = :no_user_account",
+		["no_day_description" => $no_day_description, "no_user_account" => $no_user_account]);
 }
 
-function db_querie_select_all_description_for_day_timeline($db, $no_user_account, $no_day): array {
+function db_querie_select_all_day_description_for_day_timeline($db, $no_user_account, $no_day): array {
 	return db_ops_rows($db,
-		"SELECT ld.no_description, d.no_user_account, d.name, d.type
-		FROM link_day_timeline_description AS ld LEFT JOIN description AS d ON ld.no_description = d.no_description
+		"SELECT ld.no_day_description, d.no_user_account, d.name, d.type
+		FROM link_day_timeline_day_description AS ld LEFT JOIN day_description AS d ON ld.no_day_description = d.no_day_description
 		WHERE ld.no_day = :no_day AND d.no_user_account = :no_user_account",
 		["no_day" => $no_day, "no_user_account" => $no_user_account]
 	);
 }
 
 // The labels of every day of a range in one query, ordered by day, type and id: a read of many days groups them by no_day.
-function db_querie_select_descriptions_for_day_timeline_frame($db, string $start_date, string $end_date, $no_user_account): array {
+function db_querie_select_day_descriptions_for_day_timeline_frame($db, string $start_date, string $end_date, $no_user_account): array {
 	return db_ops_rows($db,
-		"SELECT ld.no_day, d.no_description, d.name, d.type
+		"SELECT ld.no_day, d.no_day_description, d.name, d.type
 		FROM day_timeline AS dt
-		JOIN link_day_timeline_description AS ld ON ld.no_day = dt.no_day
-		JOIN description AS d ON d.no_description = ld.no_description
+		JOIN link_day_timeline_day_description AS ld ON ld.no_day = dt.no_day
+		JOIN day_description AS d ON d.no_day_description = ld.no_day_description
 		WHERE dt.no_user_account = :no_user_account AND dt.date_obs >= :start_date AND dt.date_obs <= :end_date AND d.no_user_account = :no_user_account
-		ORDER BY ld.no_day ASC, d.type ASC, d.no_description ASC",
+		ORDER BY ld.no_day ASC, d.type ASC, d.no_day_description ASC",
 		["no_user_account" => $no_user_account, "start_date" => $start_date, "end_date" => $end_date]
 	);
 }
 
-function db_querie_insert_link_description_day_timeline($db, $no_day, $no_description): int {
-	return db_ops_exec($db, "INSERT INTO link_day_timeline_description (no_day, no_description) VALUES (:no_day, :no_description)",
-		["no_day" => $no_day, "no_description" => $no_description]);
+function db_querie_insert_link_day_description_day_timeline($db, $no_day, $no_day_description): int {
+	return db_ops_exec($db, "INSERT INTO link_day_timeline_day_description (no_day, no_day_description) VALUES (:no_day, :no_day_description)",
+		["no_day" => $no_day, "no_day_description" => $no_day_description]);
 }
 
-function db_querie_delete_linked_descriptions($db, $no_day, $no_description): int {
-	return db_ops_exec($db, "DELETE FROM link_day_timeline_description WHERE no_description = :no_description AND no_day = :no_day",
-		["no_description" => $no_description, "no_day" => $no_day]);
+function db_querie_delete_linked_day_descriptions($db, $no_day, $no_day_description): int {
+	return db_ops_exec($db, "DELETE FROM link_day_timeline_day_description WHERE no_day_description = :no_day_description AND no_day = :no_day",
+		["no_day_description" => $no_day_description, "no_day" => $no_day]);
 }
 
 // A day shows its labels by name and type: renaming, retyping or deleting one changes the days it is on for the sync, though their rows
 // do not change, so they are stamped.
-function db_querie_update_day_timeline_touch_description($db, $no_user_account, $no_description): int {
+function db_querie_update_day_timeline_touch_day_description($db, $no_user_account, $no_day_description): int {
 	return db_ops_exec($db,
-		"UPDATE day_timeline AS dt JOIN link_day_timeline_description AS ld ON ld.no_day = dt.no_day
+		"UPDATE day_timeline AS dt JOIN link_day_timeline_day_description AS ld ON ld.no_day = dt.no_day
 		SET dt.last_write_db = CURRENT_TIMESTAMP
-		WHERE ld.no_description = :no_description AND dt.no_user_account = :no_user_account",
-		["no_description" => $no_description, "no_user_account" => $no_user_account]
+		WHERE ld.no_day_description = :no_day_description AND dt.no_user_account = :no_user_account",
+		["no_day_description" => $no_day_description, "no_user_account" => $no_user_account]
 	);
 }
 
@@ -491,19 +524,22 @@ function db_querie_select_cycle($db, string $date, $no_user_account): ?string {
 // their cycles (auto_mail_export)
 function db_querie_select_cycles_finished($db): array {
 	return db_ops_rows($db,
-		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.login_email, c.notification_emails, c.language
-		FROM day_timeline AS obs JOIN user_account AS c ON obs.no_user_account = c.no_user_account
-		WHERE obs.date_obs = CURDATE() - INTERVAL 2 DAY AND (obs.cycle_1st_day = 1 OR obs.observation_paused = 1) AND c.auto_mail_export = 1"
+		"SELECT SUBDATE(obs.date_obs, 1) AS cycle_complet, obs.no_user_account, c.name, c.nfp_method, c.login_email, ne.value_str AS notification_emails, c.language
+		FROM day_timeline AS obs JOIN user_account AS c ON obs.no_user_account = c.no_user_account"
+		. db_querie_sql_setting_join("c", "ne", "notification_emails") . db_querie_sql_setting_join("c", "ame", "auto_mail_export") . "
+		WHERE obs.date_obs = CURDATE() - INTERVAL 2 DAY AND (obs.cycle_1st_day = 1 OR obs.observation_paused = 1)
+		AND COALESCE(ame.value_int, " . intval(USER_SETTINGS["autoMailExport"][2]) . ") = 1"
 	);
 }
 
 // the accounts with no day written for 35 days, registered for more than that, not yet reminded
 function db_querie_select_user_account_inactive($db): array {
 	return db_ops_rows($db,
-		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.login_email, c.notification_emails, c.language, c.inscription_date
-		FROM user_account AS c LEFT JOIN day_timeline AS o ON c.no_user_account = o.no_user_account
+		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.login_email, ne.value_str AS notification_emails, c.language, c.inscription_date
+		FROM user_account AS c LEFT JOIN day_timeline AS o ON c.no_user_account = o.no_user_account"
+		. db_querie_sql_setting_join("c", "ne", "notification_emails") . "
 		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0 AND c.email_verified_at IS NOT NULL
-		GROUP BY c.no_user_account, c.name, c.login_email, c.notification_emails, c.language, c.inscription_date
+		GROUP BY c.no_user_account, c.name, c.login_email, ne.value_str, c.language, c.inscription_date
 		HAVING (DATE(last_day_written) < DATE(NOW()) - INTERVAL 35 DAY OR last_day_written IS NULL) AND c.inscription_date < DATE(NOW()) - INTERVAL 35 DAY
 		ORDER BY last_day_written DESC LIMIT 20"
 	);
@@ -513,12 +549,13 @@ function db_querie_select_user_account_inactive($db): array {
 // table is reduced to one MAX() per account in a derived table, joined once, rather than a subquery per account. Without the demo
 // accounts. The retention is re-evaluated on every run, so no "warned" flag exists: any activity takes the account out of both lists.
 const DB_SQL_USER_ACCOUNT_LAST_ACTIVITY =
-	"SELECT u.no_user_account, u.name, u.login_email, u.notification_emails, u.language,
+	"SELECT u.no_user_account, u.name, u.login_email, ne.value_str AS notification_emails, u.language,
 	GREATEST(u.inscription_date, COALESCE(u.last_auth_date, u.inscription_date), COALESCE(dt.last_activity, u.inscription_date),
 		COALESCE(de.last_activity, u.inscription_date), COALESCE(at.last_activity, u.inscription_date)) AS last_activity
 	FROM user_account u
+	LEFT JOIN user_setting ne ON ne.no_user_account = u.no_user_account AND ne.name = 'notification_emails'
 	LEFT JOIN (SELECT no_user_account, MAX(last_write_db) AS last_activity FROM day_timeline GROUP BY no_user_account) dt ON dt.no_user_account = u.no_user_account
-	LEFT JOIN (SELECT no_user_account, MAX(last_write_db) AS last_activity FROM description GROUP BY no_user_account) de ON de.no_user_account = u.no_user_account
+	LEFT JOIN (SELECT no_user_account, MAX(last_write_db) AS last_activity FROM day_description GROUP BY no_user_account) de ON de.no_user_account = u.no_user_account
 	LEFT JOIN (SELECT no_user_account, MAX(date_use) AS last_activity FROM auth_token GROUP BY no_user_account) at ON at.no_user_account = u.no_user_account
 	WHERE u.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")";
 
@@ -563,7 +600,7 @@ function db_querie_count_user_accounts_recent($db): int {
 }
 
 function db_querie_count_user_accounts_with_totp($db): int {
-	return intval(db_ops_value($db, "SELECT COUNT(no_user_account) FROM user_account WHERE totp_state = " . TOTP_STATE_ACTIVE . " AND no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")"));
+	return intval(db_ops_value($db, "SELECT COUNT(s.no_user_account) FROM user_setting AS s WHERE s.name = '" . USER_SETTING_TOTP_STATE . "' AND s.value_int = " . TOTP_STATE_ACTIVE . " AND s.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ")"));
 }
 
 // Accounts that never verified their address, and the age in seconds of the oldest (null without any).

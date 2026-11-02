@@ -25,17 +25,18 @@ require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_pdf.php";
 
-function doc_fc_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false): DocPdf {
+function doc_fc_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false, string $date_pattern = 'd/m/y'): DocPdf {
 	$with_temperature = user_account_tracks_temperature($nfp_method);
 	if ($anonymous) $name = doc_get_initials($name);
 
-	$h_start_date = date_human(new DateTime($days[0]["date"]));
-	$h_end_date = date_human(new DateTime(end($days)["date"]));
-	$h_current_date = date_human(new DateTime());
+	$h_start_date = date_human(new DateTime($days[0]["date"]), $date_pattern);
+	$h_end_date = date_human(new DateTime(end($days)["date"]), $date_pattern);
+	$h_current_date = date_human(new DateTime(), $date_pattern);
 
 	$pdf = new DocPdf('L', 'A3', 'MONCYCLE.APP tableau du ' . $h_start_date, $anonymous ? "$name (anonyme)" : $name);
 	$pdf->SetMargins(DOC_PDF_MARGIN, DOC_PDF_MARGIN);
 	$grid = doc_fc_layout($pdf, $with_temperature, $anonymous);
+	$grid["date_pattern"] = $date_pattern;
 
 	// built once, then paginated: the page count cannot disagree with what is drawn
 	$lines_per_page = $with_temperature ? DOC_FC_LINES_PER_PAGE_TEMPERATURE : DOC_FC_LINES_PER_PAGE;
@@ -217,7 +218,7 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 	if (!is_null($day)) {
 		$date = new DateTime($day["date"]);
 		$week_day = intval($date->format('w'));
-		$date_text = $grid["anonymous"] ? DOC_WEEK_DAYS[$week_day] : date_human_week_day($date, DOC_WEEK_DAYS);
+		$date_text = $grid["anonymous"] ? DOC_WEEK_DAYS[$week_day] : date_human_week_day($date, DOC_WEEK_DAYS, $grid["date_pattern"]);
 		if ($week_day === 0) $date_style = 'fc.cell.sunday';
 	}
 	$pdf->UseStyle($date_style, $text_color);

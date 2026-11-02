@@ -17,7 +17,7 @@ origins) see [deployment.md](deployment.md); for what the app writes in its log,
 The only credential is a **token**: a random 256-character string, stored as its SHA-256. The web app keeps it in an `HttpOnly`
 cookie; a script or mobile app sends it as `Authorization: Bearer <token>`.
 
-`POST /api/v2/token` is the sign-in. It always checks the credentials (password, TOTP code, captcha once the account asks for one), so
+`POST /api/v3/token` is the sign-in. It always checks the credentials (password, TOTP code, captcha once the account asks for one), so
 a stolen session cannot make itself another token without the password. Options:
 
 | Field | Meaning |
@@ -30,10 +30,10 @@ a stolen session cannot make itself another token without the password. Options:
 The token is always in the answer, so a script injected into the page could read it: the `script-src 'self'` policy
 ([Stored text and scripts](#stored-text-and-scripts)) is what stands in the way.
 
-- `GET /api/v2/token` lists the account's tokens: `prefix` (first 5 characters, unique per account), name, scope, creation, last use
+- `GET /api/v3/token` lists the account's tokens: `prefix` (first 5 characters, unique per account), name, scope, creation, last use
   (written at most every 5 minutes), expiry, and the user agent and network of the address (`a.b.c.0`, or the first 48 bits of IPv6).
-- `DELETE /api/v2/token` ends the caller's own session. `DELETE /api/v2/token/{prefix}` revokes one token of the caller's account.
-  `DELETE /api/v2/token?others=true` revokes all the others. No body.
+- `DELETE /api/v3/token` ends the caller's own session. `DELETE /api/v3/token/{prefix}` revokes one token of the caller's account.
+  `DELETE /api/v3/token?others=true` revokes all the others. No body.
 - The two demo accounts (a shared account with a public password) can neither list nor revoke other tokens.
 
 **Every sign-in is announced by mail** to the account's address (demo accounts excepted): token name, `prefix`, scope, expiry, user
@@ -66,7 +66,7 @@ Each check holds its 46 MiB for its time: up to 30 at once is about 1.4 GiB, so 
 password (a wrong one still gets `401 invalid_credentials`), and counted as no failed attempt.
 
 **One kind of link** proves the address, chooses a password again and changes the login address. It is mailed and used at
-`POST /api/v2/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
+`POST /api/v3/verify_email` with `{"purpose": "accountCreation" | "resetPassword" | "changeEmail", "token": ..., "newPassword": ...}`
 (`newPassword` for `resetPassword` only).
 
 - The link is a page of the app with the purpose and token in its **fragment** (`APP_URL` + `/#/verify_email?purpose=...&t=...`). A
@@ -77,15 +77,20 @@ password (a wrong one still gets `401 invalid_credentials`), and counted as no f
 - Consequence: anyone who can ask for a password reset can cancel a pending link, with no cooldown. Accepted: the owner gets a new
   link by mail, and a reset link proves the address too. The captcha (good for one mail) and the per-IP throttling stop floods.
 
-`POST /api/v2/register` answers the same `202` whether the address is new or has an account, and never touches an existing
+`POST /api/v3/register` answers the same `202` whether the address is new or has an account, and never touches an existing
 account: its owner gets a mail with a reset link instead. Every mistake in the request is reported before the address is looked up,
 and the password is hashed either way.
 
-`POST /api/v2/recover_password` only mails a reset link: **the password stays as it is until the link is used**. Using it sets the
+`POST /api/v3/recover_password` only mails a reset link: **the password stays as it is until the link is used**. Using it sets the
 password and proves the address; it does not close open sessions or touch the TOTP (a mail tells the owner, who can close sessions
 from the settings page). It sleeps 1 to 5 s on purpose, holding a worker: rate-limit it at the edge.
 
-**Account settings.** `POST /api/v2/account` changes every setting. Three want the current password again as `password`:
+**Account settings.** `POST /api/v3/account` changes every setting. The mandatory ones (nickname, method, birth year, language, research
+consent, address, password) are columns of `user_account`; the optional ones (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`,
+`dateFormat`, `temperatureUnit`, `notificationEmails`), the two-factor state and the keys of third parties (`customSettings`) are rows of
+`user_setting`. Every value is checked in PHP before it is written, and only what is sent is written. A key of `customSettings` is stored as
+`custom.<key>`: it can never reach the two-factor secret or a setting of the app, and the raw data export masks `totp_secret`. Three changes
+want the current password again as `password`:
 
 - `newPassword`: set at once (`logoutOtherDevices` closes the other sessions). It cancels a waiting reset link, not a waiting change of address.
 - `notificationEmails`: addresses that also receive cycles, reminders and warnings (`;` between, 5 at most). Effective at once; a notice goes to the login address.
@@ -112,14 +117,14 @@ Failed logins are counted per account and forgotten after `LOGIN_ATTEMPTS_DECAY_
 password, and past the lockout threshold such an account refuses even the right password and code until the failures fade. Whoever
 knows the password can therefore keep it locked by trying.
 
-A password or code asked again on an open session (`POST /api/v2/account`, `account/deletion`, `totp/confirm`, `totp/disable`) counts
+A password or code asked again on an open session (`POST /api/v3/account`, `account/deletion`, `totp/confirm`, `totp/disable`) counts
 against the same counters: past the threshold these checks answer `403 account_locked`, even for the right secret, and the session
 stays valid. So a stolen session cannot guess the password or code at will; the price is that it can also push the owner's next
 sign-in towards the captcha or the lockout. Turning TOTP on asks for the password, so a foreign session cannot lock the owner out.
 
 ## The captcha
 
-`POST /api/v2/captcha` gives a picture and a token `<exp>.<mac>`. **The server keeps nothing**: no row, no cookie. The mac is an
+`POST /api/v3/captcha` gives a picture and a token `<exp>.<mac>`. **The server keeps nothing**: no row, no cookie. The mac is an
 HMAC-SHA256 keyed with `CAPTCHA_SECRET` over:
 
 - the purpose (`register`, `recover`, `login`), the address, the expiry (5 minutes) and the answer;
@@ -170,7 +175,7 @@ Content-Security-Policy has `script-src 'self'`: no inline script runs.
 - An account with no activity for `ACCOUNT_INACTIVITY_DELETE_YEARS` (4) years is deleted by the daily cron, after a warning by mail.
   An account whose address was never proved is deleted after `ACCOUNT_UNVERIFIED_DELETE_DAYS` (7) days
   ([`constants.php`](../www_data/constants.php)).
-- `POST /api/v2/account/deletion` deletes an account at its owner's request, with everything it owns.
-- `GET /api/v2/all_of_my_data_plz` gives the owner a CSV of everything stored about them (passwords, TOTP secrets and tokens masked).
+- `POST /api/v3/account/deletion` deletes an account at its owner's request, with everything it owns.
+- `GET /api/v3/all_of_my_data_plz` gives the owner a CSV of everything stored about them (passwords, TOTP secrets and tokens masked).
 - The log says what happened, to which account and row, never the content ([logs.md](logs.md)). It holds IP addresses and account
   ids: keep it only as long as you need it.

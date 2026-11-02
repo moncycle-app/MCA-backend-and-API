@@ -15,10 +15,10 @@
 
 declare(strict_types=1);
 
-// The account's tokens, and /api/v2/token: the sign-in that makes one, the request that carries one (cookie or Bearer), the list and the
+// The account's tokens, and /api/v3/token: the sign-in that makes one, the request that carries one (cookie or Bearer), the list and the
 // revocation. A browser session and a script's token are the same row; only the name tells them apart. The token itself is kept nowhere:
 // its SHA-256, and its first AUTH_TOKEN_PREFIX_CHARS characters in the clear (unique per account), which name it in the list and in
-// DELETE /api/v2/token/{prefix}.
+// DELETE /api/v3/token/{prefix}.
 
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db_ops.php";
@@ -114,7 +114,7 @@ function sec_token_create($db, array $user_account, array $options): array {
 }
 
 // ---------------------------------------------------------------------------
-// The sign-in: POST /api/v2/token
+// The sign-in: POST /api/v3/token
 // ---------------------------------------------------------------------------
 
 // The options of a new token from the body: [name, scope, expires_in_days, cookie]; a wrong field is an issue. expires_in_days null is
@@ -160,7 +160,7 @@ function sec_token_login_over(array $user_account, int $threshold): bool {
 	return $threshold > 0 && sec_token_login_attempts($user_account) >= $threshold;
 }
 
-// A password or code asked again on a session (POST /api/v2/account, account deletion, the TOTP routes) counts against the same
+// A password or code asked again on a session (POST /api/v3/account, account deletion, the TOTP routes) counts against the same
 // counters as a sign-in, so a stolen session cannot guess them freely: past LOGIN_LOCKOUT_THRESHOLD failures in
 // LOGIN_ATTEMPTS_DECAY_MINUTES every such check is a 403 "account_locked", even for the right secret. The session itself stays valid.
 // The counters are those of the request's start: requests that come together still pass, as at sign-in.
@@ -291,7 +291,7 @@ function sec_token_login_outcome($db, array $body, array $token_options): array 
 }
 
 // ---------------------------------------------------------------------------
-// The list and the revocation: GET and DELETE /api/v2/token
+// The list and the revocation: GET and DELETE /api/v3/token
 // ---------------------------------------------------------------------------
 
 // The address as the list shows it: cut to AUTH_TOKEN_IP_PREFIX_V4 / _V6 bits. The database keeps it whole.

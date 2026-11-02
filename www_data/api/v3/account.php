@@ -23,6 +23,7 @@ require_once __DIR__ . "/../../lib/input.php";
 require_once __DIR__ . "/../../lib/sec.php";
 require_once __DIR__ . "/../../lib/sec_token.php";
 require_once __DIR__ . "/../../lib/user_account.php";
+require_once __DIR__ . "/../../lib/user_setting.php";
 
 [$db, $user_account] = api_start();
 
@@ -67,7 +68,7 @@ if ($path !== []) http_exit_not_found();
 if ($method === "GET") {
 	input_exit_unless_none();
 
-	$account = user_account_to_json($user_account, db_querie_select_day_timeline_oldest_date($db, $user_account["no_user_account"]));
+	$account = user_account_to_json($user_account, db_querie_select_day_timeline_oldest_date($db, $user_account["no_user_account"]), user_setting_load($db, intval($user_account["no_user_account"])));
 	// a client that keeps the account sends back the ETag it was given and is told when nothing changed
 	$etag = 'W/"' . md5((string) json_encode($account)) . '"';
 	header("ETag: $etag");
@@ -78,10 +79,11 @@ if ($method === "GET") {
 	http_data(200, $account);
 }
 
-// UPDATE OF THE ACCOUNT, partial (what is not sent is kept): its settings, and what wants the password again (loginEmail, newPassword, notificationEmails)
+// UPDATE OF THE ACCOUNT, partial (what is not sent is kept): its settings, and what wants the password again (loginEmail, newPassword, notificationEmails).
+// An optional setting set to null goes back to its default.
 if ($method === "POST") {
 	input_query([], $issues);
-	$body = input_body(ACCOUNT_UPDATE_FIELDS, $issues, [], ACCOUNT_READ_ONLY_FIELDS);
+	$body = input_body(array_merge(ACCOUNT_UPDATE_FIELDS, array_keys(USER_SETTINGS)), $issues, [], ACCOUNT_READ_ONLY_FIELDS, array_keys(USER_SETTINGS));
 
 	$outcome = user_account_update($db, $user_account, $body, $issues);
 	if (!isset($outcome["data"])) http_error($outcome["status"], $outcome["code"], $outcome["message"]);

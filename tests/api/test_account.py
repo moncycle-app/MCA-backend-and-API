@@ -8,15 +8,16 @@ class Settings(ApiTest):
         a = Account(method=3, nickname="MB")
         d = a.get("account").data
         self.assertEqual((d["userId"], d["loginEmail"], d["nickname"], d["method"]), (a.id, a.email, "MB", "fertilityCare"))
-        self.assertEqual((d["temperatureTracking"], d["totpState"], d["autoMailExport"], d["oldestDay"]), (False, "unknown", True, None))
+        self.assertEqual((d["temperatureTracking"], d["totpState"], d["oldestDay"]), (False, "unknown", None))
+        self.assertNotIn("sponsor", d)
 
     def test_a_setting_changes_alone_and_the_answer_says_what_changed(self):
         a = Account()
-        r = a.post("account", {"nickname": "New", "timelineAscending": False})
+        r = a.post("account", {"nickname": "New", "research": True})
         self.assertStatus(r, 200)
-        self.assertEqual(sorted(r.json["meta"]["fieldsUpdated"]), ["nickname", "timelineAscending"])
+        self.assertEqual(sorted(r.json["meta"]["fieldsUpdated"]), ["nickname", "research"])
         d = a.get("account").data
-        self.assertEqual((d["nickname"], d["timelineAscending"], d["method"]), ("New", False, "cervicalMucus"))
+        self.assertEqual((d["nickname"], d["research"], d["method"]), ("New", True, "cervicalMucus"))
 
     def test_an_empty_body_is_valid_and_changes_nothing(self):
         r = Account().post("account", {})
@@ -94,9 +95,9 @@ class Addresses(ApiTest):
         a = Account()
         self.assertIssues(a.post("account", {"notificationEmails": "x@example.org"}), "password")
         a.post("account", {"password": a.password, "notificationEmails": "Partner@Example.org;mum@example.org;partner@example.org"})
-        self.assertEqual(a.get("account").data["notificationEmails"], "partner@example.org;mum@example.org")   # no duplicate
+        self.assertEqual(a.get("account").data["settings"]["notificationEmails"]["value"], "partner@example.org;mum@example.org")   # no duplicate
         a.post("account", {"password": a.password, "notificationEmails": ""})
-        self.assertIn(a.get("account").data["notificationEmails"], (None, ""))
+        self.assertEqual(a.get("account").data["settings"]["notificationEmails"], {"value": "", "isSet": False, "default": ""})
 
     def test_at_most_five_notification_addresses(self):
         a = Account()

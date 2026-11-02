@@ -44,6 +44,7 @@ SMTP (`SMTP_HOST=127.0.0.1 SMTP_PORT=1`), the default password policy, and a dat
 | `api/test_days.py` | `GET/POST/DELETE /day`: replace-whole-day, validation, ranges, late writes (409) |
 | `api/test_descriptions.py` | `/description`: create, rename, retype, delete, uniqueness, isolation between accounts |
 | `api/test_sync.py` | `GET /timeline_sync`: `since`, overlap, deletions, cycles |
+| `api/test_settings.py` | optional settings (default, set, reset with `null`, wrong values), `customSettings`, exports following the date format and the unit |
 | `api/test_account.py` | `GET/POST /account`: settings, password, addresses, ETag, deletion |
 | `api/test_token.py` | `/token`: sign-in, cookie, captcha after failures, read-only tokens, revoke, logout, demo accounts |
 | `api/test_register.py` | `/register`, `/recover_password`, `/verify_email` (links by mail) |
@@ -63,9 +64,9 @@ A test is a few lines of what a client does and what it must get:
 ```python
 def test_a_new_day_is_201_with_its_address_then_a_replacement_is_200(self):
     a = Account()                                         # a throwaway account with a session token
-    r = a.post("day/2026-09-20", {"stampColor": "Red"})   # POST /api/v2/day/2026-09-20
+    r = a.post("day/2026-09-20", {"stampColor": "Red"})   # POST /api/v3/day/2026-09-20
     self.assertStatus(r, 201)
-    self.assertEqual(r.headers["Location"], "/api/v2/day/2026-09-20")
+    self.assertEqual(r.headers["Location"], "/api/v3/day/2026-09-20")
     self.assertStatus(a.post("day/2026-09-20", {"stampColor": "Green"}), 200)
 ```
 

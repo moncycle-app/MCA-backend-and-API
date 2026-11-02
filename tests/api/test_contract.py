@@ -44,7 +44,7 @@ class Contract(ApiTest):
 
     def test_every_endpoint_of_the_server_is_documented(self):
         documented = {p.split("/")[1] for _, p, _ in documented_operations()}
-        files = {f[:-4] for f in os.listdir(os.path.join(ROOT, "api", "v2")) if f.endswith(".php") and f != "test.php"}
+        files = {f[:-4] for f in os.listdir(os.path.join(ROOT, "api", "v3")) if f.endswith(".php") and f != "test.php"}
         self.assertEqual(files - documented, set(), "endpoint files with no entry in the contract")
         self.assertEqual(documented - files, set(), "documented routes with no endpoint file")
 

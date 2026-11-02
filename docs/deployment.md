@@ -16,14 +16,14 @@ The Docker image serves plain HTTP and is made to sit behind a reverse proxy. Th
 - **Terminate TLS** and redirect http to https. The image sends `Strict-Transport-Security` itself when the request carries
   `X-Forwarded-Proto: https`: make the proxy set that header. If the proxy already sends HSTS, remove that line from
   `server_conf/zz-moncycleapp.conf` (in MCA-Docker-image) to avoid a duplicate.
-- **Rate-limit** `/api/v2/token`, `/api/v2/register`, `/api/v2/recover_password`, `/api/v2/verify_email` and `/api/v2/captcha`.
+- **Rate-limit** `/api/v3/token`, `/api/v3/register`, `/api/v3/recover_password`, `/api/v3/verify_email` and `/api/v3/captcha`.
   The app counts failed attempts, but it cannot limit requests it is never asked to check (a captcha costs a JPEG to draw), and these
   endpoints hold a worker for a while on purpose: `recover_password` sleeps 1 to 5 s, a password check takes about 240 ms and 46 MiB
   (Argon2id), a refused sign-in is held until 400 ms ([security.md](security.md)).
 - **Cap the body at 10 MB** (`client_max_body_size 10m` with nginx), the same as Apache, so that a request that is too large is
   refused at the edge before it costs a worker.
-- **Not log query strings or paths.** URLs such as `GET /api/v2/day/2026-09-20` carry the dates of someone's observations and token
-  prefixes. The image has no Apache access log for that reason; the app's own log names the endpoint (`/api/v2/day`), never the arguments.
+- **Not log query strings or paths.** URLs such as `GET /api/v3/day/2026-09-20` carry the dates of someone's observations and token
+  prefixes. The image has no Apache access log for that reason; the app's own log names the endpoint (`/api/v3/day`), never the arguments.
 - **Block `/script/`** too (defence in depth: the app already refuses it to anyone but the machine itself).
 - **Tell the app who the proxy is.** Set `TRUSTED_PROXIES` (an address or a CIDR range, comma separated) and have the proxy send the
   real client address in `X-Forwarded-For` (`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` with nginx).
@@ -96,8 +96,8 @@ no environment variable and no Docker is needed). The web server is yours: Apach
 with `www_data/` as its document root, doing what the Docker image's Apache does.
 `server_conf/zz-moncycleapp.conf` (in MCA-Docker-image) is the reference.
 
-1. **Serve the pages and the API without their extension.** `/auth` is `auth.html`, `/api/v2/token` is `api/v2/token.php`, and what
-   follows the script name is its `PATH_INFO`: `/api/v2/day/2026-03-10` runs `api/v2/day.php` with `PATH_INFO=/2026-03-10`. Apache does it
+1. **Serve the pages and the API without their extension.** `/auth` is `auth.html`, `/api/v3/token` is `api/v3/token.php`, and what
+   follows the script name is its `PATH_INFO`: `/api/v3/day/2026-03-10` runs `api/v3/day.php` with `PATH_INFO=/2026-03-10`. Apache does it
    with `Options +MultiViews` and `MultiviewsMatch Any`.
 2. **Refuse what is not public** (403): `config*.php`, `constants.php`, `composer.json`, `composer.lock`, `*.sql`, `*.md`, `lib/`,
    and `vendor/` except `vendor/components/jquery`, `vendor/chartjs` and `vendor/swagger-api/swagger-ui/dist`.
@@ -142,7 +142,7 @@ A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rew
         Require all granted
     </Directory>
 
-    # PHP goes to FPM; MultiViews resolves /api/v2/day/2026-03-10 to day.php and keeps the rest as PATH_INFO
+    # PHP goes to FPM; MultiViews resolves /api/v3/day/2026-03-10 to day.php and keeps the rest as PATH_INFO
     <FilesMatch "\.php$">
         SetHandler "proxy:unix:/run/php/php8.4-fpm.sock|fcgi://localhost"
     </FilesMatch>

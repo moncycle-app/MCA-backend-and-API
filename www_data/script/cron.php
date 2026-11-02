@@ -22,6 +22,7 @@ require_once __DIR__ . "/../lib/doc_export.php";
 require_once __DIR__ . "/../lib/log.php";
 require_once __DIR__ . "/../lib/mail.php";
 require_once __DIR__ . "/../lib/nfp_export.php";
+require_once __DIR__ . "/../lib/user_setting.php";
 require_once __DIR__ . "/../lib/weekly_report.php";
 
 // php cron.php [--dry-run]. --dry-run reads and says what a run would do, and sends, deletes and writes nothing.
@@ -52,7 +53,7 @@ if (MAINTENANCE_MODE) {
 $db = db_ops_open();
 
 // THE EXPORT OF A CYCLE THAT ENDED, by mail: PDF, CSV and NFP (cycles of at least 5 days, accounts that
-// have not turned auto_mail_export off)
+// have turned auto_mail_export on: it is off by default)
 
 $handled = $failed = 0;
 foreach (db_querie_select_cycles_finished($db) as $account) {
@@ -72,7 +73,8 @@ foreach (db_querie_select_cycles_finished($db) as $account) {
 
 	$nfp_method = intval($account["nfp_method"]);
 	$csv = fopen('php://memory', 'rw');
-	doc_csv_cycle($csv, $days, $nfp_method);
+	$display = user_setting_display(user_setting_load($db, intval($account["no_user_account"])), $account["language"]);
+	doc_csv_cycle($csv, $days, $nfp_method, $display);
 	rewind($csv);
 
 	// the NFP export reads the account the way a logged-in request gives it: the name is "name_user_account"
@@ -81,7 +83,7 @@ foreach (db_querie_select_cycles_finished($db) as $account) {
 	$file_name = 'moncycle_app_' . date_human(new DateTime($cycle_start), '_');
 	$sent = mail_send_cycle(
 		$account, date_human(new DateTime($days[0]["date"])), date_human(new DateTime(end($days)["date"])), count($days),
-		["$file_name.pdf" => doc_export_pdf($days, $nfp_method, $account["name"])->Output('S'), "$file_name.csv" => stream_get_contents($csv), "$file_name.nfp" => $nfp],
+		["$file_name.pdf" => doc_export_pdf($days, $nfp_method, $account["name"], $display)->Output('S'), "$file_name.csv" => stream_get_contents($csv), "$file_name.nfp" => $nfp],
 		doc_export_rows_read($days)
 	);
 	fclose($csv);
@@ -179,7 +181,7 @@ else {
 	log_cron_step("login_attempts", $deleted);
 }
 
-// THE PUBLIC NUMBERS OF /api/v2/pub_stat: counted here, once a day, and not on every visit
+// THE PUBLIC NUMBERS OF /api/v3/pub_stat: counted here, once a day, and not on every visit
 
 if (!$dry_run) data_public_stats_store($db);
 echo ($dry_run ? "[dry run] public stats would be stored" : "public stats stored") . PHP_EOL;

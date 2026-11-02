@@ -15,12 +15,14 @@
 
 declare(strict_types=1);
 
-function date_human(DateTimeInterface $date, string $sep = '/'): string {
-	return $date->format('d' . $sep . 'm' . $sep . 'y');
+// A date as the account wants to read it: $pattern is one of USER_SETTING_DATE_FORMATS, the year on two digits.
+function date_human(DateTimeInterface $date, string $pattern = 'd/m/y'): string {
+	return $date->format($pattern);
 }
 
-function date_human_week_day(DateTimeInterface $date, array $week_days): string {
-	return $week_days[intval($date->format('w'))] . $date->format(' d/m');
+// The day of the week, then the date without its year ("lun. 31/12", "Mon 12/31", "Mon 12-31").
+function date_human_week_day(DateTimeInterface $date, array $week_days, string $pattern = 'd/m/y'): string {
+	return $week_days[intval($date->format('w'))] . $date->format(' ' . preg_replace('/^y[\/.\-]|[\/.\-]y$/', '', $pattern));
 }
 
 function date_next_day(string $date): string {

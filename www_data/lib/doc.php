@@ -61,3 +61,12 @@ function doc_get_initials(string $name): string {
 	foreach (preg_split('/\s+/u', trim($name), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $word) $initials .= mb_strtoupper(mb_substr($word, 0, 1));
 	return $initials;
 }
+
+// The temperatures of the days (stored in Celsius) in the unit the account chose.
+function doc_temperature_unit(array $days, string $unit): array {
+	if ($unit !== "F") return $days;
+	return array_map(function ($day) {
+		if (!is_null($day["temperature"] ?? null)) $day["temperature"] = round($day["temperature"] * 9 / 5 + 32, 2);
+		return $day;
+	}, $days);
+}

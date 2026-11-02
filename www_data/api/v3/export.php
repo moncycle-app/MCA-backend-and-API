@@ -21,6 +21,7 @@ require_once __DIR__ . "/../../lib/doc_csv.php";
 require_once __DIR__ . "/../../lib/doc_export.php";
 require_once __DIR__ . "/../../lib/input.php";
 require_once __DIR__ . "/../../lib/nfp_export.php";
+require_once __DIR__ . "/../../lib/user_setting.php";
 
 // GET /export/{format}: a file. Its failures are the JSON envelope like every other endpoint's.
 [$db, $user_account] = api_start();
@@ -78,18 +79,19 @@ log_event("export.file", [
 	"n" => $rows_read ?? doc_export_rows_read($days),
 ]);
 
-$filename = 'moncycle_app_' . date_human(new DateTime($start_date), '_');
+$filename = 'moncycle_app_' . (new DateTime($start_date))->format('d_m_y');
+$display = user_setting_display(user_setting_load($db, intval($user_account["no_user_account"])), $user_account["language"]);
 
 if ($type === EXPORT_TYPE_CSV) {
 	header("Content-Type: text/csv; charset=utf-8");
 	header('Content-Disposition: attachment; filename="' . $filename . '.csv"');
 	$out = fopen('php://output', 'w');
-	doc_csv_cycle($out, $days, $nfp_method);
+	doc_csv_cycle($out, $days, $nfp_method, $display);
 	fclose($out);
 }
 
 elseif ($type === EXPORT_TYPE_PDF) {
-	$pdf = doc_export_pdf($days, $nfp_method, $user_account["name_user_account"], $anonymous);
+	$pdf = doc_export_pdf($days, $nfp_method, $user_account["name_user_account"], $display, $anonymous);
 	// 'D' sends the Content-Type and an attachment Content-Disposition itself
 	$pdf->Output('D', $filename . '.pdf', true);
 }

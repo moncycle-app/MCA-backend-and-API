@@ -89,7 +89,7 @@ define("TRUSTED_PROXIES", env_ip_ranges("TRUSTED_PROXIES"));
 define("NEWS_URL", getenv("NEWS_URL") === false ? "https://tech4fertility.org/latest-news.json" : trim(getenv("NEWS_URL")));
 
 // The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
-// GET /api/v2/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
+// GET /api/v3/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
 // required). The Docker image also reads it for the CSP (frame-src, server_conf/docker-entrypoint.sh).
 define("TERMS_OF_SERVICE_URL", getenv("TERMS_OF_SERVICE_URL") === false ? "https://www.moncycle.app/ToS/term_of_service_fr.html" : trim(getenv("TERMS_OF_SERVICE_URL")));
 
@@ -99,7 +99,7 @@ define("WEEKLY_REPORT_EMAILS", env_string("WEEKLY_REPORT_EMAILS"));
 
 // The password policy: a regex, without delimiters (PCRE, and JavaScript for the `pattern` of a form), that a new password must match. Empty
 // or not a valid regex: the default, PASSWORD_POLICY_REGEX_DEFAULT of constants.php (10 characters at least, a lower case letter, an upper
-// case letter, a digit). A new password is at most PASSWORD_MAX_CHARS (128) characters whatever the regex says. GET /api/v2/server_info tells the one in force.
+// case letter, a digit). A new password is at most PASSWORD_MAX_CHARS (128) characters whatever the regex says. GET /api/v3/server_info tells the one in force.
 define("PASSWORD_POLICY_REGEX", env_string("PASSWORD_POLICY_REGEX", PASSWORD_POLICY_REGEX_DEFAULT));
 
 // Login brute-force defense. A value of 0 turns the feature it sets off.
@@ -113,7 +113,7 @@ define("LOGIN_LOCKOUT_THRESHOLD", env_int("LOGIN_LOCKOUT_THRESHOLD", 15));
 // Failed attempts from one IP, in the window of db_querie_count_login_attempt_ip(), before HTTP 429 (0: no limit).
 define("LOGIN_IP_MAX_ATTEMPTS", env_int("LOGIN_IP_MAX_ATTEMPTS", 30));
 
-// The biggest request body any endpoint takes, in bytes (the NFP file of /api/v2/import is the biggest one: 15 years of full days are
+// The biggest request body any endpoint takes, in bytes (the NFP file of /api/v3/import is the biggest one: 15 years of full days are
 // about 7.7 MB). A body over it is refused with 413 file_too_large by PHP (lib/http.php) and, in the Docker image, by Apache before PHP starts.
 // 1024 at least. Outside Docker, set post_max_size and the web server's own limit (LimitRequestBody, client_max_body_size) to the same
 // number, and keep memory_limit about 6 times above it (docs/deployment.md). The Docker image reads this value at every start and puts it

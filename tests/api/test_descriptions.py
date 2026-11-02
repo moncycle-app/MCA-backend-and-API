@@ -10,7 +10,7 @@ class Descriptions(ApiTest):
         self.assertStatus(r, 201)
         did = r.data["id"]
         self.assertEqual((r.data["name"], r.data["type"]), ("stretchy", "sensation"))   # trimmed, lower case
-        self.assertEqual(r.headers["Location"], "/api/v2/description/%d" % did)
+        self.assertEqual(r.headers["Location"], "/api/v3/description/%d" % did)
         self.assertEqual(a.get("description").data, [{"id": did, "name": "stretchy", "type": "sensation", "useCount": 0}])
 
         r = a.post("description/%d" % did, {"name": "Very Stretchy"})   # partial: the type stays

@@ -15,8 +15,8 @@
 
 declare(strict_types=1);
 
-// What the server says of itself (GET /api/v2/server_info), and the check that the database is at the version of this code. The version of
-// the app (APP_VERSION) is also the schema's: the row `schema_version` of key_value must say it. The contract's version is the v2 of the URL.
+// What the server says of itself (GET /api/v3/server_info), and the check that the database is at the version of this code. The version of
+// the app (APP_VERSION) is also the schema's: the row `schema_version` of key_value must say it. The contract's version is the v3 of the URL.
 
 require_once __DIR__ . "/sec_captcha.php";
 require_once __DIR__ . "/sec.php";
@@ -57,6 +57,9 @@ function server_info(): array {
 			"accountNicknameMaxChars" => ACCOUNT_LIMIT_NICKNAME_CHARS,
 			"registerCommentMaxChars" => ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS,
 			"notificationEmailsMax" => ACCOUNT_NOTIFICATION_EMAILS_MAX,
+			"customSettingsMax" => USER_SETTING_CUSTOM_MAX,
+			"customSettingKeyMaxChars" => USER_SETTING_CUSTOM_KEY_MAX_CHARS,
+			"customSettingValueMaxChars" => USER_SETTING_CUSTOM_VALUE_MAX_CHARS,
 			"birthYearMaxAge" => ACCOUNT_BIRTH_YEAR_MAX_AGE,
 			"tokenNameMaxChars" => AUTH_TOKEN_LIMIT_NAME_CHARS,
 			"tokenExpiresInDaysMin" => AUTH_TOKEN_EXPIRES_DAYS_MIN,

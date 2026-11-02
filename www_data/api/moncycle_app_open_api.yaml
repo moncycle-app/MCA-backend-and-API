@@ -2,7 +2,7 @@ openapi: 3.0.3
 
 info:
   title: moncycle.app API
-  version: "2.0"
+  version: "3.0"
   termsOfService: https://www.moncycle.app/ToS/term_of_service_fr.html
   license:
     name: AGPL-3.0-or-later
@@ -111,13 +111,13 @@ info:
 
     ### Compatibility
 
-    This page describes **v2**, served under `/api/v2/` (every path below is relative to it). `appVersion` in
+    This page describes **v3**, served under `/api/v3/` (every path below is relative to it). `appVersion` in
     `GET /server_info` is the version of the app, not of the contract.
 
-    - Stays in v2: a new field in an answer, a new optional request field, a new endpoint, a new enum value, a new
+    - Stays in v3: a new field in an answer, a new optional request field, a new endpoint, a new enum value, a new
       `code`. **A client must ignore the fields and enum values it does not know**, and treat an unknown `code` like
       any other error of the same status.
-    - A breaking change is published as `/api/v3/`; v2 is not touched.
+    - A breaking change is published as `/api/v4/`; v3 is not touched. (`/api/v2/` is gone: v3 reshaped the account, see below.)
 
     ## 3. Authentication
 
@@ -150,7 +150,7 @@ info:
     check forms with.
 
     ```bash
-    curl -s http://localhost:8003/api/v2/server_info
+    curl -s http://localhost:8003/api/v3/server_info
     # -> 200 {"data":{"app":"moncycle.app","appVersion":"15","maintenanceMode":false,"registrationEnabled":true,"limits":{...},...}}
     ```
 
@@ -159,14 +159,14 @@ info:
 
     ```bash
     # 1. A challenge for this address: a picture (data URI) and a token.
-    curl -s -X POST http://localhost:8003/api/v2/captcha \
+    curl -s -X POST http://localhost:8003/api/v3/captcha \
       -H 'Content-Type: application/json' \
       -d '{"purpose":"register","email":"marie@example.org"}'
     # -> 200 {"data":{"image":"data:image/jpeg;base64,...","token":"1790000000.9f2c...","expiresAt":1790000000}}
     # ... a human reads the picture, for example "a7k2fm"
 
     # 2. Create the account.
-    curl -s -X POST http://localhost:8003/api/v2/register \
+    curl -s -X POST http://localhost:8003/api/v3/register \
       -H 'Content-Type: application/json' \
       -d '{"nickname":"MB","email":"marie@example.org","password":"a long passphrase","birthYear":1994,
            "method":"cervicalMucus","temperatureTracking":false,"termsAccepted":true,
@@ -180,7 +180,7 @@ info:
     Then sign in and keep the token:
 
     ```bash
-    curl -s -X POST http://localhost:8003/api/v2/token \
+    curl -s -X POST http://localhost:8003/api/v3/token \
       -H 'Content-Type: application/json' \
       -d '{"email":"marie@example.org","password":"a long passphrase","name":"my script"}'
     # -> 201 {"data":{"prefix":"abcde","token":"abc...256 chars...","userId":42,"totpUsed":false,"name":"my script","scope":"readWrite",...}}
@@ -193,19 +193,19 @@ info:
     AUTH="Authorization: Bearer $TOKEN"
 
     # Settings. Call at start-up and when the app comes back to the foreground.
-    curl -s -H "$AUTH" http://localhost:8003/api/v2/account
+    curl -s -H "$AUTH" http://localhost:8003/api/v3/account
 
     # The whole timeline the first time; then only what changed (section 8).
-    curl -s -H "$AUTH" http://localhost:8003/api/v2/timeline_sync
+    curl -s -H "$AUTH" http://localhost:8003/api/v3/timeline_sync
 
     # Write a day: day 1 of a new cycle, red stamp. The date is in the address.
     curl -s -H "$AUTH" -H 'Content-Type: application/json' \
-      -X POST http://localhost:8003/api/v2/day/2026-03-10 \
+      -X POST http://localhost:8003/api/v3/day/2026-03-10 \
       -d '{"cycleFirstDay":true,"stampColor":"Red","freeMucusSensation":["dry"],"comment":"cramps in the morning"}'
     # -> 201 with the day as stored
 
     # Read a week (100 days at most per call)
-    curl -s -H "$AUTH" 'http://localhost:8003/api/v2/day?from=2026-03-04&to=2026-03-10'
+    curl -s -H "$AUTH" 'http://localhost:8003/api/v3/day?from=2026-03-04&to=2026-03-10'
     ```
 
     ### Writing a day replaces the whole day
@@ -366,11 +366,11 @@ externalDocs:
   url: https://www.moncycle.app
 
 servers:
-  - url: ./v2
+  - url: ./v3
     description: The server this documentation page is served from (relative paths).
-  - url: https://tableau.moncycle.app/api/v2
+  - url: https://tableau.moncycle.app/api/v3
     description: Production.
-  - url: http://localhost:8003/api/v2
+  - url: http://localhost:8003/api/v3
     description: Local development (docker).
 
 # Every endpoint needs a token, unless it declares `security: []`.
@@ -430,7 +430,7 @@ paths:
         - `maintenanceMode`: `true` when the operator stopped the server. Every other endpoint then answers
           `503 maintenance`; this one stays `200`, so a client can tell the user to come back later.
         - `appVersion`: a string (`15`, `15dev`). It changes with each release: a client that finds a new value knows the
-          server was updated (the web app then drops its local copy and reloads). It is not the version of the contract (`v2`).
+          server was updated (the web app then drops its local copy and reloads). It is not the version of the contract (`v3`).
         - `limits`: lengths in characters (`...Chars`), sizes in bytes (`...Bytes`), and how many days or dates one `GET /day` reads.
       security: []
       responses:
@@ -1480,12 +1480,34 @@ paths:
       summary: Change the settings, the login address, the password
       description: |-
         Every setting of the account is changed here: nickname, method, preferences, notification addresses, login address
-        and password.
+        and password. There are three kinds of settings:
+
+        - **Mandatory** (asked at sign-up, kept in the account): `nickname`, `method`, `temperatureTracking`, `birthYear`,
+          `language`, `research`, `loginEmail`, `newPassword`. `GET /account` shows them flat.
+        - **Optional** (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `temperatureUnit`,
+          `notificationEmails`): sent flat in the same body, e.g. `{"temperatureUnit": "F"}`. `GET /account` lists them all in
+          `settings`, each as `{value, isSet, default}`: `isSet: false` means the account never chose, `value` is then the
+          `default`. **`null` puts an optional setting back to its default** (the only place where `null` means something).
+        - **Custom keys** for apps of third parties, in `customSettings`: an object `key -> whole number or text`; `null`
+          deletes the key. A key is 1 to 64 characters (`a-z`, `0-9`, `_`, `.`, `-`; a letter or a digit first), a text is
+          255 characters at most, a number fits 32 bits signed, an account keeps 50 keys at most (`server_info` `limits`).
+          Only the keys sent change. Prefix your keys with the name of your app (`myapp.theme`) so that apps do not collide.
+
+        The optional settings:
+
+        | Key | Values | Default |
+        |---|---|---|
+        | `timelineAscending` | boolean: `false` puts today at the top of the table | `true` |
+        | `autoMailExport` | boolean: mail the export of each finished cycle | `false` |
+        | `dayBackgroundColor` | boolean: show the colour behind each day | `true` |
+        | `dateFormat` | `DMY_SLASH` 31/12/26, `DMY_DOT` 31.12.26, `DMY_DASH` 31-12-26, `MDY_SLASH` 12/31/26, `YMD_DASH` 26-12-31, `YMD_SLASH` 26/12/31, `YMD_DOT` 26.12.31 (dates only, never times; the PDF and the CSV of an export follow it) | by `language`: `DMY_DOT` for `DE` and `PL`, `DMY_SLASH` for the others |
+        | `temperatureUnit` | `C` or `F`. **Temperatures stay in Celsius in the API and in the NFP files**: the client converts. The PDF and the CSV of an export follow it. | `C` |
+        | `notificationEmails` | see below (needs the password) | `""` |
 
         **Partial update:** only the fields you send change. (`POST /day/{date}` is the opposite.) `{}` is valid and changes
         nothing; `null` is the same as not sent. Send only the one of `method` / `temperatureTracking` you change.
 
-        An unknown field, a read-only field of `GET /account` (`userId`, `inscriptionDate`, `oldestDay`, `totpState`) or a
+        An unknown field, a read-only field of `GET /account` (`userId`, `inscriptionDate`, `oldestDay`, `totpState`, `settings`) or a
         wrong value is refused with `400 validation_failed`, and nothing is changed.
 
         ### What needs the password again
@@ -1508,14 +1530,14 @@ paths:
 
         `data` is the account after the change. `meta` says what happened:
 
-        - `fieldsUpdated`: the settings written (`password` when `newPassword` was set; never `loginEmail`, which changes when the link is used). It can be empty.
+        - `fieldsUpdated`: the settings written (`password` when `newPassword` was set; `customSettings.<key>` for a key of `customSettings`; never `loginEmail`, which changes when the link is used). A setting sent as it already is writes nothing and is not listed. It can be empty.
         - `loggedOutDevices`: present when `newPassword` was sent.
         - `loginEmailLinkSent`: present when `loginEmail` was sent; `false` means the mail could not be sent. The answer is
           the same if another account has that address (its owner gets a mail instead).
 
         ### Body fields
 
-        All optional.
+        All optional. The optional settings and `customSettings` are described above.
 
         | Key | Type | Usage |
         |---|---|---|
@@ -1525,15 +1547,15 @@ paths:
         | `logoutOtherDevices` | boolean | With `newPassword`: close every other session. Default `false`. |
         | `loginEmail` | string (email) | Asks to change the login address. |
         | `code` | string (digits) | TOTP code, needed with `loginEmail` when two-factor is on. |
-        | `notificationEmails` | string | See above (1024 characters at most). |
+        | `notificationEmails` | string | See above (255 characters at most). `null` or `""` empties the list. |
         | `method` | `cervicalMucus` or `fertilityCare` | Tracking method. |
         | `temperatureTracking` | boolean | Also record basal temperature. |
         | `birthYear` | integer | This year or up to 100 years earlier. |
         | `language` | `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | Language of the account. |
-        | `timelineAscending` | boolean | Display preference: today at the top of the table. |
+        | `timelineAscending`, `autoMailExport`, `dayBackgroundColor` | boolean | Optional settings, see above. |
+        | `dateFormat`, `temperatureUnit` | string | Optional settings, see above. |
+        | `customSettings` | object | Keys of third parties, see above. |
         | `research` | boolean | Consent to contribute anonymous data to research. |
-        | `sponsor` | boolean | Marks the account as a financial supporter. |
-        | `autoMailExport` | boolean | Mail the export of each finished cycle. |
         | `lastWriteClientUtc` | string (RFC 3339) | Your own clock. |
       requestBody:
         required: true
@@ -1915,7 +1937,7 @@ paths:
           description: The day was new. `Location` is its address.
           headers:
             Location:
-              description: "`/api/v2/day/{date}`."
+              description: "`/api/v3/day/{date}`."
               schema:
                 type: string
           content:
@@ -2073,7 +2095,7 @@ paths:
           description: Created. `Location` is its address.
           headers:
             Location:
-              description: "`/api/v2/description/{id}`."
+              description: "`/api/v3/description/{id}`."
               schema:
                 type: string
           content:
@@ -2229,7 +2251,7 @@ paths:
         | `format` | Content type | Purpose |
         |---|---|---|
         | `nfp` | `application/json` | **Portable data**: the NFP format, to move data to another app. `POST /import` reads it. See the `NfpFile` schema. |
-        | `csv` | `text/csv; charset=utf-8` | A spreadsheet, one row per day. |
+        | `csv` | `text/csv; charset=utf-8` | A spreadsheet, one row per day. Dates are written in the account's `dateFormat` and temperatures in its `temperatureUnit`, like the `pdf`; the `nfp` file never changes (ISO dates, Celsius). |
         | `pdf` | `application/pdf` | A printable chart, laid out for the account's method. |
 
         Only a `200` is a file. A failure is the usual `error` envelope: `validation_failed` (missing or malformed date,
@@ -2840,8 +2862,8 @@ components:
     Account:
       type: object
       description: |-
-        The account and its settings, as `GET /account` shows them (and `POST /account` answers). `userId`, `inscriptionDate`, `oldestDay` and
-        `totpState` are read-only: sent in a `POST /account`, they are refused.
+        The account and its settings, as `GET /account` shows them (and `POST /account` answers). `userId`, `inscriptionDate`, `oldestDay`, `totpState` and
+        `settings` are read-only: sent in a `POST /account`, they are refused.
       properties:
         userId:
           type: integer
@@ -2850,11 +2872,6 @@ components:
           type: string
           format: email
           description: The login address.
-        notificationEmails:
-          type: string
-          nullable: true
-          description: The addresses that also receive the cycles, the reminders and the warnings by email, separated by `;`. Empty or `null` when there is none.
-          example: partner@example.org;mother@example.org
         method:
           type: string
           enum: [cervicalMucus, fertilityCare]
@@ -2885,20 +2902,9 @@ components:
           nullable: true
           description: The date of the oldest day the account holds, `null` when it holds none. Read-only.
           example: "2023-11-02"
-        sponsor:
-          type: boolean
-          description: Is this account a financial supporter of the project?
         research:
           type: boolean
           description: Has the user agreed to contribute anonymous data to research?
-        timelineAscending:
-          type: boolean
-          description: |-
-            Display preference: `true` puts today at the top of the table. The API itself always
-            returns days in ascending date order.
-        autoMailExport:
-          type: boolean
-          description: Is the export of each finished cycle mailed (PDF, CSV and NFP file)? `true` by default.
         totpState:
           type: string
           enum: [never_used, disabled, init, active, unknown]
@@ -2917,6 +2923,86 @@ components:
           format: date-time
           nullable: true
           description: When the account settings were last written, from the client clock. `null` if never.
+        settings:
+          type: object
+          description: |-
+            The optional settings, all of them, whether the account set them or not. Read-only here: write them flat in `POST /account`
+            (`null` puts one back to its default).
+          required: [timelineAscending, autoMailExport, dayBackgroundColor, dateFormat, temperatureUnit, notificationEmails]
+          properties:
+            timelineAscending:
+              $ref: '#/components/schemas/SettingBoolean'
+            autoMailExport:
+              $ref: '#/components/schemas/SettingBoolean'
+            dayBackgroundColor:
+              $ref: '#/components/schemas/SettingBoolean'
+            dateFormat:
+              $ref: '#/components/schemas/SettingDateFormat'
+            temperatureUnit:
+              $ref: '#/components/schemas/SettingTemperatureUnit'
+            notificationEmails:
+              $ref: '#/components/schemas/SettingText'
+        customSettings:
+          type: object
+          description: The keys that apps of third parties keep for the user, `{}` when there is none. Written with `POST /account`.
+          additionalProperties:
+            oneOf:
+              - type: integer
+              - type: string
+          example: {"myapp.theme": "dark", "myapp.size": 3}
+
+    SettingBoolean:
+      type: object
+      required: [value, isSet, default]
+      properties:
+        value:
+          type: boolean
+          description: The value in force. The default when `isSet` is `false`.
+        isSet:
+          type: boolean
+          description: Has the account chosen a value? `false` means nothing is stored.
+        default:
+          type: boolean
+          description: What `value` is when the account chose nothing.
+
+    SettingDateFormat:
+      type: object
+      required: [value, isSet, default]
+      properties:
+        value:
+          type: string
+          enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
+          description: The value in force. The default when `isSet` is `false`.
+        isSet:
+          type: boolean
+        default:
+          type: string
+          enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
+          description: What `value` is when the account chose nothing; it follows the `language` of the account.
+
+    SettingTemperatureUnit:
+      type: object
+      required: [value, isSet, default]
+      properties:
+        value:
+          type: string
+          enum: ["C", "F"]
+        isSet:
+          type: boolean
+        default:
+          type: string
+          enum: ["C", "F"]
+
+    SettingText:
+      type: object
+      required: [value, isSet, default]
+      properties:
+        value:
+          type: string
+        isSet:
+          type: boolean
+        default:
+          type: string
 
     Day:
       type: object
@@ -3620,7 +3706,7 @@ components:
           example: moncycle.app
         appVersion:
           type: string
-          description: The version of the app the server runs. It changes with each release; the version of the contract is the `v2` of the address.
+          description: The version of the app the server runs. It changes with each release; the version of the contract is the `v3` of the address.
           example: "15"
         maintenanceMode:
           type: boolean
@@ -3667,6 +3753,16 @@ components:
             notificationEmailsMax:
               type: integer
               example: 5
+            customSettingsMax:
+              type: integer
+              example: 50
+              description: How many keys an account keeps in `customSettings`.
+            customSettingKeyMaxChars:
+              type: integer
+              example: 64
+            customSettingValueMaxChars:
+              type: integer
+              example: 255
             birthYearMaxAge:
               type: integer
               description: A birth year is this year or up to this many years back.
@@ -3770,7 +3866,8 @@ components:
           example: "123456"
         notificationEmails:
           type: string
-          description: The addresses that also receive the cycles by email, separated by `;` (5 at most, 1024 characters in all). `""` empties the list. Needs `password`.
+          nullable: true
+          description: The addresses that also receive the cycles by email, separated by `;` (5 at most, 255 characters in all). `""` or `null` empties the list. Needs `password`.
           example: partner@example.org;mother@example.org
         method:
           type: string
@@ -3787,18 +3884,39 @@ components:
           type: string
           enum: [EN, FR, ES, DE, IT, PL, PT]
           description: "The language of the account. The mails the server sends to the account are written in it."
-        timelineAscending:
-          type: boolean
-          description: 'Display preference only: `true` puts today at the top of the table. The API always returns days in ascending order.'
         research:
           type: boolean
           description: Consent to contribute anonymous data to research programs.
-        sponsor:
+        timelineAscending:
           type: boolean
-          description: Marks the account as a financial supporter of the project.
+          nullable: true
+          description: 'Optional setting. Display preference only: `false` puts today at the top of the table. The API always returns days in ascending order. `null` puts it back to the default (`true`).'
         autoMailExport:
           type: boolean
-          description: Mail the export of each finished cycle (PDF, CSV and NFP file) to the login address and `notificationEmails`. `true` by default.
+          nullable: true
+          description: Optional setting. Mail the export of each finished cycle (PDF, CSV and NFP file) to the login address and `notificationEmails`. `null` puts it back to the default (`false`: no mail).
+        dayBackgroundColor:
+          type: boolean
+          nullable: true
+          description: Optional setting. Show the colour behind each day. `null` puts it back to the default (`true`).
+        dateFormat:
+          type: string
+          nullable: true
+          enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
+          description: Optional setting. How dates are written (the year on two digits), in the app and in the PDF and CSV exports. `null` puts it back to the default of the account's language.
+        temperatureUnit:
+          type: string
+          nullable: true
+          enum: ["C", "F"]
+          description: Optional setting. The unit temperatures are shown in. They are always stored and sent in Celsius; the client converts. `null` puts it back to `C`.
+        customSettings:
+          type: object
+          description: "Keys of third parties: `key -> whole number or text`, `null` deletes the key. Only the keys sent change. A key is 1 to 64 characters of `a-z`, `0-9`, `_`, `.`, `-`; a text is 255 characters at most; 50 keys at most."
+          additionalProperties:
+            oneOf:
+              - type: integer
+              - type: string
+              - type: "null"
         lastWriteClientUtc:
           type: string
           format: date-time
@@ -3813,7 +3931,7 @@ components:
           description: "The settings that were written (`password` when `newPassword` was set). Can be empty. Never `loginEmail`: it changes when the link is used."
           items:
             type: string
-            enum: [nickname, notificationEmails, method, birthYear, language, timelineAscending, research, sponsor, autoMailExport, password]
+            description: One of the keys of the body, `password`, or `customSettings.<key>`.
           example: [method]
         loggedOutDevices:
           type: integer

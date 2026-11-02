@@ -18,7 +18,7 @@ declare(strict_types=1);
 // The version of the app, a string that starts with the number of the database schema ("15", "15dev", "15.2", "15rc"). The digits it starts
 // with are the schema's version: the row 'schema_version' of key_value (schema.sql inserts it, every migration sets it) must say that integer
 // or nothing is served (503 schema_mismatch); upgrade_schema_version() reads it. The newest migration is script/migration/v<N - 1>_to_v<N>.*;
-// GET /api/v2/server_info tells the whole string as appVersion. The version of the API contract is the v2 of the URL (api/v2/), not this one.
+// GET /api/v3/server_info tells the whole string as appVersion. The version of the API contract is the v3 of the URL (api/v3/), not this one.
 const APP_VERSION = "16dev";
 
 // The commit the image was built from (8 hex digits, or "unknown"): the Dockerfile replaces "dev" below at build time. Not in server_info.
@@ -32,7 +32,7 @@ const APP_COMMIT = "dev";
 // ACCOUNT -- two-factor authentication, data retention
 // ===========================================================================
 
-// user_account.totp_state: where the account is in the two-factor authentication lifecycle.
+// user_setting "totp_state": where the account is in the two-factor authentication lifecycle.
 const TOTP_STATE_NEVER_USED = 0;    // 2FA was never set up
 const TOTP_STATE_DISABLED = 1;      // was set up, then turned off by the user
 const TOTP_STATE_INIT = 2;          // secret generated and shown, first code not confirmed yet
@@ -54,7 +54,7 @@ const COOKIE_SAMESITE_VALUES = ["strict", "lax", "none"];
 
 // The default password policy: 10 characters at least, one lower case letter, one upper case letter, one digit. A regex WITHOUT
 // delimiters, written to mean the same in PCRE and in JavaScript (a client puts it in a `pattern` attribute); the operator's
-// PASSWORD_POLICY_REGEX replaces it. GET /api/v2/server_info tells the one in force.
+// PASSWORD_POLICY_REGEX replaces it. GET /api/v3/server_info tells the one in force.
 const PASSWORD_POLICY_REGEX_DEFAULT = '^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$';
 // Lengths in characters (Unicode code points: mb_strlen, the regex's /u, JSON Schema's maxLength). A new password is at most
 // PASSWORD_MAX_CHARS. A password typed to sign in or to confirm is not checked against the policy (it may have been chosen under an older
@@ -104,11 +104,11 @@ const ACCOUNT_DEMO_IDS_SQL = ACCOUNT_DEMO_ID_CERVICAL_MUCUS . ", " . ACCOUNT_DEM
 // The widths of the columns of user_account, and the birth years a person can give.
 const ACCOUNT_LIMIT_NICKNAME_CHARS = 255;           // user_account.name varchar(255)
 const ACCOUNT_LIMIT_REGISTER_COMMENT_CHARS = 255;   // user_account.register_comment varchar(255)
-// user_account.notification_emails: the addresses that receive the cycles, the reminders and the warnings with the login address, as the
+// user_setting "notification_emails": the addresses that receive the cycles, the reminders and the warnings with the login address, as the
 // client sends and reads them and as they are stored (lower case, no duplicate).
 const ACCOUNT_NOTIFICATION_EMAILS_SEPARATOR = ";";
 const ACCOUNT_NOTIFICATION_EMAILS_MAX = 5;                 // how many
-const ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS = 1024;      // user_account.notification_emails varchar(1024)
+const ACCOUNT_LIMIT_NOTIFICATION_EMAILS_CHARS = 255;       // user_setting.value_str varchar(255)
 const ACCOUNT_BIRTH_YEAR_MAX_AGE = 100;             // this year, or up to this many years back (user_account.age is a smallint)
 
 // The methods that change nothing: all a read-only token may use (api_start()).
@@ -118,7 +118,7 @@ const HTTP_SAFE_METHODS = ["GET", "HEAD", "OPTIONS"];
 const AUTH_TOKEN_LIMIT_NAME_CHARS = 256;            // auth_token.name varchar(256)
 const AUTH_TOKEN_LIMIT_USER_AGENT_CHARS = 255;      // auth_token.user_agent and user_agent_use varchar(255), cut to fit
 const AUTH_TOKEN_DEFAULT_NAME = "API";              // the name of a token whose client gave none
-// The first characters of the token, kept in the clear next to its hash: GET /api/v2/token shows them and DELETE /api/v2/token names a token by
+// The first characters of the token, kept in the clear next to its hash: GET /api/v3/token shows them and DELETE /api/v3/token names a token by
 // them. Unique per account: a token that would repeat one is made again, up to AUTH_TOKEN_PREFIX_TRIES times.
 const AUTH_TOKEN_PREFIX_CHARS = 5;                  // auth_token.auth_token_prefix varchar(5)
 const AUTH_TOKEN_PREFIX_TRIES = 10;
@@ -130,13 +130,13 @@ const AUTH_TOKEN_SCOPE_NAMES = [
 	AUTH_TOKEN_SCOPE_READ_ONLY => "readOnly",
 	AUTH_TOKEN_SCOPE_READ_WRITE => "readWrite",
 ];
-// "expiresInDays" of POST /api/v2/token: such a token dies on that day whatever its use.
+// "expiresInDays" of POST /api/v3/token: such a token dies on that day whatever its use.
 const AUTH_TOKEN_EXPIRES_DAYS_MIN = 1;
 const AUTH_TOKEN_EXPIRES_DAYS_MAX = 365;
 // A token made without "expiresInDays" dies after this many days, or after this many days unused (db_querie_purge_auth_token()).
 const AUTH_TOKEN_DEFAULT_LIFETIME_DAYS = 365;
 const AUTH_TOKEN_IDLE_DAYS = 40;
-// The address of a token as GET /api/v2/token shows it, cut to these bits; the database keeps it whole.
+// The address of a token as GET /api/v3/token shows it, cut to these bits; the database keeps it whole.
 const AUTH_TOKEN_IP_PREFIX_V4 = 24;
 const AUTH_TOKEN_IP_PREFIX_V6 = 48;
 
@@ -148,7 +148,7 @@ const EMAIL_TOKEN_LIMIT_CHARS = 64;                 // a token a client sends th
 const EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION = 1;     // proves the address of a new account: the account becomes usable
 const EMAIL_TOKEN_PURPOSE_RESET_PASSWORD = 2;       // lets whoever reads the mail choose a new password (and proves the address too)
 const EMAIL_TOKEN_PURPOSE_CHANGE_EMAIL = 3;         // proves the new primary address, which then replaces the old one
-// purpose => the string the JSON API (POST /api/v2/verify_email) and the link of the mail speak.
+// purpose => the string the JSON API (POST /api/v3/verify_email) and the link of the mail speak.
 const EMAIL_TOKEN_PURPOSE_NAMES = [
 	EMAIL_TOKEN_PURPOSE_ACCOUNT_CREATION => "accountCreation",
 	EMAIL_TOKEN_PURPOSE_RESET_PASSWORD => "resetPassword",
@@ -215,7 +215,7 @@ const NFP_METHOD_BY_ID = [
 ];
 
 // ===========================================================================
-// THE SERVER AND ITS CONTRACT -- GET /api/v2/server_info (api/v2/server_info.php, lib/server.php), what a request may say (lib/input.php)
+// THE SERVER AND ITS CONTRACT -- GET /api/v3/server_info (api/v3/server_info.php, lib/server.php), what a request may say (lib/input.php)
 // ===========================================================================
 
 const APP_NAME = "moncycle.app";
@@ -228,14 +228,68 @@ const UPGRADE_UNVERSIONED_VERSION = 14;
 const UPGRADE_LOCK_NAME = "moncycle_upgrade";
 const UPGRADE_LOCK_WAIT_SECONDS = 600;
 
-// The names a POST /api/v2/account body may use, and the ones of GET /api/v2/account that the server alone writes (refused if sent).
+// The names a POST /api/v3/account body may use, and the ones of GET /api/v3/account that the server alone writes (refused if sent).
+// The settings of USER_SETTINGS are accepted by their JSON name too (user_setting_names()).
 const ACCOUNT_UPDATE_FIELDS = [
-	"nickname", "method", "temperatureTracking", "birthYear", "language", "timelineAscending", "research", "sponsor", "autoMailExport",
-	"notificationEmails", "loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
+	"nickname", "method", "temperatureTracking", "birthYear", "language", "research", "customSettings",
+	"loginEmail", "newPassword", "logoutOtherDevices", "password", "code", "lastWriteClientUtc",
 ];
-const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "oldestDay", "totpState"];
+const ACCOUNT_READ_ONLY_FIELDS = ["userId", "inscriptionDate", "oldestDay", "totpState", "settings"];
 
-// The names a day body may use (POST /api/v2/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
+// ===========================================================================
+// USER SETTINGS -- the table user_setting
+// ===========================================================================
+
+// What an account must have to exist stays in user_account (nickname, method, birth year, language, address, password, research
+// consent). Everything else is a row of user_setting, one per account and name; no row means the default below. A number is stored in
+// value_int (a boolean as 0 / 1), a text in value_str.
+const USER_SETTING_TYPE_BOOL = "bool";
+const USER_SETTING_TYPE_CHOICE = "choice";       // one of the codes of a list, stored as text
+const USER_SETTING_TYPE_EMAILS = "emails";       // a list of addresses, stored as text (user_account_notification_emails_parse())
+
+// Written by the two-factor endpoints only: in the table, never in the settings of the API.
+const USER_SETTING_TOTP_STATE = "totp_state";
+const USER_SETTING_TOTP_SECRET = "totp_secret";
+
+// The keys third parties keep for the user are stored as USER_SETTING_CUSTOM_PREFIX . key, which no setting above can be.
+const USER_SETTING_CUSTOM_PREFIX = "custom.";
+const USER_SETTING_CUSTOM_KEY_REGEX = '/^[a-z0-9][a-z0-9_.-]{0,63}$/';
+const USER_SETTING_CUSTOM_KEY_MAX_CHARS = 64;
+const USER_SETTING_CUSTOM_MAX = 50;              // keys per account
+const USER_SETTING_CUSTOM_VALUE_MAX_CHARS = 255; // user_setting.value_str varchar(255)
+const USER_SETTING_INT_MIN = -2147483648;        // user_setting.value_int int(11)
+const USER_SETTING_INT_MAX = 2147483647;
+
+// The date formats a person can choose (dates only, never times): code => PHP date() pattern, the year on two digits.
+const USER_SETTING_DATE_FORMATS = [
+	"DMY_SLASH" => "d/m/y",   // 31/12/26: France, Spain, Italy, Portugal, United Kingdom...
+	"DMY_DOT" => "d.m.y",     // 31.12.26: Germany, Poland, Switzerland, Russia
+	"DMY_DASH" => "d-m-y",    // 31-12-26: Netherlands
+	"MDY_SLASH" => "m/d/y",   // 12/31/26: United States
+	"YMD_DASH" => "y-m-d",    // 26-12-31: Sweden, Canada
+	"YMD_SLASH" => "y/m/d",   // 26/12/31: Japan, China
+	"YMD_DOT" => "y.m.d",     // 26.12.31: Korea, Hungary
+];
+// The keys of USER_SETTING_DATE_FORMATS (a constant expression cannot call array_keys()).
+const USER_SETTING_DATE_FORMAT_CODES = ["DMY_SLASH", "DMY_DOT", "DMY_DASH", "MDY_SLASH", "YMD_DASH", "YMD_SLASH", "YMD_DOT"];
+// The date format of an account that chose none, by the language of the account.
+const USER_SETTING_DATE_FORMAT_BY_LANGUAGE = [
+	"EN" => "DMY_SLASH", "FR" => "DMY_SLASH", "ES" => "DMY_SLASH", "IT" => "DMY_SLASH", "PT" => "DMY_SLASH", "DE" => "DMY_DOT", "PL" => "DMY_DOT",
+];
+// A temperature is always stored and sent in Celsius; the unit is how it is shown (the client converts, and so do the exports).
+const USER_SETTING_TEMPERATURE_UNITS = ["C", "F"];
+
+// The optional settings: JSON name => [name in user_setting, type, default, the codes a choice takes]. The default of the date
+// format is null here: it depends on the language (USER_SETTING_DATE_FORMAT_BY_LANGUAGE).
+const USER_SETTINGS = [
+	"timelineAscending" => ["timeline_asc", USER_SETTING_TYPE_BOOL, true, null],               // false puts today at the top of the table
+	"autoMailExport" => ["auto_mail_export", USER_SETTING_TYPE_BOOL, false, null],              // the export of each finished cycle by mail
+	"dayBackgroundColor" => ["day_background_color", USER_SETTING_TYPE_BOOL, true, null],      // the colour behind each day
+	"dateFormat" => ["date_format", USER_SETTING_TYPE_CHOICE, null, USER_SETTING_DATE_FORMAT_CODES],
+	"temperatureUnit" => ["temperature_unit", USER_SETTING_TYPE_CHOICE, "C", USER_SETTING_TEMPERATURE_UNITS],
+	"notificationEmails" => ["notification_emails", USER_SETTING_TYPE_EMAILS, "", null],       // wants the current password to change (user_account_update())
+];
+// The names a day body may use (POST /api/v3/day/{date}), and the ones the server writes, dropped when a day read is sent back whole.
 const DAY_INPUT_FIELDS = [
 	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "observationPaused",
 	"freeMucusSensation", "freeMucusObservation", "freeOther", "temperature", "temperatureTime", "codifiedArrow",
@@ -278,21 +332,21 @@ const DESCRIPTION_TYPE_UNDEFINED = 0;     // free text of no known type
 const DESCRIPTION_TYPE_OBSERVATION = 1;   // a mucus observation
 const DESCRIPTION_TYPE_SENSATION = 2;     // a mucus sensation
 
-// type => the string the JSON API speaks (api/v2/description.php, api/v2/timeline_sync.php).
+// type => the string the JSON API speaks (api/v3/description.php, api/v3/timeline_sync.php).
 const DESCRIPTION_TYPE_NAMES = [
 	DESCRIPTION_TYPE_UNDEFINED => "undefined",
 	DESCRIPTION_TYPE_OBSERVATION => "observation",
 	DESCRIPTION_TYPE_SENSATION => "sensation",
 ];
 
-// The formats api/v2/export.php can produce, as the {format} of its URL names them.
+// The formats api/v3/export.php can produce, as the {format} of its URL names them.
 const EXPORT_TYPE_PDF = "pdf";
 const EXPORT_TYPE_CSV = "csv";
 const EXPORT_TYPE_NFP = "nfp";
 const EXPORT_TYPES = [EXPORT_TYPE_PDF, EXPORT_TYPE_CSV, EXPORT_TYPE_NFP];
 
 // ===========================================================================
-// PUBLIC STATISTICS -- GET /api/v2/pub_stat (api/v2/pub_stat.php, lib/data.php)
+// PUBLIC STATISTICS -- GET /api/v3/pub_stat (api/v3/pub_stat.php, lib/data.php)
 // ===========================================================================
 
 // JSON name => [the key_value row the cron keeps it in, the digits it is rounded to]: counting walks day_timeline, not for every visit.
@@ -336,7 +390,7 @@ const CRON_LAST_DURATION_KEY = "cron_last_duration_ms";
 const WEEKLY_REPORT_WEEKS = 12;
 
 // ===========================================================================
-// SYNC -- GET /api/v2/timeline_sync (api/v2/timeline_sync.php, lib/data.php)
+// SYNC -- GET /api/v3/timeline_sync (api/v3/timeline_sync.php, lib/data.php)
 // ===========================================================================
 
 // How far before the client's cursor the sync reads: a row is stamped when its statement runs but seen only once its transaction commits,
@@ -447,7 +501,7 @@ const DAY_FORMAT_FC_GROUPS = [
 // where two overlap ("X1" and "10" in "X10") the order decides. 'R' belongs to no group: taken out and ignored.
 const DAY_FORMAT_FC_PARSE_ORDER = ['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', 'X2', 'X3', 'AD', 'AP', 'VL', 'VH', '2W', '10', 'H', 'M', 'L', 'B', '0', '2', '4', '6', '8', 'C', 'G', 'K', 'P', 'Y', 'R'];
 
-// How many days one GET /api/v2/day reads ("dates=a,b,c", or "from" to "to" both counted).
+// How many days one GET /api/v3/day reads ("dates=a,b,c", or "from" to "to" both counted).
 const DAY_LIMIT_QUERY_DAYS = 100;
 
 // What day_timeline and description can hold: the widths of their columns.

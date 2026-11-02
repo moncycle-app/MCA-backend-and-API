@@ -21,7 +21,7 @@ Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-prof
 
 | Path | What |
 |---|---|
-| `www_data/` | The API: the HTTP endpoints (`api/v2/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`), the settings (`config*.php`, `constants.php`). |
+| `www_data/` | The API: the HTTP endpoints (`api/v3/`), the PHP library (`lib/`), the scheduled and maintenance scripts (`script/`), the settings (`config*.php`, `constants.php`). |
 | `www_data/api/moncycle_app_open_api.yaml` | The API's OpenAPI 3.0 description: **the contract** between this API and its clients, the web app included. |
 | `docs/` | Security, deployment, upgrading, monitoring and the log reference. |
 
@@ -120,7 +120,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | `DEMO_ENABLED` | `false` | The two public demo accounts. See [Demo accounts](#demo-accounts). |
 | `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
 | `NEWS_URL` | `https://tech4fertility.org/latest-news.json` | JSON file of the news banner (`{"fr": {"title", "description", "url", "pubDate"}, ...}`), fetched by the browser. https, or `http://localhost:PORT/...` for development. **Empty: no banner.** |
-| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | https page of your terms of service, shown in an iframe on the sign-up page (the box to tick is required by `POST /api/v2/register`), linked from the settings page and told by `GET /api/v2/server_info`. Empty: nothing to show. Change `info.termsOfService` in the OpenAPI file too. A page that forbids framing cannot be shown. |
+| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | https page of your terms of service, shown in an iframe on the sign-up page (the box to tick is required by `POST /api/v3/register`), linked from the settings page and told by `GET /api/v3/server_info`. Empty: nothing to show. Change `info.termsOfService` in the OpenAPI file too. A page that forbids framing cannot be shown. |
 | `WEEKLY_REPORT_EMAILS` | – | Addresses, comma separated, that get the weekly report of the team (French, sent by the cron on Mondays: accounts, usage, sign-up comments, database health, each compared with the week before). **Empty: no report.** See [Cron](#cron). |
 | `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
 
@@ -156,7 +156,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 |---|---|---|
 | `REQUEST_BODY_MAX_BYTES` | `10485760` (10 MB) | The biggest request body, in bytes, 1024 at least. A bigger one gets `413 file_too_large`. 15 years of daily observations make an NFP file of up to about 7.7 MB. The Docker image applies it to Apache and `post_max_size` at start-up (restart the container to change it); keep `memory_limit` (64M) about 6 times above it, and the container's `mem_limit` above 30 workers x `memory_limit`. Without Docker, set `post_max_size` and your web server's own limit to the same number. |
 | `CAPTCHA_SECRET` | made at start-up (Docker) | Random key that signs captcha challenges, **32 characters or more**. Without it sign-up, password recovery and some sign-ins answer `503 captcha_unavailable`. Instances behind one address must share it. |
-| `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients as `passwordPolicyRegex` in `GET /api/v2/server_info`. A password is 128 characters at most whatever it says. |
+| `PASSWORD_POLICY_REGEX` | 10+ characters, a lower case letter, an upper case letter, a digit | Regex (no delimiters; PCRE and JavaScript) a new password must match, e.g. `^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{10,}$`. Empty or invalid: the default. Told to clients as `passwordPolicyRegex` in `GET /api/v3/server_info`. A password is 128 characters at most whatever it says. |
 | `LOGIN_ATTEMPTS_DECAY_MINUTES` | `60` | Failed logins on an account older than this restart the count; `0` counts nothing, so no captcha and no lockout. |
 | `LOGIN_CAPTCHA_THRESHOLD` | `3` | Failed logins after which a captcha is asked; `0` never asks. |
 | `LOGIN_LOCKOUT_THRESHOLD` | `15` | Failed logins after which a wrong password locks the account; `0` never locks. |
@@ -195,7 +195,7 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 
 ### Cron
 
-`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers of `/api/v2/pub_stat`,
+`script/cron.php` runs **once per day**. It purges expired tokens and old login attempts, stores the numbers of `/api/v3/pub_stat`,
 sends the cycle mails, reminders and deletion warnings, and **deletes** accounts inactive for 4 years and accounts whose address was
 not verified within 7 days (`ACCOUNT_INACTIVITY_DELETE_YEARS`, `ACCOUNT_UNVERIFIED_DELETE_DAYS` in [`constants.php`](www_data/constants.php)).
 
@@ -242,7 +242,7 @@ later makes them at the next full hour.
 `MAINTENANCE_MODE=true` (restart the container to change it) puts the back end in maintenance:
 
 - **The API** answers `503 maintenance` on every endpoint before opening the database, downloads included. The exception is
-  `GET /api/v2/server_info`, which answers `200` with `"maintenanceMode": true` so a client can tell its user. Static pages stay up.
+  `GET /api/v3/server_info`, which answers `200` with `"maintenanceMode": true` so a client can tell its user. Static pages stay up.
   **A container healthcheck must accept the 503 of `health_check` as alive**, or the server is restarted as dead (the one in
   `docker-compose.exemple.yml` (in MCA-Docker-image) does).
 - **The cron** refuses to run, dry run included, and exits with status 1.
@@ -281,22 +281,22 @@ spec is the contract:** change an endpoint and its YAML together.
 
 In four lines:
 
-0. `GET /api/v2/server_info` (public) first: server version, maintenance flag and the limits to check a form with.
-1. `POST /api/v2/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
+0. `GET /api/v3/server_info` (public) first: server version, maintenance flag and the limits to check a form with.
+1. `POST /api/v3/token` with `{"email": "...", "password": "...", "name": "my script"}` answers `{"data": {"token": "...", ...}}`. The
    token is shown once.
 2. Send it on every other call as `Authorization: Bearer <token>`.
 3. Answers are `{"data": ...}` or `{"error": {"code": "...", "message": "..."}}`. **Bodies must be `Content-Type: application/json`.**
 
 ```sh
-TOKEN=$(curl -s -H 'Content-Type: application/json' -d '{"email":"you@example.org","password":"..."}' https://YOUR.HOST/api/v2/token | jq -r .data.token)
-curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/v2/account
-curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST -d '{"stampColor":"Red"}' https://YOUR.HOST/api/v2/day/2026-09-20
+TOKEN=$(curl -s -H 'Content-Type: application/json' -d '{"email":"you@example.org","password":"..."}' https://YOUR.HOST/api/v3/token | jq -r .data.token)
+curl -s -H "Authorization: Bearer $TOKEN" https://YOUR.HOST/api/v3/account
+curl -s -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -X POST -d '{"stampColor":"Red"}' https://YOUR.HOST/api/v3/day/2026-09-20
 ```
 
 ### Versioning
 
 The integer at the start of `APP_VERSION` (`constants.php`: `16`, `16dev`) is the API generation, the database schema and the migration
-`vN` all at once; `GET /api/v2/server_info` tells it as `appVersion`. It goes up when the contract changes in a way an older client
+`vN` all at once; `GET /api/v3/server_info` tells it as `appVersion`. It goes up when the contract changes in a way an older client
 cannot follow. The contract is [`moncycle_app_open_api.yaml`](www_data/api/moncycle_app_open_api.yaml), which stays in this repository
 (a web app keeps no copy). A web app declares the range of generations it was tested with and compares it with `appVersion`.
 
@@ -311,8 +311,8 @@ keeps the token and sends it as `Authorization: Bearer`; nothing in the contract
   `Access-Control-Allow-Origin: <origin>`, `Vary: Origin`, `Access-Control-Allow-Headers: Authorization, Content-Type, If-None-Match`,
   `Access-Control-Allow-Methods: GET, POST, DELETE, OPTIONS`, `Access-Control-Expose-Headers: Content-Disposition, X-Request-Id, ETag`. No
   `Access-Control-Allow-Credentials`: there is no cookie. The Docker image does it from its `CORS_ALLOWED_ORIGINS` setting (docker repository).
-- **`apiUrl`** in the web app's `config.json` is one of the `servers` of the YAML, e.g. `https://tableau.moncycle.app/api/v2`, never a link
-  without `/api/v2`.
+- **`apiUrl`** in the web app's `config.json` is one of the `servers` of the YAML, e.g. `https://tableau.moncycle.app/api/v3`, never a link
+  without `/api/v3`.
 - **`APP_URL`** is the web app's public URL: it builds the links of the mails and the TOTP image.
 
 ## Development

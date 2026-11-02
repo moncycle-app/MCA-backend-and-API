@@ -38,7 +38,7 @@ $id = $path === [] ? null : input_path_id($path[0], $issues);
 if ($method === "GET") {
 	input_exit_unless_none($issues);
 
-	$descriptions = array_map('data_description_to_json', db_querie_select_description_with_count($db, $no_user_account));
+	$descriptions = array_map('data_description_to_json', db_querie_select_day_description_with_count($db, $no_user_account));
 	log_note(["n" => count($descriptions)]);
 	http_data(200, $descriptions);
 }
@@ -47,7 +47,7 @@ if ($method === "GET") {
 elseif ($method === "DELETE") {
 	input_exit_unless_none($issues);
 
-	if (is_null(db_querie_select_description($db, $id, $no_user_account))) {
+	if (is_null(db_querie_select_day_description($db, $id, $no_user_account))) {
 		http_error(404, "not_found", "No description of this account has this id.");
 	}
 
@@ -80,9 +80,9 @@ else {
 	if ($saved["outcome"] === "duplicate_name") http_error(409, "duplicate_name", "A description of this account already has this name.");
 
 	$description = $saved["description"];
-	if ($creates) http_location("description/" . $description["no_description"]);
+	if ($creates) http_location("description/" . $description["no_day_description"]);
 	http_data($creates ? 201 : 200, [
-		"id" => $description["no_description"],
+		"id" => $description["no_day_description"],
 		"name" => $description["name"],
 		"type" => DESCRIPTION_TYPE_NAMES[$description["type"]],
 		"lastWriteClientUtc" => http_iso8601($last_write_client_UTC),

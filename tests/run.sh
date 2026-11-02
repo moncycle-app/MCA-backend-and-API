@@ -66,7 +66,7 @@ docker run -d --name "$TEST_CONTAINER" --platform "$PLATFORM" --network "$NETWOR
 
 # ready when the server answers (the database is built first: about a second)
 for _ in $(seq 1 100); do
-	curl -s -o /dev/null "http://127.0.0.1:$PORT/api/v2/health_check" && break
+	curl -s -o /dev/null "http://127.0.0.1:$PORT/api/v3/health_check" && break
 	[ "$(docker inspect -f '{{.State.Running}}' "$TEST_CONTAINER")" = true ] || { docker logs "$TEST_CONTAINER" 2>&1 | tail -20; echo "The server did not start. Does the database $TEST_DB exist, with all privileges for the DB user? (tests/README.md)" >&2; exit 1; }
 	sleep 0.2
 done

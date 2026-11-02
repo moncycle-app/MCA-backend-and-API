@@ -54,8 +54,8 @@ def random_ip():
 
 
 def request(method, path, body=None, token=None, headers=None, raw=None, ip=None):
-    """One call. `path` is what follows /api/v2/ (or starts with / for anything else). `body` is sent as JSON; `raw` is sent as is."""
-    url = BASE + (path if path.startswith("/") else "/api/v2/" + path)
+    """One call. `path` is what follows /api/v3/ (or starts with / for anything else). `body` is sent as JSON; `raw` is sent as is."""
+    url = BASE + (path if path.startswith("/") else "/api/v3/" + path)
     h = {"X-Forwarded-For": ip or random_ip()}
     data = raw
     if body is not None:

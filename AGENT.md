@@ -23,7 +23,7 @@ PHP 8.4 + MariaDB 11.1: a JSON HTTP API for menstrual cycle tracking (natural fa
 web app that uses it. The source is in `www_data/`, the web server's document root (`/var/www/html/` in the Docker image). There is no
 framework and no build step: PHP files, one script per endpoint. The web app (jQuery, no framework) is the repository MCA-web-APP.
 
-- `www_data/api/v2/*.php` the endpoints, `www_data/api/moncycle_app_open_api.yaml` the contract
+- `www_data/api/v3/*.php` the endpoints, `www_data/api/moncycle_app_open_api.yaml` the contract
 - `tests/` the API regression tests, committed (see [Running and checking a change](#running-and-checking-a-change))
 - `www_data/lib/*.php` every function and class
 - `www_data/script/` cron, statistics, migrations (`script/migration/`), `db_init.php`, `auto_upgrade.php`, `demo_reset.php`; `script/db/` holds
@@ -33,7 +33,7 @@ framework and no build step: PHP files, one script per endpoint. The web app (jQ
 
 The app is a **wellbeing** application, not a health application, and it does not collect its users' identity: an account has a
 nickname, not a name. Do not write "health data" or doctors into code, docs, mails or UI (the one exception is the notice that tells
-users not to enter such information). `GET /api/v2/health_check` is the container's liveness probe and keeps its name.
+users not to enter such information). `GET /api/v3/health_check` is the container's liveness probe and keeps its name.
 
 ## Code layout: where things go
 
@@ -45,7 +45,7 @@ The rule of the codebase: **`lib/` holds every function, `api/` holds none.** An
 | `constants.php` | Fixed internal constants: DB codes, API vocabularies, limits, export and PDF layouts | `const` only, under the section banners already there. Not a deployment setting. |
 | `config.php`, `config.docker.php`, `config.exemple.php` | What an operator sets: DB, SMTP, toggles, login throttling, CSV/PDF options | `define()` only, no function. Each loads `constants.php`. A new setting goes in all three, with the same name and default. `config.php` is the operator's own copy (not committed). |
 | `lib/<name>.php` | All functions and classes | Every function is named `<name>_*`: the file name is the prefix. |
-| `api/v2/*.php` | One HTTP endpoint each | No `function`, `class`, `const` or `define`. Answers with `http_data()`, `http_error()` or `http_no_content()` (they `exit`). |
+| `api/v3/*.php` | One HTTP endpoint each | No `function`, `class`, `const` or `define`. Answers with `http_data()`, `http_error()` or `http_no_content()` (they `exit`). |
 | `script/*.php` | cron, stats, migrations, `db_init.php`, `auto_upgrade.php`, `demo_reset.php` | Same rules as `api/`. Migrations are `script/migration/vN-1_to_vN.{sql,php}`. |
 
 Also:
@@ -56,7 +56,7 @@ Also:
 - Every PHP file declares `declare(strict_types=1);`, right after its licence header. A value from the database or a client is cast or
   checked before it reaches a typed parameter, a built-in function included: `strlen(null)` and `round("1.5")` throw.
 - Every `require_once` is `__DIR__`-based, and no lib file shares its name with an endpoint (`lib/user_account.php`,
-  `lib/sec_token.php` and `lib/sec_captcha.php` beside `api/v2/account.php`, `api/v2/token.php` and `api/v2/captcha.php`).
+  `lib/sec_token.php` and `lib/sec_captcha.php` beside `api/v3/account.php`, `api/v3/token.php` and `api/v3/captcha.php`).
 - Comments say why (a reason, a risk, a contract), once, where the code is: no paraphrase of the code and no history.
 - An endpoint requires what its own code reaches, and a lib file requires what it calls and nothing it does not (each lib file
   requires its own dependencies).
@@ -72,8 +72,8 @@ Also:
   `db_ops.php`). A read answers what the caller needs: a list of rows, one row or `null`, a column, a scalar; a write answers a row count,
   an insert the new id. No business logic.
 - **`data.php`** what the app does with its data: `data_day` (a day built from its row, its cycle and its descriptions, no query: the
-  sync, `GET /api/v2/day` and the exports all go through it), `data_construct_day` (one day read), `data_days_range`,
-  `data_descriptions_by_day`, `data_sync` (the answer of `GET /api/v2/timeline_sync`),
+  sync, `GET /api/v3/day` and the exports all go through it), `data_construct_day` (one day read), `data_days_range`,
+  `data_descriptions_by_day`, `data_sync` (the answer of `GET /api/v3/timeline_sync`),
   `data_save_description` (create, or rename / retype: partial), `data_save_day` / `data_write_day` (the one way a day is written, by
   the API and the NFP import alike), `data_resolve_description`, `data_reactivate_account`, and the two SQL files of `script/db/`:
   `data_init_database` (schema, plus demo when `DEMO_ENABLED`, into a database with no table) and `data_reload_demo_accounts` (the
@@ -87,23 +87,36 @@ Also:
 - **`doc.php`, `doc_export.php`, `doc_csv.php`, `doc_pdf.php`, `doc_mucus.php`, `doc_fc.php`** the CSV and PDF exports: the shared display
   rule; the front door (`doc_export_days`, `doc_export_pdf`); the CSV and the raw data dump; `DocPdf` and core-font text; the cervical mucus
   chart; the FertilityCare chart.
+- **`user_setting.php`** the table `user_setting` (one row per account and name; a number in `value_int`, a text in `value_str`; no row = the
+  default of `constants.php`). Three kinds of rows: the **optional settings** (`USER_SETTINGS`: JSON name => name in the table, type, default;
+  `timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `temperatureUnit`, `notificationEmails`), the **two-factor state**
+  (`totp_state`, `totp_secret`: written by `user_setting_set_totp()` only, never shown as a setting) and the **custom keys** of third parties
+  (`customSettings`, stored as `custom.<key>`, so that a key can never be a setting of the app). `user_setting_check_body()` /
+  `user_setting_check_custom()` check what a client sends (a wrong value is an issue; `null` resets to the default; a value equal to the stored
+  one writes nothing) and `user_setting_save()` writes it inside the caller's transaction; `user_setting_to_json()` tells each setting as
+  `{value, isSet, default}`; `user_setting_display()` gives the exports the date pattern and the temperature unit. **What an account needs to
+  exist (nickname, method, birth year, language, research consent, address, password) stays a column of `user_account`; any other setting is
+  a row here.** A new optional setting is an entry of `USER_SETTINGS` (and its choices in `constants.php`), the YAML and a test: no column, no migration.
+  A SQL read that needs the two-factor state or the notification addresses joins them from `user_setting` (`db_querie_sql_setting_join()`);
+  a session row (`sec_token_authenticate()`) has `totp_state`, `totp_secret` and `notification_emails` that way.
 - **`user_account.php`** the account row: the method table (`NFP_METHOD_BY_ID`: id 3 = FertilityCare, 4 = FertilityCare + temperature),
   `user_account_check_settings` (the settings that need no password, checked: issues, never silently dropped), `user_account_to_json`
-  (`GET /api/v2/account`; the cycles are in the sync, the news address in `server_info`), **`user_account_update()` = the whole of
-  `POST /api/v2/account`** (every setting is changed there, partial: a method or a temperature flag not sent keeps its value;
+  (`GET /api/v3/account`; the cycles are in the sync, the news address in `server_info`), **`user_account_update()` = the whole of
+  `POST /api/v3/account`** (every setting is changed there, partial: a method or a temperature flag not sent keeps its value;
   `newPassword`, `notificationEmails` and `loginEmail` want the current password again as `password`, `loginEmail` also the TOTP
   `code`; everything is checked before anything is written; it answers the account in `data` and `fieldsUpdated` /
-  `loggedOutDevices` / `loginEmailLinkSent` in `meta`), `user_account_notification_emails_parse()` (`user_account.notification_emails` is a
-  list of at most 5 addresses separated by `;`, lower case, no duplicate, 1024 characters; `mail_recipients()` adds the login
+  `loggedOutDevices` / `loginEmailLinkSent` in `meta`; the optional settings and `customSettings` go through `lib/user_setting.php`),
+  `user_account_notification_emails_parse()` (the setting `notification_emails` is a
+  list of at most 5 addresses separated by `;`, lower case, no duplicate, 255 characters; `mail_recipients()` adds the login
   address), and the two requests that make a link: `user_account_register()` (a new address gets an unverified account, with the moment it accepted
-  the terms in `terms_accepted_at` (`POST /api/v2/register` refuses a request without `termsAccepted: true`), and a verify link;
+  the terms in `terms_accepted_at` (`POST /api/v3/register` refuses a request without `termsAccepted: true`), and a verify link;
   an address that has an account is never touched and gets a reset link; same answer either way; the insert that finds the address
   taken ENDS its transaction and goes round again, because a share lock on the key plus a locking read is a deadlock, measured) and
   `user_account_recover_password()` (a link only: the password is not touched).
 - **`email_token.php`** the link by mail. ONE slot per account (`user_account.email_token_*`: hash, purpose 1 accountCreation / 2
   resetPassword / 3 changeEmail, expiry, pending address); a new link replaces the old one, whatever it was for.
   `email_token_issue()`, `email_token_use()` (transaction, account locked, purpose and expiry checked, single use),
-  `email_token_complete()` (the body of `POST /api/v2/verify_email`; the password is checked before the link is touched; a reset leaves
+  `email_token_complete()` (the body of `POST /api/v3/verify_email`; the password is checked before the link is touched; a reset leaves
   sessions and TOTP alone), `email_token_request_email_change()` (called by `user_account_update()` for `loginEmail`: a link to the NEW
   address; an address another account has gets a mail, same answer). `user_account.email_verified_at` NULL = the account cannot sign in
   (`sec_token_login`: `403 email_not_verified`, only after the right password, counted as nothing); the cron erases such accounts after
@@ -116,19 +129,19 @@ Also:
   `sec_session_is_demo()`), throttling (`sec_attempt_reserve()` / `_release()`: the attempt is written before the check and given back
   when it does not count), the client address (`sec_client_ip()`: `REMOTE_ADDR`, or `X-Forwarded-For` when the peer is in
   `TRUSTED_PROXIES`), and the write-origin check (`sec_exit_if_cross_origin()`: `APP_URL`, `WEB_APP_ORIGINS`).
-- **`sec_token.php`** the account's tokens and `/api/v2/token`. `sec_token_authenticate()` finds the account of the request (cookie or
+- **`sec_token.php`** the account's tokens and `/api/v3/token`. `sec_token_authenticate()` finds the account of the request (cookie or
   `Authorization: Bearer`); `sec_token_login()` is the sign-in (returns its outcome, the endpoint answers; a refusal that looked at the
   account is held until `AUTH_LOGIN_REFUSAL_MIN_MS` after the request began, so that its time tells nothing; an account that must answer a
   captcha is checked inside `db_ops_transaction()` with its row locked); `sec_token_create()` makes the token (name, scope, expiry, cookie only
   on request, `sec_token_cookie_samesite()`: `COOKIE_SAMESITE`; user agent and address kept whole; its first characters are kept in the
   clear as `auth_token.auth_token_prefix`, unique per account, and the token is made again when the key refuses).
-  `sec_token_parse_options` reads name, scope, expiresInDays, cookie of `POST /api/v2/token` (a 400 before anything is read);
+  `sec_token_parse_options` reads name, scope, expiresInDays, cookie of `POST /api/v3/token` (a 400 before anything is read);
   `sec_token_list` / `sec_token_to_json` (the address cut to /24 or /48 by `sec_token_ip_network`), `sec_token_revoke`
-  (`DELETE /api/v2/token/{prefix}`, the first `AUTH_TOKEN_PREFIX_CHARS` characters of the token, or `?others=true`: no database id is in the
-  API), `sec_token_exit_if_demo`. `api/v2/token.php` is the only endpoint: POST signs in (and mails the owner through
+  (`DELETE /api/v3/token/{prefix}`, the first `AUTH_TOKEN_PREFIX_CHARS` characters of the token, or `?others=true`: no database id is in the
+  API), `sec_token_exit_if_demo`. `api/v3/token.php` is the only endpoint: POST signs in (and mails the owner through
   `mail_send_new_login`), GET lists (a bare array), DELETE logs out (no parameter, idempotent) or revokes. **A DELETE never has a body.**
   `api_start($login_required, $read_only_ok)` refuses a read-only token on a method that is not in `HTTP_SAFE_METHODS`
-  (`POST /api/v2/totp` included: it is a POST).
+  (`POST /api/v3/totp` included: it is a POST).
 - **`sec_captcha.php`** the signed captcha, kept nowhere: `sec_captcha_issue` / `sec_captcha_verify` (ok / expired / invalid) / `sec_captcha_sign`
   (HMAC-SHA256 with `CAPTCHA_SECRET`, over purpose, address, expiry, phrase, `sec_captcha_ip_scope` of the client and `sec_captcha_state` of the
   account) / `sec_captcha_ready`. Closed without a secret of 32+ characters: 503 `captcha_unavailable`. No cookie, no row, no `db_*` call.
@@ -136,7 +149,7 @@ Also:
 - **`mail.php`** `mail_send()` and the mails (names and addresses escaped; returns false rather than throwing); `mail_send_link()` is
   the mail of a link, by kind (verify_email, account_exists, reset_password, confirm_email). The links are
   `APP_URL` + `/#/verify_email?purpose=..&t=..` (the web app's `verify_email` screen, routed in the URL hash, posts the
-  parameters to `POST /api/v2/verify_email`). A mail never holds a password. Every mail to a user is the template `www_data/mail/layout.html`
+  parameters to `POST /api/v3/verify_email`). A mail never holds a password. Every mail to a user is the template `www_data/mail/layout.html`
   (`MAIL_LAYOUT`; its plain-text part is `layout.txt`) and says its words through `mail_t()` from `www_data/mail/lang/<language>.php` (the language of the account the mail is for, `mail_language()`): **no word a user reads is in `mail.php`**,
   none in the layout (see `docs/mail.md`): `mail_send()` takes its slots and `mail_render()` fills it; the body is made
   of `mail_p()`, `mail_facts()`, `mail_callout()`... never of hand-written HTML. Every mail has `Reply-To: MAIL_REPLY_TO`.
@@ -145,7 +158,7 @@ Also:
   envelope (`http_data($status, $data, $meta)`), `http_exit_method_not_allowed()` (405 + `Allow`), `http_exit_not_found()`,
   `http_location()`; dates (`date_parse_ymd` checks a real calendar date, `date_parse_rfc3339` an RFC 3339 timestamp with a zone,
   converted to UTC); typed `getenv()`; `api_start()`, the preamble of a JSON endpoint (`api_start_open()` is its first half: log, JSON,
-  exception handler; `GET /api/v2/server_info` uses only that).
+  exception handler; `GET /api/v3/server_info` uses only that).
 - **`input.php`** what a request may say. Every endpoint reads its path (`input_path()`: `PATH_INFO` as segments), its query string
   (`input_query()`, unknown names refused) and its body (`input_body()`: unknown names refused with a "did you mean", `null` = not
   sent) through here, collects the problems as issues `{field, code, message}` (`input_issue()`, codes `INPUT_ISSUE_CODES`) and ends
@@ -153,7 +166,7 @@ Also:
   came and what is expected; it never holds a password, a code or a text. The checks a field needs are here once: `input_email()`,
   `input_choice()` (a value of a vocabulary), `input_secret()`, `input_code()`, `input_last_write()` (the client's moment of a write),
   `input_check_strings()`, `input_exit_unless_none()` (a request that takes no query and no body).
-- **`server.php`** `server_info()` (`GET /api/v2/server_info`: `appVersion` = `APP_VERSION`, `maintenanceMode`, the toggles, `newsUrl`,
+- **`server.php`** `server_info()` (`GET /api/v3/server_info`: `appVersion` = `APP_VERSION`, `maintenanceMode`, the toggles, `newsUrl`,
   `termsOfServiceUrl`, `limits`; made from the settings alone, **no database**, so it answers in maintenance too, and it tells no build or
   commit), `server_exit_if_schema_mismatch()` (503 `schema_mismatch`, run by every endpoint that opens the database after the
   maintenance exit).
@@ -170,7 +183,7 @@ require_once __DIR__ . "/../../lib/input.php";   // plus the lib files the endpo
 [$db, $user_account] = api_start();   // api_start(false) when logged-out visitors are fine
 ```
 
-- The URL after the script name is `PATH_INFO` (`/api/v2/day/2026-03-10` reaches `api/v2/day.php`: Apache MultiViews does it).
+- The URL after the script name is `PATH_INFO` (`/api/v3/day/2026-03-10` reaches `api/v3/day.php`: Apache MultiViews does it).
   `input_path()` reads it, `input_exit_unless_path_fits()` ends an extra segment with a 404,
   `http_exit_method_not_allowed([...])` answers a method the URL does not take.
 - A `DELETE` and a `GET` take no body (`input_check_no_body()`).
@@ -197,22 +210,23 @@ the code follows the file, never the other way round, and a refactor, a fix or a
   on failure. JSON keys are camelCase, DB columns snake_case, error codes snake_case, URL paths snake_case (`server_info`,
   `timeline_sync`), query parameters camelCase, timestamps RFC 3339 with a zone.
 - **Verbs.** `GET` reads, `DELETE` deletes (and takes no body), every other write is a `POST`: there is no `PUT` and no `PATCH`.
-  `POST /api/v2/day/{date}` replaces the whole day; `POST /api/v2/account` and `POST /api/v2/description/{id}` change only what is sent. An
+  `POST /api/v3/day/{date}` replaces the whole day; `POST /api/v3/account` and `POST /api/v3/description/{id}` change only what is sent. An
   address answers 405 with `Allow` to a method it does not take (`http_exit_method_not_allowed()`).
-- **Versions.** The version of the contract is the `v2` of the address (`api/v2/`). Additive changes (a field, an optional parameter, an
-  endpoint, an enum value, a `code`) stay in v2; a breaking one is published as `api/v3/`, beside it, and v2 is not touched. The app's
-  own version (`APP_VERSION`) is another number, told by `GET /api/v2/server_info` as `appVersion`.
+- **Versions.** The version of the contract is the `v3` of the address (`api/v3/`). Additive changes (a field, an optional parameter, an
+  endpoint, an enum value, a `code`) stay in v3; a breaking one is published as `api/v4/`, beside it, and v3 is not touched. (v3 replaced
+  v2, which is not served any more: it reshaped the account and its settings.) The app's
+  own version (`APP_VERSION`) is another number, told by `GET /api/v3/server_info` as `appVersion`.
 - **Strict input.** An unknown field or query parameter, a wrong type and an out-of-range value are 400 `validation_failed` with every
   problem in `details.issues`: nothing is dropped silently. The day fields the server computes (`DAY_OUTPUT_ONLY_FIELDS`) are
-  accepted and dropped on `POST /api/v2/day/{date}`, so that a day read can be sent back. A field set to `null` is a field not sent.
-- **Bodies.** Requests are JSON (`Content-Type: application/json`, else 415; malformed JSON is 400 `invalid_json`), `POST /api/v2/import`
+  accepted and dropped on `POST /api/v3/day/{date}`, so that a day read can be sent back. A field set to `null` is a field not sent.
+- **Bodies.** Requests are JSON (`Content-Type: application/json`, else 415; malformed JSON is 400 `invalid_json`), `POST /api/v3/import`
   included. A browser write with a foreign `Origin` is `403 cross_origin_refused` (`sec_exit_if_cross_origin()`, called by
   `api_start()`); a request with no `Origin` is not a browser's and passes.
 - **Types.** A body or query field a function reads as a string is checked `is_string()` first: a client can send a list, an object or
   a number (`?date[]=`, `"password":["x"]`, a cookie `MONCYCLEAPP_TOKEN[]=x`), and PHP throws a `TypeError`. A text from a client bound
   for a varchar goes through `day_format_text()` (string, cleaned, within the `*_LIMIT_*_CHARS` limit) before the DB; a number through
   its `*_STORABLE_*` range. The DB must never be the one to refuse a value.
-- **Sync.** `GET /api/v2/timeline_sync` selects on `last_write_db` (the DB clock), never on `last_write_client_UTC`. Any write of a day goes
+- **Sync.** `GET /api/v3/timeline_sync` selects on `last_write_db` (the DB clock), never on `last_write_client_UTC`. Any write of a day goes
   through `db_querie_update_day_timeline()`, which stamps it; a change that alters what a day *shows* without touching its row (a description
   renamed, retyped or deleted) must stamp the days itself (`db_querie_update_day_timeline_touch_description`). The descriptions come whole in
   every sync: that is how a deletion reaches a client.
@@ -227,7 +241,7 @@ the code follows the file, never the other way round, and a refactor, a fix or a
   shared by accounts (`login_email`) cannot be locked that way: `db_querie_insert_user_account()` answers null when the key refuses, and
   `register` answers 409.
 - **Maintenance and schema.** In maintenance every endpoint answers 503 `maintenance` before it opens the database, except
-  `GET /api/v2/server_info`. A database whose `schema_version` is not `APP_VERSION` is served nothing: 503 `schema_mismatch`.
+  `GET /api/v3/server_info`. A database whose `schema_version` is not `APP_VERSION` is served nothing: 503 `schema_mismatch`.
 
 ## Data and SQL
 
@@ -273,6 +287,11 @@ and `%` as wildcards (use `=` for names, emails and keys). Target: MariaDB, Inno
 If existing code breaks one of these rules, follow the rule in new code and mention the inconsistency rather than silently
 refactoring the old code.
 
+**The NFP file format is fixed.** `nfp_format.php` (`NFP_FILE_SCHEMA`, the field names such as `descriptions` and `comments`, ISO dates, Celsius)
+is an interchange format shared with other apps and with files exported by every earlier version: do not rename, remove or reinterpret
+anything in it, whatever the database or the API call things (`day_description` in the database, `descriptions` in the file). An addition
+must be optional and ignored by an older reader. The user's date format and temperature unit never reach it.
+
 ## The web client
 
 The web app is its own repository, **MCA-web-APP**, with its own AGENT.md (CSP rules, forms, `store.js`, `config.js`). It talks to this
@@ -312,10 +331,10 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
 - **Every `require_once` is `__DIR__`-based**: a script runs from any directory.
 - **Two versions.** `APP_VERSION` (`constants.php`, first constant of the file) is a string starting with an integer (`15`, `15dev`): the release, whose leading digits are the schema this code is written
   for, and the row `schema_version` of `key_value` (`schema.sql` inserts it, **every migration ends by setting it**; the three must agree;
-  a database that says another number is served nothing: 503 `schema_mismatch`). `GET /api/v2/server_info` tells it as `appVersion`, and
+  a database that says another number is served nothing: 503 `schema_mismatch`). `GET /api/v3/server_info` tells it as `appVersion`, and
   the NFP export writes it as `sourceAppVersion`. There is no build date, no commit and no `build.json`. Because the number is also
   the schema's, a release that changes no table still ships a migration that sets the row. The other version is the contract's: the
-  `v2` of `api/v2/` (see "The API contract"). Bump `APP_VERSION` only when asked, with its migration and the git tag `vN`.
+  `v2` of `api/v3/` (see "The API contract"). Bump `APP_VERSION` only when asked, with its migration and the git tag `vN`.
 - **Migrations** are `script/migration/vN-1_to_vN.{sql,php}`; `APP_VERSION` corresponds to the `vN`. **`script/auto_upgrade.php`**
   (`lib/upgrade.php`) runs them: the Docker entrypoint calls it at every start, and it works from a shell (`php script/auto_upgrade.php`,
   settings from `config.php`). It reads the database's `schema_version` (none, with the old `cle_valeur` table: v14), refuses a database
@@ -331,7 +350,7 @@ levels: `LOG_EVENTS` in `constants.php`), `log_context()` / `log_note()`, `log_s
 
 The API tests are in `tests/` ([tests/README.md](tests/README.md)): `tests/run.sh` (about 130 tests, 8 seconds, needs Docker and
 Python 3, runs on a database of its own) and `tests/static_checks.sh` (syntax, layout rules). Run both after any change to `lib/`,
-`api/v2/`, `script/` or `constants.php`. A new endpoint, field or rule gets its tests in `tests/api/`, written in the style of the
+`api/v3/`, `script/` or `constants.php`. A new endpoint, field or rule gets its tests in `tests/api/`, written in the style of the
 neighbours (one behaviour per test, named as a sentence). Beyond that, a change is checked by running the app and calling it.
 
 - **Run it** with Docker (the MCA-Docker-image repository: `dev.env.example`, `docker-compose.exemple.yml`) or without it, on your own Apache or PHP-FPM
@@ -340,19 +359,19 @@ neighbours (one behaviour per test, named as a sentence). Beyond that, a change 
 - **Syntax**, of one file or all of them (prints only the failures):
 
   ```sh
-  php -l www_data/api/v2/day.php
+  php -l www_data/api/v3/day.php
   find www_data -name '*.php' -not -path '*/vendor/*' -print0 | xargs -0 -n1 php -l | grep -v '^No syntax errors'
   ```
 
   `php -l` cannot see a missing `require_once`, a renamed function a caller still uses, or a wrong return shape: only running the code
   does.
-- **Behaviour:** call the endpoints with `curl`. Get a token with `POST /api/v2/token` and send it as `Authorization: Bearer <token>`.
+- **Behaviour:** call the endpoints with `curl`. Get a token with `POST /api/v3/token` and send it as `Authorization: Bearer <token>`.
   Test anything behind authentication over HTTP: `sec_token_authenticate()` needs `getallheaders()`, which the command line does not have.
   Day JSON uses `comment` (singular); the NFP format uses `comments`.
 - **A refactor must not change behaviour:** `tests/run.sh` is green before and after; for what it does not cover, record the answers
   of the endpoints you touched (and the exports) before the change and compare them after.
-- **Side effects to avoid** on a database that holds real data: `POST /api/v2/token` mails the account's owner at **every** sign-in (the
-  demo accounts excepted); `POST /api/v2/register` and `POST /api/v2/recover_password` send real mail through the configured SMTP;
+- **Side effects to avoid** on a database that holds real data: `POST /api/v3/token` mails the account's owner at **every** sign-in (the
+  demo accounts excepted); `POST /api/v3/register` and `POST /api/v3/recover_password` send real mail through the configured SMTP;
   `script/cron.php` mails users and **deletes** accounts that have been inactive for years. Use a throwaway database and a dead SMTP
   port (`SMTP_HOST=127.0.0.1`, `SMTP_PORT=1`) for anything that sends or erases, and `php cron.php --dry-run` to see what a run would
   do.

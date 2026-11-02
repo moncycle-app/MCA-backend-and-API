@@ -146,7 +146,7 @@ database. Counters restart from 0 when the server restarts.
 | `db_innodb_buffer_pool_hit_percent` | % | Share of data reads served from memory instead of the disk. | Over 99 % is healthy. Under it, the memory given to the database is smaller than the data in use. Left out while the server reports no reads. |
 | `db_uptime_seconds` | seconds | Time since the database server started. | A drop to 0 is a restart; the counters above restart with it. |
 | `db_size_bytes` | bytes | Space taken by this app's data and indexes. | The growth curve, for sizing the disk and the memory. |
-| `db_table_bytes{table=}` | bytes | The same, per table (one line per table). | `day_timeline` (the observations) and `link_day_timeline_description` grow the most. |
+| `db_table_bytes{table=}` | bytes | The same, per table (one line per table). | `day_timeline` (the observations) and `link_day_timeline_day_description` grow the most. |
 | `db_table_rows{table=}` | rows | Rows per table. **An estimate**: good for the trend, not for counting. | |
 
 ### PHP: OPcache

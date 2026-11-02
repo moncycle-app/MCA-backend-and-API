@@ -25,7 +25,7 @@ class Export(ApiTest):
         self.assertTrue(r.headers["Content-Type"].startswith("text/csv"))
         self.assertIn("attachment", r.headers["Content-Disposition"])
         text = r.body.decode("utf-8-sig")
-        self.assertIn("2026-09-20", text)
+        self.assertIn("20/09/26", text)
         self.assertIn("first day", text)
 
     def test_pdf(self):

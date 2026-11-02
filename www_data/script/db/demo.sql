@@ -3,10 +3,16 @@ SET NAMES utf8mb4;
 DELETE FROM `user_account` WHERE `no_user_account` = 2;
 DELETE FROM `user_account` WHERE `no_user_account` = 3;
 
-INSERT INTO `user_account` (`no_user_account`, `name`, `nfp_method`, `age`, `login_email`, `password`, `language`, `totp_state`, `email_verified_at`)
+INSERT INTO `user_account` (`no_user_account`, `name`, `nfp_method`, `age`, `login_email`, `password`, `language`, `email_verified_at`)
 VALUES
-	(2,'Démo BL',2,1990,'demo.bl@moncycle.app','$argon2id$v=19$m=47104,t=4,p=1$YVVFdlVUS1hTVXVZWC95SQ$ZXkJ7fb0EfJg5pMW0kjsf79C1Vp87yWId7qidOEgnV8','FR',0,NOW()),
-	(3,'Démo FC',3,1990,'demo.fc@moncycle.app','$argon2id$v=19$m=47104,t=4,p=1$NnA0c1ZER2J0c0c2ZDBQWQ$qaZitL7UcHhO7mz66qC7CmTOLDCmFRBotYGG/U9EXHg','FR',0,NOW());
+	(2,'Démo BL',2,1990,'demo.bl@moncycle.app','$argon2id$v=19$m=47104,t=4,p=1$YVVFdlVUS1hTVXVZWC95SQ$ZXkJ7fb0EfJg5pMW0kjsf79C1Vp87yWId7qidOEgnV8','FR',NOW()),
+	(3,'Démo FC',3,1990,'demo.fc@moncycle.app','$argon2id$v=19$m=47104,t=4,p=1$NnA0c1ZER2J0c0c2ZDBQWQ$qaZitL7UcHhO7mz66qC7CmTOLDCmFRBotYGG/U9EXHg','FR',NOW());
+
+-- two-factor authentication was never set up on the demo accounts
+INSERT INTO `user_setting` (`no_user_account`, `name`, `value_int`)
+VALUES
+	(2,'totp_state',0),
+	(3,'totp_state',0);
 
 INSERT INTO `day_timeline` (`no_day`, `no_user_account`, `date_obs`, `fc_score`, `fc_arrow`, `stamp`, `is_peak`, `union_sex`, `cycle_1st_day`, `comment`, `last_write_client_UTC`)
 VALUES
@@ -113,7 +119,7 @@ VALUES
 	(98,2,CURDATE()+INTERVAL-2 DAY,NULL,'G',NULL,NULL,NULL,1,NULL,NULL,NOW()+INTERVAL-2 DAY),
 	(99,2,CURDATE()+INTERVAL-1 DAY,NULL,'G',NULL,NULL,NULL,NULL,NULL,NULL,NOW()+INTERVAL-1 DAY);
 
-INSERT INTO `description` (`no_description`, `no_user_account`, `name`, `type`, `last_write_client_UTC`)
+INSERT INTO `day_description` (`no_day_description`, `no_user_account`, `name`, `type`, `last_write_client_UTC`)
 VALUES
 	(1,2,'sec',2,NOW()+INTERVAL-50 DAY),
 	(2,2,'humide',2,NOW()+INTERVAL-50 DAY),
@@ -129,7 +135,7 @@ VALUES
 	(12,2,'transparent',1,NOW()+INTERVAL-50 DAY),
 	(13,2,'élastique',1,NOW()+INTERVAL-50 DAY);
 
-INSERT INTO `link_day_timeline_description` (`no_day`, `no_description`)
+INSERT INTO `link_day_timeline_day_description` (`no_day`, `no_day_description`)
 VALUES
 	(52,6),
 	(52,2),

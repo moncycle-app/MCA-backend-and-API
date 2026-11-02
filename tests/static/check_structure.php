@@ -17,7 +17,7 @@
 chdir("/var/www/html");
 
 const ALLOWED_CONST = ["NFP_FILE_SCHEMA" => "lib/nfp_format.php", "DB_SQL_USER_ACCOUNT_LAST_ACTIVITY" => "lib/db_querie.php"];
-$skip = ["api/v2/test.php" => 1, "test.php" => 1, "info.php" => 1];
+$skip = ["api/v3/test.php" => 1, "test.php" => 1, "info.php" => 1];
 
 $files = [];
 foreach (new RecursiveIteratorIterator(new RecursiveDirectoryIterator(".", FilesystemIterator::SKIP_DOTS)) as $f) {

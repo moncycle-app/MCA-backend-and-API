@@ -20,6 +20,7 @@ require_once __DIR__ . "/../../lib/api.php";
 require_once __DIR__ . "/../../lib/input.php";
 require_once __DIR__ . "/../../lib/sec_token.php";
 require_once __DIR__ . "/../../lib/user_account.php";
+require_once __DIR__ . "/../../lib/user_setting.php";
 
 [$db, $user_account] = api_start();
 
@@ -72,7 +73,7 @@ sec_token_reauth_passed($db, $user_account);
 if ($enable) sec_password_upgrade($db, intval($user_account["no_user_account"]), $hash, $password);
 
 $state = $enable ? TOTP_STATE_ACTIVE : TOTP_STATE_DISABLED;
-db_querie_update_user_account_totp($db, $user_account["no_user_account"], $state, $enable ? $user_account["totp_secret"] : null);
+user_setting_set_totp($db, intval($user_account["no_user_account"]), $state, $enable ? $user_account["totp_secret"] : null);
 if ($enable) log_event("account.totp_enabled");
 else log_event("account.totp_disabled");
 http_data(200, ["totpState" => sec_totp_state_name($state)]);

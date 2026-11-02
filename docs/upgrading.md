@@ -34,7 +34,7 @@ UPDATE key_value SET value = N WHERE `key` = 'schema_version';
 
 On every request the code compares it with `APP_VERSION` ([`constants.php`](../www_data/constants.php)), the app's version: the two
 are the same number, so a release that changes no table still ships a migration that sets the row. A database at another number is
-served nothing: every endpoint answers `503 schema_mismatch` (except `GET /api/v2/server_info`, which opens no database).
+served nothing: every endpoint answers `503 schema_mismatch` (except `GET /api/v3/server_info`, which opens no database).
 
 Only `auto_upgrade.php` reads this row to decide what to run, so do not run a migration by hand. It starts from the version found
 (a database with the old `cle_valeur` table is v14), runs one `vN-1_to_vN` at a time up to `APP_VERSION`, and checks the row after each.
@@ -64,4 +64,19 @@ those on the copy from step 1.
 - `email1` becomes `login_email`, `email2` becomes `notification_emails` (a list separated by `;`).
 
 **API clients** written for v14 must be updated: the contract was reshaped and moved under `/api/v2/` (the old addresses answer 404).
-Start with the introduction of [`moncycle_app_open_api.yaml`](../www_data/api/moncycle_app_open_api.yaml) and `GET /api/v2/server_info`.
+Start with the introduction of [`moncycle_app_open_api.yaml`](../www_data/api/moncycle_app_open_api.yaml) and `GET /api/v3/server_info`.
+
+## From v15 to v16
+
+`script/migration/v15_to_v16` (run by the entrypoint, or `php script/auto_upgrade.php`): take a dump first.
+
+- The settings that are not needed to open an account move to a new table, `user_setting` (one row per account and name): `timeline_asc`,
+  `auto_mail_export`, `notification_emails` and the two-factor state and secret (`totp_state`, `totp_secret`). Their columns are dropped from
+  `user_account`, with `sponsor`. Values are copied, not reset. A list of notification addresses longer than 255 characters (the new limit)
+  keeps the addresses that fit; the migration prints the accounts concerned.
+- The tables `description` and `link_day_timeline_description` become `day_description` and `link_day_timeline_day_description`
+  (`no_description` is `no_day_description`).
+- The API is served under `/api/v3/`; `/api/v2/` answers 404. The proxy, the health check and the web app must use the new address.
+  `GET /account` changes shape: see the YAML.
+- `autoMailExport` (`auto_mail_export`) now defaults to **off**: an account without a row gets no cycle export by mail. Migrated accounts keep their stored value; accounts created from now on start with no mail.
+- `autoMailExport` (`auto_mail_export`) now defaults to **off**: an account without a row gets no cycle export by mail. Migrated accounts keep their stored value; accounts created from now on start with no mail.

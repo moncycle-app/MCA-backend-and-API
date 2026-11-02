@@ -54,7 +54,19 @@ try {
         throw new RuntimeException("cannot read v15_to_v16.sql: nothing has been changed");
     }
 
-    // Data steps (before the schema ones) go here.
+    // Data steps (before the schema ones).
+    // user_setting.value_str holds 255 characters, notification_emails held 1024: a list that does not fit keeps the addresses that do.
+    $too_long = $db->query("SELECT `no_user_account`, `notification_emails` FROM `user_account` WHERE CHAR_LENGTH(`notification_emails`) > 255")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($too_long as $row) {
+        $kept = [];
+        foreach (explode(";", $row["notification_emails"]) as $address) {
+            if (mb_strlen(implode(";", [...$kept, $address])) <= 255) $kept[] = $address;
+        }
+        $update = $db->prepare("UPDATE `user_account` SET `notification_emails` = :list WHERE `no_user_account` = :no_user_account");
+        $update->execute(["list" => implode(";", $kept), "no_user_account" => $row["no_user_account"]]);
+        print("account " . $row["no_user_account"] . ": notification_emails cut to " . count($kept) . " addresses to fit 255 characters");
+        print(PHP_EOL);
+    }
 
     print("migrating schema (executing v15_to_v16.sql) ...");
     print(PHP_EOL);

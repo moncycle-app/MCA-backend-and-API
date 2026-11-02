@@ -16,6 +16,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/../../config.php";
+require_once __DIR__ . "/../../lib/db_querie.php";
 require_once __DIR__ . "/../../lib/doc_csv.php";
 require_once __DIR__ . "/../../lib/log.php";
 require_once __DIR__ . "/../../lib/sec.php";
@@ -34,6 +35,7 @@ $no_user_account = $user_account["no_user_account"];
 // the account, its sessions and its days as stored, secrets masked; read first, for the log
 $account_row = sec_obfuscate_columns(db_querie_select_user_account($db, $no_user_account), ["password", "totp_secret", "email_token_hash"]);
 $session_rows = array_map(fn($row) => sec_obfuscate_columns($row, ["auth_token_str"]), db_querie_select_auth_tokens($db, $no_user_account));
+$setting_rows = array_map(fn($row) => $row["name"] === USER_SETTING_TOTP_SECRET ? sec_obfuscate_columns($row, ["value_str"]) : $row, db_querie_select_user_settings($db, intval($no_user_account)));
 $day_rows = doc_csv_raw_days($db, $no_user_account);
 
 log_event("export.raw_dump", ["n" => count($day_rows), "ntk" => count($session_rows)]);
@@ -45,6 +47,7 @@ fputs($out, chr(0xEF) . chr(0xBB) . chr(0xBF));
 fputs($out, "Export des données MONCYCLE.APP de " . $user_account["name_user_account"] . PHP_EOL . PHP_EOL);
 
 doc_csv_dump($out, [$account_row]);
+doc_csv_dump($out, $setting_rows);
 doc_csv_dump($out, $session_rows);
 doc_csv_dump($out, $day_rows);
 

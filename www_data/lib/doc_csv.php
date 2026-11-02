@@ -15,11 +15,12 @@
 
 declare(strict_types=1);
 
-// The CSV of a period, and the raw data export of an account (api/v2/all_of_my_data_plz.php). The most compatible shape for text editors,
+// The CSV of a period, and the raw data export of an account (api/v3/all_of_my_data_plz.php). The most compatible shape for text editors,
 // Excel (FR and EN), Google Sheets and LibreOffice: UTF-8 with a BOM, CSV_SEP between fields, RFC 4180 quoting, CRLF line ends, and as
 // many fields on every row as in the header.
 
 require_once __DIR__ . "/data.php";
+require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/doc.php";
@@ -41,12 +42,15 @@ function doc_csv_columns(int $nfp_method): array {
 		...$temperature, "isPeak", "counterStart", "sexUnion", "observationPaused", "comments"];
 }
 
-function doc_csv_cycle($out, array $days, int $nfp_method): void {
+// $display: user_setting_display() of the account: the dates and the temperatures are written the way it chose.
+function doc_csv_cycle($out, array $days, int $nfp_method, array $display): void {
 	$columns = doc_csv_columns($nfp_method);
+	$days = doc_temperature_unit($days, $display["temperature_unit"]);
 	fwrite($out, "\xEF\xBB\xBF");
 	doc_csv_row($out, $columns);
 	foreach ($days as $day) {
 		$day = doc_display_day($day);
+		$day["date"] = date_human(new DateTime($day["date"]), $display["date_pattern"]);
 		doc_csv_row($out, array_map(fn($column) => doc_csv_value($day, $column), $columns));
 	}
 }

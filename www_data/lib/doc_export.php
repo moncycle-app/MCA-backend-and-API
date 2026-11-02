@@ -15,12 +15,13 @@
 
 declare(strict_types=1);
 
-// The front door of the period exports (api/v2/export.php, script/cron.php): the days of a period, and the chart of a method.
+// The front door of the period exports (api/v3/export.php, script/cron.php): the days of a period, and the chart of a method.
 
 require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db_querie.php";
+require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_mucus.php";
 require_once __DIR__ . "/doc_fc.php";
 require_once __DIR__ . "/user_account.php";
@@ -64,7 +65,10 @@ function doc_export_day(array $day): array {
 	return $day;
 }
 
-function doc_export_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false): DocPdf {
-	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $anonymous);
-	return doc_mucus_pdf($days, $nfp_method, $name, $anonymous);
+// $display: user_setting_display() of the account, the date format and the temperature unit it chose.
+function doc_export_pdf(array $days, int $nfp_method, string $name, array $display, bool $anonymous = false): DocPdf {
+	$days = doc_temperature_unit($days, $display["temperature_unit"]);
+	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $anonymous, $display["date_pattern"]);
+	return doc_mucus_pdf($days, $nfp_method, $name, $anonymous, $display["date_pattern"]);
 }
+

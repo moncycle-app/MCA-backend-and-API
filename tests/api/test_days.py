@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """GET/POST/DELETE /day: writing a day replaces it whole, reading it back, what is refused, which write wins."""
+import datetime
+
 from moncycle import *
 
 D = "2026-09-20"
@@ -14,7 +16,7 @@ class WriteAndRead(ApiTest):
         a = Account()
         r = a.post("day/" + D, {"stampColor": "Red", "comment": "cramps"})
         self.assertStatus(r, 201)
-        self.assertEqual(r.headers["Location"], "/api/v2/day/" + D)
+        self.assertEqual(r.headers["Location"], "/api/v3/day/" + D)
         self.assertEqual((r.data["date"], r.data["stampColor"], r.data["comment"]), (D, "Red", "cramps"))
         self.assertStatus(a.post("day/" + D, {"stampColor": "Green"}), 200)
 
@@ -162,4 +164,6 @@ class LateWrites(ApiTest):
     def test_a_clock_far_in_the_future_does_not_shut_the_other_devices_out(self):
         a = Account()
         a.post("day/" + D, {"stampColor": "Red", "lastWriteClientUtc": "2099-01-01T00:00:00Z"})
-        self.assertStatus(a.post("day/" + D, {"stampColor": "Green", "lastWriteClientUtc": "2026-10-27T12:00:00Z"}), 200)
+        # another device with a right clock: its moment is now, which is later than the DB clock of the first write
+        now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        self.assertStatus(a.post("day/" + D, {"stampColor": "Green", "lastWriteClientUtc": now}), 200)

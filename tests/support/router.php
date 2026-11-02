@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Router of the test server (php -S, started by tests/run.sh). It does two things:
 //
-//  1. Apache's MultiViews: /api/v2/day/2026-03-10 runs api/v2/day.php with PATH_INFO=/2026-03-10, and an unknown endpoint is a 404.
+//  1. Apache's MultiViews: /api/v3/day/2026-03-10 runs api/v3/day.php with PATH_INFO=/2026-03-10, and an unknown endpoint is a 404.
 //  2. /_test/*: the fixtures the tests need and the API cannot give (an account with a token, a one-time code, a captcha
 //     answer, a mail link, a SQL read). They only exist on a database named test_*; anything else is refused.
 //
@@ -13,8 +13,8 @@ declare(strict_types=1);
 $docroot = $_SERVER["DOCUMENT_ROOT"];
 $path = parse_url($_SERVER["REQUEST_URI"] ?? "", PHP_URL_PATH) ?: "/";
 
-if (preg_match('#^/api/v2/([a-z_]+)(?:\.php)?(/.*)?$#', $path, $m)) {
-	$script = "$docroot/api/v2/$m[1].php";
+if (preg_match('#^/api/v3/([a-z_]+)(?:\.php)?(/.*)?$#', $path, $m)) {
+	$script = "$docroot/api/v3/$m[1].php";
 	if (!is_file($script)) {
 		http_response_code(404);
 		header("Content-Type: text/html; charset=iso-8859-1");
@@ -23,7 +23,7 @@ if (preg_match('#^/api/v2/([a-z_]+)(?:\.php)?(/.*)?$#', $path, $m)) {
 	}
 	$_SERVER["PATH_INFO"] = $m[2] ?? "";
 	if ($_SERVER["PATH_INFO"] === "") unset($_SERVER["PATH_INFO"]);
-	$_SERVER["SCRIPT_NAME"] = "/api/v2/$m[1].php";
+	$_SERVER["SCRIPT_NAME"] = "/api/v3/$m[1].php";
 	$_SERVER["SCRIPT_FILENAME"] = $script;
 	chdir(dirname($script));
 	require $script;

@@ -28,6 +28,7 @@ require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
+require_once __DIR__ . "/user_setting.php";
 
 // The one way a password is hashed. password_verify() reads this and the bcrypt hashes made before it alike.
 function sec_password_hash(string $password): string {
@@ -48,7 +49,7 @@ function sec_password_upgrade($db, int $no_user_account, string $hash, string $p
 function sec_password_issue(string $password, string $field): ?array {
 	if (mb_strlen($password) > PASSWORD_MAX_CHARS) return input_issue($field, "password_too_long", "'$field' is too long: the maximum is " . PASSWORD_MAX_CHARS . " characters.");
 	if (str_contains($password, "\0")) return input_issue($field, "password_invalid", "'$field' must not contain a null character.");
-	if (!sec_password_matches_policy($password)) return input_issue($field, "password_too_weak", "'$field' does not meet the password policy (GET /api/v2/server_info, passwordPolicyRegex).");
+	if (!sec_password_matches_policy($password)) return input_issue($field, "password_too_weak", "'$field' does not meet the password policy (GET /api/v3/server_info, passwordPolicyRegex).");
 	return null;
 }
 
@@ -144,7 +145,7 @@ function sec_totp_begin($db, array $user_account): array {
 	$totp->setLabel($user_account["login_email"]);
 	$totp->setIssuer('MONCYCLE.APP');
 	$totp->setParameter('image', APP_URL . "img/moncycleapp512.jpg");
-	db_querie_update_user_account_totp($db, $user_account["no_user_account"], TOTP_STATE_INIT, $totp->getSecret());
+	user_setting_set_totp($db, intval($user_account["no_user_account"]), TOTP_STATE_INIT, $totp->getSecret());
 
 	$qr_writer = new Writer(new ImageRenderer(new RendererStyle(150), new SvgImageBackEnd()));
 	return [

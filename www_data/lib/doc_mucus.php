@@ -26,19 +26,20 @@ require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_pdf.php";
 
-function doc_mucus_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false): DocPdf {
+function doc_mucus_pdf(array $days, int $nfp_method, string $name, bool $anonymous = false, string $date_pattern = 'd/m/y'): DocPdf {
 	$first_date = new DateTime($days[0]["date"]);
 	$last_date = new DateTime(end($days)["date"]);
 	if ($anonymous) $name = doc_get_initials($name) . " (anonyme)";
 
 	$subtitle = sprintf("Tableau de %d %s", count($days), count($days) > 1 ? "jours" : "jour");
-	if (!$anonymous) $subtitle .= sprintf(" du %s au %s", date_human($first_date), date_human($last_date));
+	if (!$anonymous) $subtitle .= sprintf(" du %s au %s", date_human($first_date, $date_pattern), date_human($last_date, $date_pattern));
 
-	$pdf = new DocPdf('P', 'A4', 'MONCYCLE.APP tableau du ' . date_human($first_date), $name);
+	$pdf = new DocPdf('P', 'A4', 'MONCYCLE.APP tableau du ' . date_human($first_date, $date_pattern), $name);
 	$pdf->SetMargins(DOC_PDF_MARGIN, DOC_PDF_MARGIN);
 
 	$rows = doc_mucus_rows($days);
 	$layout = doc_mucus_layout($pdf, $rows, user_account_tracks_temperature($nfp_method));
+	$layout["date_pattern"] = $date_pattern;
 	doc_mucus_fit_rows($pdf, $rows, $layout);
 	$pages = doc_mucus_paginate($pdf, $rows);
 
@@ -314,7 +315,7 @@ function doc_mucus_draw_row(DocPdf $pdf, array $row, array $layout, float $y, bo
 	// the date and the day of the cycle, white on black on a cycle's first day
 	$date = new DateTime($day["date"]);
 	$week_day = intval($date->format('w'));
-	$date_label = $anonymous ? DOC_WEEK_DAYS[$week_day] : date_human_week_day($date, DOC_WEEK_DAYS);
+	$date_label = $anonymous ? DOC_WEEK_DAYS[$week_day] : date_human_week_day($date, DOC_WEEK_DAYS, $layout["date_pattern"]);
 	$date_style = $week_day === 0 ? 'mucus.date.sunday' : 'mucus.date';
 	$text_color = null;
 	if ($day["cycleFirstDay"]) {
