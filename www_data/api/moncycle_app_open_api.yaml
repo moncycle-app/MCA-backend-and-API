@@ -1896,7 +1896,7 @@ paths:
         | `codifiedNumberObservations` | string or null | FertilityCare: `X1`, `X2`, `X3`, `AD`. |
         | `codifiedPainObservations` | string or null | FertilityCare: `AP`, `RAP`, `LAP`. |
         | `codifiedArrow` | `Up`, `Down`, `Right` or null | FertilityCare: the arrow drawn on the chart. |
-        | `comment` | string (max 256) | Free note. |
+        | `comment` | string (max 512) | Free note. |
         | `lastWriteClientUtc` | string or null (RFC 3339) | Your clock; decides which of two writes is the latest. |
         | `cycleStartDate`, `cycleDay`, `lastWriteDb` | | Computed by the server: accepted so a day read can be sent back, then ignored. |
       parameters:
@@ -2448,7 +2448,7 @@ paths:
         These refuse the file (`400`, or `413` for the first):
 
         - **`requestBodyMaxBytes`** per request (`GET /server_info`; 10 MB by default, the operator's `REQUEST_BODY_MAX_BYTES`): `413 file_too_large`. This holds for every endpoint, and the number of days or cycles in a file is not limited otherwise: 15 years of full days are about 7.7 MB. Split a bigger file into fewer cycles.
-        - 256 characters per label and per joined comment.
+        - 256 characters per label and 512 per joined comment.
         - 32 characters for the packed FertilityCare notes of a day.
         - A temperature outside `0.00`–`99.99`.
         - Dates must be real, from `1900-01-01`, and not in the future (one day of slack). Two cycles covering the same date
@@ -3160,7 +3160,7 @@ components:
 
         comment:
           type: string
-          maxLength: 256
+          maxLength: 512
           default: ""
           description: A free note from the user. Read back as `""` when empty, never `null`.
           example: cramps in the morning
@@ -3400,7 +3400,7 @@ components:
           type: array
           maxItems: 32
           description: |-
-            The user's notes, joined with newlines into the `comment` of the day (**256 characters**: a longer result
+            The user's notes, joined with newlines into the `comment` of the day (**512 characters**: a longer result
             rejects the file). `GET /export/nfp` also writes the labels with no type yet (`freeOther`) here, as one last
             entry.
           items:
@@ -3778,7 +3778,7 @@ components:
               example: 365
             dayCommentMaxChars:
               type: integer
-              example: 256
+              example: 512
             descriptionNameMaxChars:
               type: integer
               example: 256

@@ -87,6 +87,13 @@ class DocPdf extends tFPDF {
 		return rtrim($txt) . "…";
 	}
 
+	// Makes the current font smaller when $txt is wider than Cell($w, ...) holds: for a text that must be read whole, never cut.
+	public function ShrinkToFit(string $txt, float $w): void {
+		$room = $w - 2 * $this->cMargin;
+		$width = $this->GetStringWidth($txt);
+		if ($width > $room) $this->SetFontSize($this->FontSizePt * $room / $width);
+	}
+
 	// How many characters of $txt, followed by $tail, fit in $room mm in the current font.
 	private function FittingChars(string $txt, float $room, string $tail = ''): int {
 		$low = 0;
@@ -208,12 +215,12 @@ class DocPdf extends tFPDF {
 
 	// The baby of a stamp, in a $size mm square at ($x, $y): a round face with ears and a curl of hair. On a coloured stamp ($background: r, g, b)
 	// the face is white, outlined, and its eyes and smile are drawn in $ink (r, g, b; the stamp's colour when null); on a white one, where white
-	// alone would not show, the face is very light grey with a mid grey outline and mid grey eyes, smile and curl. It is drawn inside its own
+	// alone would not show, the face is a light skin tone with a brown outline, eyes, smile and curl. It is drawn inside its own
 	// graphics state (q ... Q), so that the caller's colours and line width are the same after it.
 	public function Baby(float $x, float $y, float $size, array $background, ?array $ink = null): void {
 		$on_white = min($background) > 230;
-		$ink = $on_white ? [140, 140, 140] : ($ink ?? $background);
-		$face = $on_white ? [240, 240, 240] : [255, 255, 255];
+		$ink = $on_white ? [128, 78, 52] : ($ink ?? $background);
+		$face = $on_white ? [252, 219, 190] : [255, 255, 255];
 		$color = fn(array $rgb): string => vsprintf('%.3F %.3F %.3F rg %1$.3F %2$.3F %3$.3F RG', array_map(fn(int $c): float => $c / 255, $rgb));
 		// a point of the icon, (0, 0) its top left corner and (1, 1) its bottom right
 		$at = fn(float $u, float $v): string => sprintf('%.2F %.2F', ($x + $u * $size) * $this->k, ($this->h - $y - $v * $size) * $this->k);
@@ -231,13 +238,56 @@ class DocPdf extends tFPDF {
 			// the ears go first: the face covers their inner half, outline included
 			$dot(0.16, 0.6, 0.09, 'B'), $dot(0.84, 0.6, 0.09, 'B'),   // the ears
 			$dot(0.5, 0.57, 0.35, 'B'),                          // the face
-			$on_white ? $width(0.075) . ' ' . $curl : '',        // dark grey on a white stamp
+			$on_white ? $width(0.075) . ' ' . $curl : '',        // brown on a white stamp
 			$color($ink),
 			$dot(0.375, 0.55, 0.05), $dot(0.625, 0.55, 0.05),    // the eyes
 			$width(0.06),                                        // the smile
 			$at(0.39, 0.69) . ' m ' . $at(0.45, 0.76) . ' ' . $at(0.55, 0.76) . ' ' . $at(0.61, 0.69) . ' c S',
 			'Q',
 		]));
+	}
+
+	// The top of a page, two lines that the logo spans on the right. First line: the name, and "mon<b>cycle</b>.app" on its baseline; second
+	// line: $pieces (the first in a chip, the others after it, joined) and the page number under the app's name. The app's name and logo are a
+	// link: the chart is shared with people who do not know the app. $name is UTF-8; $page is "" on a chart of one page. Returns the x where
+	// the app's name and the page number start, what a chart may add to the second line ends before it.
+	public function PageTitle(string $name, array $pieces, string $page): float {
+		$left = DOC_PDF_MARGIN;
+		$logo_x = $this->GetPageWidth() - DOC_PDF_MARGIN - DOC_PDF_TITLE_LOGO_SIZE;
+		$right = $logo_x - DOC_PDF_TITLE_GAP;
+		$name_baseline = DOC_PDF_MARGIN + DOC_PDF_TITLE_NAME_BASELINE;
+		$line_baseline = DOC_PDF_MARGIN + DOC_PDF_TITLE_LINE_BASELINE;
+
+		// the app
+		$runs = [["title.link", "mon", 0], ["title.link_bold", "cycle", 0], ["title.link", ".app", 0]];
+		$link_w = $this->RunsWidth($runs);
+		$this->TextOnBaseline($right - $link_w, $name_baseline, $runs);
+		$this->Logo($logo_x, DOC_PDF_MARGIN + DOC_PDF_TITLE_LOGO_TOP, DOC_PDF_TITLE_LOGO_SIZE);
+		$this->Link($right - $link_w, DOC_PDF_MARGIN, $link_w + DOC_PDF_TITLE_GAP + DOC_PDF_TITLE_LOGO_SIZE, DOC_PDF_TITLE_LOGO_TOP + DOC_PDF_TITLE_LOGO_SIZE, DOC_APP_URL);
+
+		$this->UseStyle('title.page');
+		$page_w = $this->GetStringWidth($page);
+		if ($page !== "") $this->Text($right - $page_w, DOC_PDF_MARGIN + DOC_PDF_TITLE_PAGE_BASELINE, $page);
+
+		$this->UseStyle('title.name');
+		$this->Text($left, $name_baseline, $this->FitText($name, $right - $link_w - DOC_PDF_TITLE_GAP - $left));
+		$end = $right - max($link_w, $page_w);
+
+		if (empty($pieces)) return $end;
+		$room = $right - $page_w - DOC_PDF_TITLE_GAP - $left;
+
+		$this->UseStyle('title.chip');
+		$chip_text = $this->FitText(array_shift($pieces), $room - 2 * DOC_PDF_TITLE_CHIP_PAD);
+		$chip_w = $this->GetStringWidth($chip_text) + 2 * DOC_PDF_TITLE_CHIP_PAD;
+		$this->SetFillColor(...DOC_PDF_TITLE_CHIP_FILL);
+		$this->RoundedRect($left, $line_baseline - DOC_PDF_TITLE_CHIP_RISE, $chip_w, DOC_PDF_TITLE_CHIP_H, DOC_PDF_TITLE_CHIP_H * DOC_PDF_TITLE_CHIP_RADIUS);
+		$this->Text($left + DOC_PDF_TITLE_CHIP_PAD, $line_baseline, $chip_text);
+
+		if (empty($pieces)) return $end;
+		$x = $left + $chip_w + DOC_PDF_TITLE_CHIP_PAD;
+		$this->UseStyle('title.line');
+		$this->Text($x, $line_baseline, $this->FitText(implode(DOC_PDF_TITLE_JOINER, $pieces), $left + $room - $x));
+		return $end;
 	}
 
 	// The logo of the app: its four squares (red, yellow / green, white), $size mm wide, with rounded corners. The white one gets an outline,

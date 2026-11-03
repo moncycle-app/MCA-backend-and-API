@@ -88,9 +88,14 @@ Also:
 - **`doc.php`, `doc_export.php`, `doc_csv.php`, `doc_pdf.php`, `doc_mucus.php`, `doc_fc.php`** the CSV and PDF exports: the shared display
   rule, and what a day's stamp says when it has no colour (`doc_day_stamp_state()`: paused, `not_observed` = "?", `not_filled` = "!": no row for
   the date, or a row with nothing on it); the front door (`doc_export_days`, `doc_export_pdf`, which takes the account's language); the CSV and
-  the raw data dump; `DocPdf` (a tFPDF: UTF-8 text, Noto Sans and DejaVu Sans Mono embedded as subsets; the logo, a heart, line packing); the
-  cervical mucus chart (the text columns' widths are searched over the whole export to spend the least height, keywords never split, a column no
-  day uses is not drawn); the FertilityCare chart. Both charts say their words through `res_t("pdf", $language, $key)`.
+  the raw data dump; `DocPdf` (a tFPDF: UTF-8 text, Noto Sans and DejaVu Sans Mono embedded as subsets; the page title of both charts, the logo, a heart, line packing); the
+  cervical mucus chart (the Billings method's; the text columns' widths are searched over the whole export to spend the least height, keywords never split, a column no
+  day uses is not drawn); the FertilityCare chart (its grid of rows and cells was set with the FertilityCare organisation: restyle it, never
+  reshape it). Both charts say their words through `res_t("pdf", $language, $key)`.
+
+  **A pause ends its cycle, on the Billings (cervical mucus) chart and the FertilityCare chart alike: a chart shows nothing of the days after a paused day until the next cycle start**, whatever the database holds for
+  them (stamps, codes, comments): no cell, no "!" for them, no count. The paused day itself stays, as the last day of its cycle. Every chart, and
+  any new one, begins with `doc_days_without_paused()` (`doc.php`) on its days, before it counts, groups or paginates anything.
 - **`res.php`** `res_words($domain, $language)` and `res_t($domain, $language, $key, $vars)`: the words of `res/lang/<language>/<domain>.php`
   (`{name}` marks, `{@other.key}` to say a phrase once). `mail_t()` is `res_t("mail", mail_language(), ...)`. A new language is a folder with every
   domain in it; one that is missing a key throws.

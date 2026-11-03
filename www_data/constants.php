@@ -515,7 +515,7 @@ const DAY_FORMAT_FC_PARSE_ORDER = ['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', '
 const DAY_LIMIT_QUERY_DAYS = 100;
 
 // What day_timeline and description can hold: the widths of their columns.
-const DAY_LIMIT_COMMENT_CHARS = 256;        // day_timeline.comment    varchar(256)
+const DAY_LIMIT_COMMENT_CHARS = 512;        // day_timeline.comment    varchar(512)
 const DAY_LIMIT_DESCRIPTION_CHARS = 256;    // description.name        varchar(256)
 const DAY_LIMIT_FC_SCORE_CHARS = 32;        // day_timeline.fc_score   varchar(32), the five groups packed
 const DAY_LIMIT_COUNTER_START = 255;        // day_timeline.counter_start tinyint unsigned
@@ -666,14 +666,30 @@ const DOC_LOGO_SQUARES = [[172, 35, 51], [251, 202, 11], [30, 130, 76], [255, 25
 const DOC_LOGO_OUTLINE = [200, 200, 200];
 const DOC_LOGO_RADIUS = 0.22;   // corner radius of the logo, as a share of its side
 
-// style => [font family, font style, size in pt, [r, g, b]]; "mucus.*" for the cervical mucus table, "fc.*" for the FertilityCare grid.
+// The page title of both charts (DocPdf::PageTitle()), from the top margin: the baselines of its two lines, the chip of the second one, and the
+// logo that spans both on the right.
+const DOC_PDF_TITLE_NAME_BASELINE = 5.2;
+const DOC_PDF_TITLE_LINE_BASELINE = 11.3;
+const DOC_PDF_TITLE_CHIP_H = 4.4;
+const DOC_PDF_TITLE_CHIP_RISE = 3.27;        // from the top of the chip to the baseline of its text, which centres its capitals
+const DOC_PDF_TITLE_CHIP_PAD = 1.6;          // on each side of the chip's text, and between the chip and the rest of the line
+const DOC_PDF_TITLE_CHIP_RADIUS = 0.3;       // corner radius of the chip, as a share of its height
+const DOC_PDF_TITLE_CHIP_FILL = [236, 236, 236];
+const DOC_PDF_TITLE_PAGE_BASELINE = 10.2;    // the page number, close under the app's name
+const DOC_PDF_TITLE_LOGO_TOP = 1.4;          // level with the top of the name's capitals...
+const DOC_PDF_TITLE_LOGO_SIZE = 9;           // ... and down to the foot of the page number
+const DOC_PDF_TITLE_GAP = 3;                 // between the app's name and its logo, and kept free before the app's name and the page number
+const DOC_PDF_TITLE_JOINER = "  ·  ";        // between the pieces of the second line
+
+// style => [font family, font style, size in pt, [r, g, b]]; "title.*" for the page title of both charts, "mucus.*" for the cervical mucus
+// table, "fc.*" for the FertilityCare grid.
 const DOC_PDF_STYLES = [
-	'mucus.title' => ['NotoSans', 'B', 15, [30, 30, 30]],
-	'mucus.chip' => ['NotoSans', 'B', 8.5, [30, 30, 30]],
-	'mucus.cycle' => ['NotoSans', '', 8.5, [90, 90, 90]],
-	'mucus.link' => ['NotoSans', '', 11, [30, 30, 30]],
-	'mucus.link_bold' => ['NotoSans', 'B', 11, [30, 30, 30]],
-	'mucus.page' => ['NotoSans', '', 7.5, [140, 140, 140]],
+	'title.name' => ['NotoSans', 'B', 15, [30, 30, 30]],
+	'title.chip' => ['NotoSans', 'B', 8.5, [30, 30, 30]],
+	'title.line' => ['NotoSans', '', 8.5, [90, 90, 90]],
+	'title.link' => ['NotoSans', '', 11, [30, 30, 30]],
+	'title.link_bold' => ['NotoSans', 'B', 11, [30, 30, 30]],
+	'title.page' => ['NotoSans', '', 7.5, [140, 140, 140]],
 	'mucus.head' => ['NotoSans', 'B', 5.8, [120, 120, 120]],
 	'mucus.scale' => ['NotoSans', '', 5.5, [140, 140, 140]],
 	'mucus.date' => ['NotoSans', '', 7, [110, 110, 110]],
@@ -687,13 +703,15 @@ const DOC_PDF_STYLES = [
 	'mucus.temperature' => ['NotoSans', '', 8, DOC_MUCUS_TEMPERATURE_COLOR],
 	'mucus.temperature_time' => ['NotoSans', '', 6, [140, 140, 140]],
 	'mucus.legend' => ['NotoSans', '', 6.5, [110, 110, 110]],
-	'fc.header' => ['DejaVuSansMono', '', 10, [0, 0, 0]],
-	'fc.header.name' => ['DejaVuSansMono', 'B', 10, [0, 0, 0]],
-	'fc.header.link' => ['DejaVuSansMono', 'B', 10, [30, 130, 76]],
-	'fc.day_numbers' => ['DejaVuSansMono', '', 8, [0, 0, 0]],
-	'fc.cell' => ['DejaVuSansMono', '', 6, [0, 0, 0]],
-	'fc.cell.sunday' => ['DejaVuSansMono', 'B', 6, [0, 0, 0]],
-	'fc.baby' => ['DejaVuSansMono', '', 5, [0, 0, 0]],
+	'fc.day_numbers' => ['NotoSans', 'B', 7.5, [120, 120, 120]],
+	'fc.legend' => ['NotoSans', 'B', 5.3, [120, 120, 120]],
+	'fc.stamp' => ['NotoSans', 'B', 6.5, [30, 30, 30]],
+	'fc.peak' => ['NotoSans', 'B', 6, [30, 30, 30]],
+	'fc.date' => ['NotoSans', '', 6, [110, 110, 110]],
+	'fc.date.sunday' => ['NotoSans', 'B', 6, [40, 40, 40]],
+	'fc.cell' => ['DejaVuSansMono', '', 6, [30, 30, 30]],
+	'fc.baby' => ['NotoSans', 'B', 5, [30, 30, 30]],
+	'fc.legend.glyph' => ['NotoSans', 'B', 7.5, [30, 30, 30]],
 	'fc.arrow' => ['DejaVuSansMono', '', 6, [0, 0, 0]],
 	'fc.temperature' => ['DejaVuSansMono', '', 3.8, [0, 0, 0]],
 	'fc.comment.small' => ['DejaVuSansMono', '', 3, [0, 0, 0]],
@@ -705,19 +723,6 @@ const DOC_PDF_STYLES = [
 
 const DOC_MUCUS_TABLE_TOP = 25;          // where the table starts, under the page title: with DOC_MUCUS_BOTTOM, 40 days fit a page
 const DOC_MUCUS_BOTTOM = 14;             // what the page keeps free under the table, for the legend and what the export covers
-// The page title, from the top margin: the baselines of its two lines, the chip of the second one, and the logo that spans both on the right.
-const DOC_MUCUS_NAME_BASELINE = 5.2;
-const DOC_MUCUS_CYCLE_BASELINE = 11.3;
-const DOC_MUCUS_CHIP_H = 4.4;
-const DOC_MUCUS_CHIP_RISE = 3.27;        // from the top of the chip to the baseline of its text, which centres its capitals
-const DOC_MUCUS_CHIP_PAD = 1.6;          // on each side of the chip's text, and between the chip and the rest of the line
-const DOC_MUCUS_CHIP_RADIUS = 0.3;       // corner radius of the chip, as a share of its height
-const DOC_MUCUS_CHIP_FILL = [236, 236, 236];
-const DOC_MUCUS_PAGE_BASELINE = 10.2;    // the page number, close under the app's name
-const DOC_MUCUS_LOGO_TOP = 1.4;          // level with the top of the name's capitals...
-const DOC_MUCUS_LOGO_SIZE = 9;           // ... and down to the foot of the page number
-const DOC_MUCUS_TITLE_GAP = 3;           // between the app's name and its logo, and kept free before the app's name and the page number
-const DOC_MUCUS_CYCLE_JOINER = "  ·  ";  // between the pieces of the second line
 const DOC_MUCUS_HEAD_H = 6;              // height of the column headers band
 const DOC_MUCUS_LINE_H = 3.5;            // a line of text in a cell
 const DOC_MUCUS_MIN_ROW_H = 6.2;         // a day's line, whatever it holds: 40 of them fit a page
@@ -767,7 +772,7 @@ const DOC_MUCUS_TEXT_COLUMNS = [
 ];
 
 // The stamps that are not a colour of the app: kind => [fill, glyph, glyph colour]. "unknown" (?) is a day marked not observed, "missing"
-// (!) a day nothing was entered on. Those two are light blue, so as not to pass for a white stamp's grey baby.
+// (!) a day nothing was entered on. Those two are light blue, so as not to pass for a white stamp's baby.
 const DOC_MUCUS_SPECIAL_STAMPS = [
 	"unknown" => [[219, 232, 248], "?", [36, 96, 170]],
 	"missing" => [[219, 232, 248], "!", [36, 96, 170]],
@@ -802,8 +807,14 @@ const DOC_FC_DAYS_PER_ROW = 35;                 // days across the grid: a longe
 const DOC_FC_FIRST_COL_W = 16;                  // width of the legend column
 const DOC_FC_LINE_H = 3.5;                      // height of a line of text in a cell
 const DOC_FC_STAMP_H = 7.3;                     // height of the stamp / baby cell
+const DOC_FC_TOP = 25;                          // where the day numbers start, under the page title (the mucus table's top)
 const DOC_FC_SEPARATOR_H = 0.25;                // thickness of the bar between two rows of the grid
-const DOC_FC_GRID_GRAY = 60;                    // grey level (0-255) of the grid's lines
+const DOC_FC_SEPARATOR_COLOR = [150, 150, 150]; // r, g, b of that bar, and of the grid's outline
+const DOC_FC_COLUMN_COLOR = [200, 200, 200];    // r, g, b of the lines between two days
+const DOC_FC_LINE_COLOR = DOC_MUCUS_BORDER_COLOR;   // r, g, b of the lines between the rows of a day
+const DOC_FC_LINE_W = 0.1;                      // thickness of the grid's lines
+const DOC_FC_HEAD_FILL = DOC_MUCUS_HEAD_FILL;   // r, g, b of the day numbers band...
+const DOC_FC_LEGEND_FILL = DOC_MUCUS_STRIPE_FILL;   // ... and of the legend column
 const DOC_FC_COLOR_COEF = 1.1;                  // a cell's border is its stamp colour divided by this, a slightly darker shade
 const DOC_FC_LINES_PER_PAGE = 8;                // rows of the grid on a page...
 const DOC_FC_LINES_PER_PAGE_TEMPERATURE = 7;    // ... and when the temperature row takes room
@@ -821,18 +832,29 @@ const DOC_FC_ROW_LABELS = [
 	"comment" => "fc.row.comment",
 ];
 
-// stampColor => [language key of its letter, r, g, b of the stamp, r, g, b of the stamp with the baby on it]. The baby adds its own letters
-// before the colour's. A day with a baby on no colour is "White".
+// stampColor => [language key of its letter, r, g, b of its letters]. The colours are the mucus chart's (DOC_MUCUS_STAMP_COLORS), the baby
+// drawn in DOC_MUCUS_BABY_INK. The baby adds its own letters before the colour's, and lightens the stamp (DOC_FC_BABY_TINT), as the
+// FertilityCare stickers with a baby are. A day with a baby on no colour is "White".
 const DOC_FC_STAMPS = [
-	"Red" => ['fc.stamp.red', [190, 0, 4], [190, 0, 0]],
-	"Green" => ['fc.stamp.green', [45, 102, 23], [130, 187, 106]],
-	"Yellow" => ['fc.stamp.yellow', [255, 255, 9], [255, 255, 9]],
-	"White" => ['fc.stamp.white', [255, 255, 255], [255, 255, 255]],
+	"Red" => ['fc.stamp.red', [255, 255, 255]],
+	"Green" => ['fc.stamp.green', [255, 255, 255]],
+	"Yellow" => ['fc.stamp.yellow', [30, 30, 30]],
+	"White" => ['fc.stamp.white', [30, 30, 30]],
 ];
+const DOC_FC_BABY_TINT = 0.35;                                // the share of white mixed into a stamp's colour when it has a baby
+const DOC_FC_BABY_SHARE = 0.8;                                // the baby's square as a share of the stamp cell's height, as on the mucus chart
 const DOC_FC_STAMP_NONE = [255, 255, 255];                    // no stamp, and the padding after a cycle's last day
-const DOC_FC_STAMP_GREY = [210, 210, 210];                    // a day not observed (???) and a day not filled in (!!!)
-const DOC_FC_STAMP_PAUSE = [255, 236, 238];                   // a pause of the observations
-const DOC_FC_STATE_GLYPHS = ["not_observed" => "???", "not_filled" => "!!!"];   // doc_day_stamp_state() => what the grey stamp says
+// doc_day_stamp_state() => [what the stamp says, r, g, b of the stamp, r, g, b of its text]: the mucus chart's "?", "!" and pause. The page
+// title explains the ones a page holds (DOC_FC_LEGEND).
+const DOC_FC_STATE_STAMPS = [
+	"not_observed" => ["?", DOC_MUCUS_SPECIAL_STAMPS["unknown"][0], DOC_MUCUS_SPECIAL_STAMPS["unknown"][2]],
+	"not_filled" => ["!", DOC_MUCUS_SPECIAL_STAMPS["missing"][0], DOC_MUCUS_SPECIAL_STAMPS["missing"][2]],
+	"paused" => ["", DOC_MUCUS_SPECIAL_STAMPS["paused"][0], DOC_PAUSE_COLOR],
+];
+
+// The legend of the page title, in order: doc_day_stamp_state() => language key of what it means; only the states a page shows are explained.
+const DOC_FC_LEGEND = ["not_observed" => "legend.not_observed", "not_filled" => "legend.not_filled", "paused" => "legend.paused"];
+const DOC_FC_LEGEND_GAP = 4;                    // between two entries of the legend, and after the last one
 
 // codifiedArrow => its glyph
 const DOC_FC_ARROWS = ["Up" => "↑", "Down" => "↓", "Right" => "→"];

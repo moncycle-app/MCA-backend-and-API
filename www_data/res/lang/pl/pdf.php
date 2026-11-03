@@ -45,8 +45,9 @@ return [
 	"legend.not_observed" => "dzień bez obserwacji",
 	"legend.not_filled" => "dzień niewypełniony",
 	"legend.paused" => "obserwacje wstrzymane",
-	"fc.title" => "- obserwacje od {start} do {end} - dokument utworzony {today} - strona {page} z {count} - ",
-	"fc.title_anonymous" => "{@anonymous} - dokument utworzony {today} - strona {page} z {count} - ",
+	// the line under the name: what the export covers, and the day it was made
+	"fc.observations" => "Obserwacje od {start} do {end}",
+	"fc.created" => "dokument utworzony {today}",
 	"fc.row.stamp" => "Znacznik",
 	"fc.row.peak" => "Szczyt",
 	"fc.row.date" => "Data",

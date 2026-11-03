@@ -34,7 +34,7 @@ require_once __DIR__ . "/doc_pdf.php";
 require_once __DIR__ . "/res.php";
 
 function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $language, bool $anonymous = false, string $date_pattern = 'd/m/y'): DocPdf {
-	$days = doc_mucus_without_paused_days($days);
+	$days = doc_days_without_paused($days);
 	$first_date = new DateTime($days[0]["date"]);
 	$last_date = new DateTime(end($days)["date"]);
 	if ($anonymous) $name = doc_get_initials($name) . " " . res_t("pdf", $language, "anonymous");
@@ -75,7 +75,7 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 		$pdf->AddPage();
 		$layout = $layouts[$rows[$first]["group"]];
 		$page = count($pages) > 1 ? res_t("pdf", $language, "page", ["page" => $page_index + 1, "count" => count($pages)]) : "";
-		doc_mucus_draw_title($pdf, $name, doc_mucus_cycle_pieces($cycles[$rows[$first]["group"]], $cycle_count, $language, $anonymous, $date_pattern), $page);
+		$pdf->PageTitle($name, doc_mucus_cycle_pieces($cycles[$rows[$first]["group"]], $cycle_count, $language, $anonymous, $date_pattern), $page);
 		doc_mucus_draw_head($pdf, $layout);
 
 		$previous_point = null;   // the last point drawn on the temperature curve
@@ -95,18 +95,6 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 	}
 
 	return $pdf;
-}
-
-// A pause ends the cycle and the next one starts at its own first day: the days between are not part of any cycle, so the chart leaves them out
-// (the pause day itself stays, as the last of its cycle).
-function doc_mucus_without_paused_days(array $days): array {
-	$paused = false;
-	return array_values(array_filter($days, function ($day) use (&$paused) {
-		if (!empty($day["cycleFirstDay"])) $paused = false;
-		if ($paused) return false;
-		$paused = !empty($day["observationPaused"]);
-		return true;
-	}));
 }
 
 // What each day shows. The peak (+1..+3 after it) and the counter (+1..+n) run over calendar days, gaps included, and start over at
@@ -451,46 +439,6 @@ function doc_mucus_paginate(DocPdf $pdf, array $rows): array {
 
 	$pages[] = [$first, count($rows) - $first];
 	return $pages;
-}
-
-// The top of a page, two lines that the logo spans on the right. First line: the name, and "mon<b>cycle</b>.app" on its baseline; second
-// line: the cycle's pieces (the first in a chip, the others after it, joined) and the page number under the app's name. The app's name and
-// logo are a link: the chart is shared with people who do not know the app. $name is UTF-8; $page is "" on a chart of one page.
-function doc_mucus_draw_title(DocPdf $pdf, string $name, array $pieces, string $page): void {
-	$left = DOC_PDF_MARGIN;
-	$logo_x = $pdf->GetPageWidth() - DOC_PDF_MARGIN - DOC_MUCUS_LOGO_SIZE;
-	$right = $logo_x - DOC_MUCUS_TITLE_GAP;
-	$name_baseline = DOC_PDF_MARGIN + DOC_MUCUS_NAME_BASELINE;
-	$cycle_baseline = DOC_PDF_MARGIN + DOC_MUCUS_CYCLE_BASELINE;
-
-	// the app
-	$runs = [["mucus.link", "mon", 0], ["mucus.link_bold", "cycle", 0], ["mucus.link", ".app", 0]];
-	$link_w = $pdf->RunsWidth($runs);
-	$pdf->TextOnBaseline($right - $link_w, $name_baseline, $runs);
-	$pdf->Logo($logo_x, DOC_PDF_MARGIN + DOC_MUCUS_LOGO_TOP, DOC_MUCUS_LOGO_SIZE);
-	$pdf->Link($right - $link_w, DOC_PDF_MARGIN, $link_w + DOC_MUCUS_TITLE_GAP + DOC_MUCUS_LOGO_SIZE, DOC_MUCUS_LOGO_TOP + DOC_MUCUS_LOGO_SIZE, DOC_APP_URL);
-
-	$pdf->UseStyle('mucus.page');
-	$page_w = $pdf->GetStringWidth($page);
-	if ($page !== "") $pdf->Text($right - $page_w, DOC_PDF_MARGIN + DOC_MUCUS_PAGE_BASELINE, $page);
-
-	$pdf->UseStyle('mucus.title');
-	$pdf->Text($left, $name_baseline, $pdf->FitText($name, $right - $link_w - DOC_MUCUS_TITLE_GAP - $left));
-
-	if (empty($pieces)) return;
-	$room = $right - $page_w - DOC_MUCUS_TITLE_GAP - $left;
-
-	$pdf->UseStyle('mucus.chip');
-	$chip_text = $pdf->FitText(array_shift($pieces), $room - 2 * DOC_MUCUS_CHIP_PAD);
-	$chip_w = $pdf->GetStringWidth($chip_text) + 2 * DOC_MUCUS_CHIP_PAD;
-	$pdf->SetFillColor(...DOC_MUCUS_CHIP_FILL);
-	$pdf->RoundedRect($left, $cycle_baseline - DOC_MUCUS_CHIP_RISE, $chip_w, DOC_MUCUS_CHIP_H, DOC_MUCUS_CHIP_H * DOC_MUCUS_CHIP_RADIUS);
-	$pdf->Text($left + DOC_MUCUS_CHIP_PAD, $cycle_baseline, $chip_text);
-
-	if (empty($pieces)) return;
-	$x = $left + $chip_w + DOC_MUCUS_CHIP_PAD;
-	$pdf->UseStyle('mucus.cycle');
-	$pdf->Text($x, $cycle_baseline, $pdf->FitText(implode(DOC_MUCUS_CYCLE_JOINER, $pieces), $left + $room - $x));
 }
 
 // A rule across the table at $y.

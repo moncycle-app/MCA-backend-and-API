@@ -44,6 +44,18 @@ function doc_display_day(array $day): array {
 	return $day;
 }
 
+// A pause ends the cycle, and the next one starts at its own first day: the days between belong to no cycle and no chart shows them, whatever
+// the database holds for them (a stamp, a code, a comment). The pause day itself stays, as the last of its cycle. Every chart starts with this.
+function doc_days_without_paused(array $days): array {
+	$paused = false;
+	return array_values(array_filter($days, function ($day) use (&$paused) {
+		if (!empty($day["cycleFirstDay"])) $paused = false;
+		if ($paused) return false;
+		$paused = !empty($day["observationPaused"]);
+		return true;
+	}));
+}
+
 // What a day's stamp says when it has no colour of its own: "paused" (observations paused), "not_observed" (the user marked the day not
 // observed: "?") or "not_filled" (nothing was entered: no row for the date, or a row that holds nothing: "!"); null otherwise. $day is
 // doc_display_day()'s.

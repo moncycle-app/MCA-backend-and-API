@@ -54,6 +54,12 @@ ALTER TABLE `user_account`
 DROP `notification_emails`, DROP `totp_state`, DROP `totp_secret`, DROP `timeline_asc`, DROP `sponsor`, DROP `auto_mail_export`,
 ALGORITHM=INPLACE, LOCK=NONE;
 
+-- The note of a day: 512 characters instead of 256 (a varchar that grows within the same length prefix, so INSTANT is not available
+-- but INPLACE does not copy the table: 512 x 4 bytes needs a 2-byte length prefix, like 256 x 4).
+ALTER TABLE `day_timeline`
+MODIFY `comment` varchar(512) COLLATE utf8mb4_bin DEFAULT NULL,
+ALGORITHM=INPLACE, LOCK=NONE;
+
 -- The version of the schema, which the code checks at every request (APP_VERSION, constants.php): a database that says another
 -- number is not served (503 schema_mismatch). Every migration ends by setting it to its own number.
 INSERT INTO `key_value` (`key`, `value`) VALUES ('schema_version', 16) ON DUPLICATE KEY UPDATE `value` = 16;

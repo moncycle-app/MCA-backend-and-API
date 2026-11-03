@@ -37,6 +37,12 @@ class WriteAndRead(ApiTest):
         for key, value in sent.items():
             self.assertEqual(got[key], value, key)
 
+    def test_a_comment_holds_512_characters_and_not_513(self):
+        a = Account()
+        self.assertStatus(a.post("day/" + D, {"comment": "é" * 512}), 201)
+        self.assertEqual(a.get("day/" + D).data["comment"], "é" * 512)
+        self.assertStatus(a.post("day/" + D, {"comment": "é" * 513}), 400)
+
     def test_a_day_nothing_is_stored_for_is_empty_not_404(self):
         d = Account().get("day/2026-01-01").data
         self.assertEqual((d["date"], d["stampColor"], d["comment"], d["lastWriteDb"]), ("2026-01-01", None, "", None))

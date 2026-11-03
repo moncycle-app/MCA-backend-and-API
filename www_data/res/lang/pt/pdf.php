@@ -45,8 +45,9 @@ return [
 	"legend.not_observed" => "dia não observado",
 	"legend.not_filled" => "dia não preenchido",
 	"legend.paused" => "observações em pausa",
-	"fc.title" => "- observações de {start} a {end} - documento criado em {today} - página {page} de {count} - ",
-	"fc.title_anonymous" => "{@anonymous} - documento criado em {today} - página {page} de {count} - ",
+	// the line under the name: what the export covers, and the day it was made
+	"fc.observations" => "Observações de {start} a {end}",
+	"fc.created" => "documento criado em {today}",
 	"fc.row.stamp" => "Selo",
 	"fc.row.peak" => "Pico",
 	"fc.row.date" => "Data",
