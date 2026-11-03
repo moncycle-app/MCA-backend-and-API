@@ -16,7 +16,8 @@
 declare(strict_types=1);
 
 // The cervical mucus chart (nfp_method 1 and 2): a table, one line per day, A4 portrait, in mm, in the language of the account. A page starts
-// with the logo, the name and what the chart covers. A line: date | day of the cycle | stamp | [peak] | [counter] | [union] | sensations |
+// with the name and its cycle on the left, the app (its name and logo, a link) on the right; it ends with the legend and what the whole export
+// covers. A line: date | day of the cycle | stamp | [peak and counter] | [union] | sensations |
 // observations | comment, and method 1 ends with the temperature and its curve; the columns in brackets only exist when a day uses them, and
 // so do the three text columns.
 //
@@ -33,29 +34,32 @@ require_once __DIR__ . "/doc_pdf.php";
 require_once __DIR__ . "/res.php";
 
 function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $language, bool $anonymous = false, string $date_pattern = 'd/m/y'): DocPdf {
+	$days = doc_mucus_without_paused_days($days);
 	$first_date = new DateTime($days[0]["date"]);
 	$last_date = new DateTime(end($days)["date"]);
 	if ($anonymous) $name = doc_get_initials($name) . " " . res_t("pdf", $language, "anonymous");
-
-	$days_text = res_t("pdf", $language, count($days) > 1 ? "days.other" : "days.one", ["n" => count($days)]);
-	$subtitle = $anonymous
-		? res_t("pdf", $language, "mucus.subtitle_anonymous", ["days" => $days_text])
-		: res_t("pdf", $language, "mucus.subtitle", ["days" => $days_text, "start" => date_human($first_date, $date_pattern), "end" => date_human($last_date, $date_pattern)]);
 
 	$pdf = new DocPdf('P', 'A4', res_t("pdf", $language, "title", ["date" => date_human($first_date, $date_pattern)]), $name);
 	$pdf->SetMargins(DOC_PDF_MARGIN, DOC_PDF_MARGIN);
 
 	$rows = doc_mucus_rows($days);
+	$cycles = doc_mucus_cycle_summaries($rows);
+	$cycle_count = count(array_filter($cycles, fn($cycle) => !is_null($cycle["n"])));
+
+	// what the whole export covers, at the foot of every page: nothing when it is one cycle, which the head of the page already tells
+	$summary = "";
+	if (count($cycles) > 1 || $cycle_count === 0) {
+		$days_text = res_t("pdf", $language, count($days) > 1 ? "days.other" : "days.one", ["n" => count($days)]);
+		$cycles_text = res_t("pdf", $language, $cycle_count > 1 ? "cycles.other" : "cycles.one", ["n" => $cycle_count]);
+		$summary = $anonymous
+			? res_t("pdf", $language, "mucus.subtitle_anonymous", ["days" => $days_text, "cycles" => $cycles_text])
+			: res_t("pdf", $language, "mucus.subtitle", ["days" => $days_text, "cycles" => $cycles_text, "start" => date_human($first_date, $date_pattern), "end" => date_human($last_date, $date_pattern)]);
+	}
 
 	// one layout per cycle (a cycle starts a page): its columns are the ones its days use. The temperature scale is the export's.
 	$readings = array_filter(array_column($rows, "temperature"), fn($t) => !is_null($t));
 	$temperature = user_account_tracks_temperature($nfp_method) && !empty($readings);
-	$scale = null;
-	if ($temperature) {
-		$scale = [min($readings), max($readings)];
-		// one reading, or all the same: a scale around it
-		if ($scale[0] == $scale[1]) $scale = [$scale[0] - 0.5, $scale[1] + 0.5];
-	}
+	$scale = $temperature ? doc_mucus_temperature_scale($readings) : null;
 	$layouts = [];
 	foreach (doc_mucus_cycles($rows) as $group => $indexes) {
 		$layout = doc_mucus_layout($pdf, array_intersect_key($rows, array_flip($indexes)), $scale, $language);
@@ -70,7 +74,8 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 	foreach ($pages as $page_index => [$first, $count]) {
 		$pdf->AddPage();
 		$layout = $layouts[$rows[$first]["group"]];
-		doc_mucus_draw_title($pdf, $name, $subtitle, res_t("pdf", $language, "page", ["page" => $page_index + 1, "count" => count($pages)]));
+		$page = count($pages) > 1 ? res_t("pdf", $language, "page", ["page" => $page_index + 1, "count" => count($pages)]) : "";
+		doc_mucus_draw_title($pdf, $name, doc_mucus_cycle_pieces($cycles[$rows[$first]["group"]], $cycle_count, $language, $anonymous, $date_pattern), $page);
 		doc_mucus_draw_head($pdf, $layout);
 
 		$previous_point = null;   // the last point drawn on the temperature curve
@@ -86,14 +91,26 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 		if (in_array("unknown", $stamps, true)) $legend["unknown"] = res_t("pdf", $language, "legend.not_observed");
 		if (in_array("missing", $stamps, true)) $legend["missing"] = res_t("pdf", $language, "legend.not_filled");
 		if (in_array("paused", $stamps, true)) $legend["paused"] = res_t("pdf", $language, "legend.paused");
-		doc_mucus_draw_legend($pdf, $legend);
+		doc_mucus_draw_footer($pdf, $legend, $summary);
 	}
 
 	return $pdf;
 }
 
+// A pause ends the cycle and the next one starts at its own first day: the days between are not part of any cycle, so the chart leaves them out
+// (the pause day itself stays, as the last of its cycle).
+function doc_mucus_without_paused_days(array $days): array {
+	$paused = false;
+	return array_values(array_filter($days, function ($day) use (&$paused) {
+		if (!empty($day["cycleFirstDay"])) $paused = false;
+		if ($paused) return false;
+		$paused = !empty($day["observationPaused"]);
+		return true;
+	}));
+}
+
 // What each day shows. The peak (+1..+3 after it) and the counter (+1..+n) run over calendar days, gaps included, and start over at
-// every cycle start. "items" are the pieces a text is cut between: the keywords of a description list (each but the last with its comma),
+// every cycle start. A day's "marks" are its boxes, side by side: [[box colour, text colour], text], a null text being the peak's triangle. "items" are the pieces a text is cut between: the keywords of a description list (each but the last with its comma),
 // the words of a comment.
 function doc_mucus_rows(array $days): array {
 	$rows = [];
@@ -108,17 +125,16 @@ function doc_mucus_rows(array $days): array {
 			$counter = null;
 		}
 
-		$peak = null;
+		$marks = [];
 		if ($day["isPeak"]) {
 			$since_peak = 0;
-			$peak = ["triangle"];
+			$marks[] = [DOC_MUCUS_PEAK_COLORS, null];
 		}
-		elseif (!is_null($since_peak) && $since_peak < 3) $peak = ["text", 'mucus.peak_offset', "+" . ++$since_peak];
+		elseif (!is_null($since_peak) && $since_peak < 3) $marks[] = [DOC_MUCUS_PEAK_COLORS, "+" . ++$since_peak];
 		else $since_peak = null;
 
 		if (!empty($day["counterStart"])) $counter = [0, $day["counterStart"]];
-		$count = null;
-		if (!is_null($counter) && $counter[0] < $counter[1]) $count = ["text", 'mucus.counter', "+" . ++$counter[0]];
+		if (!is_null($counter) && $counter[0] < $counter[1]) $marks[] = [DOC_MUCUS_COUNTER_COLORS, "+" . ++$counter[0]];
 		else $counter = null;
 
 		$state = doc_day_stamp_state($day);
@@ -137,8 +153,7 @@ function doc_mucus_rows(array $days): array {
 			"day" => $day,
 			"stamp" => $stamp,
 			"baby" => $day["stampBaby"] && !is_null($day["stampColor"]),
-			"peak" => $peak,
-			"counter" => $count,
+			"marks" => $marks ?: null,
 			"union" => $day["sexUnion"] ? ["heart"] : null,
 			"items" => $items,
 			"temperature" => $day["temperature"],
@@ -150,6 +165,30 @@ function doc_mucus_rows(array $days): array {
 	return $rows;
 }
 
+// The curve's scale: [lowest, highest, step], the ends on the grid of the step (DOC_MUCUS_CURVE_STEPS) and at least one step apart.
+function doc_mucus_temperature_scale(array $readings): array {
+	foreach (DOC_MUCUS_CURVE_STEPS as $step) {
+		$low = floor(round(min($readings) / $step, 6)) * $step;
+		$high = ceil(round(max($readings) / $step, 6)) * $step;
+		if ($high - $low < $step / 2) [$low, $high] = [$low - $step, $high + $step];
+		if (round(($high - $low) / $step) <= DOC_MUCUS_CURVE_MAX_LINES) break;
+	}
+	return [$low, $high, $step];
+}
+
+// The x of a temperature on the curve column.
+function doc_mucus_curve_x(array $layout, float $temperature): float {
+	$curve = $layout["columns"]["curve"];
+	$share = ($temperature - $layout["temperature_min"]) / ($layout["temperature_max"] - $layout["temperature_min"]);
+	return $curve["x"] + DOC_MUCUS_CURVE_PAD + $share * ($curve["w"] - 2 * DOC_MUCUS_CURVE_PAD);
+}
+
+// The temperatures of the curve's grid lines, lowest first.
+function doc_mucus_curve_grid(array $layout): array {
+	$count = (int) round(($layout["temperature_max"] - $layout["temperature_min"]) / $layout["temperature_step"]);
+	return array_map(fn(int $i): float => $layout["temperature_min"] + $i * $layout["temperature_step"], range(0, $count));
+}
+
 // The row indexes of each cycle: a cycle starts at its cycleFirstDay (days before the first one are a group of their own).
 function doc_mucus_cycles(array $rows): array {
 	$groups = [];
@@ -159,6 +198,42 @@ function doc_mucus_cycles(array $rows): array {
 		$groups[$group][] = $index;
 	}
 	return $groups;
+}
+
+// What each cycle of the chart is, by group of doc_mucus_cycles(): "n" (its number, null for the days before the first cycle start), the first and
+// last date, "days" (a pause ends the cycle: its last day is the paused one) and "peak" (the cycle day of its last peak, or null).
+function doc_mucus_cycle_summaries(array $rows): array {
+	$summaries = [];
+	$number = 0;
+	foreach (doc_mucus_cycles($rows) as $group => $indexes) {
+		$first = $rows[$indexes[0]]["day"];
+		$summary = ["n" => $first["cycleFirstDay"] ? ++$number : null, "start" => $first["date"], "end" => $first["date"], "days" => 0, "peak" => null];
+		$ended = false;
+		foreach ($indexes as $index) {
+			$day = $rows[$index]["day"];
+			if ($ended) break;
+			$summary["end"] = $day["date"];
+			$summary["days"]++;
+			if ($day["isPeak"]) $summary["peak"] = $day["cycleDay"];
+			$ended = !empty($day["observationPaused"]);
+		}
+		$summaries[$group] = $summary;
+	}
+	return $summaries;
+}
+
+// The line under the name, in pieces: the cycle of the page, its number among the export's when there are several, its length, its dates, its
+// peak. The first piece is drawn in a chip. No piece for the days before the first cycle start.
+function doc_mucus_cycle_pieces(array $cycle, int $count, string $language, bool $anonymous, string $date_pattern): array {
+	if (is_null($cycle["n"])) return [];
+	$pieces = [];
+	if ($count > 1) $pieces[] = res_t("pdf", $language, "mucus.cycle", ["n" => $cycle["n"], "count" => $count]);
+	$pieces[] = res_t("pdf", $language, $cycle["days"] > 1 ? "days.other" : "days.one", ["n" => $cycle["days"]]);
+	if (!$anonymous) {
+		$pieces[] = res_t("pdf", $language, "mucus.cycle_dates", ["start" => date_human(new DateTime($cycle["start"]), $date_pattern), "end" => date_human(new DateTime($cycle["end"]), $date_pattern)]);
+	}
+	if (!is_null($cycle["peak"])) $pieces[] = res_t("pdf", $language, "mucus.cycle_peak", ["day" => $cycle["peak"]]);
+	return $pieces;
 }
 
 // The columns of a cycle, so that its days line up: which there are, their x and width. $scale: [lowest, highest] temperature of the export,
@@ -173,7 +248,10 @@ function doc_mucus_layout(DocPdf $pdf, array $rows, ?array $scale, string $langu
 	foreach (DOC_MUCUS_FIXED_COLUMNS as $key => [$label_key, $min_w]) {
 		if (in_array($key, DOC_MUCUS_MARKERS, true) && empty(array_filter(array_column($rows, $key)))) continue;
 		$label = mb_strtoupper(res_t("pdf", $language, $label_key));
-		$columns[$key] = ["label" => $label, "w" => max($min_w, $pdf->GetStringWidth($label) + 2 * $margin), "align" => 'C'];
+		$w = $key === "marks"
+			? max($min_w, doc_mucus_marks_width(max(array_map('count', array_filter(array_column($rows, "marks"))))))
+			: max($min_w, $pdf->GetStringWidth($label) + 2 * $margin);
+		$columns[$key] = ["label" => $label, "w" => $w, "align" => 'C'];
 	}
 
 	$right_w = $temperature ? DOC_MUCUS_TEMPERATURE_W + DOC_MUCUS_CURVE_W : 0;
@@ -189,7 +267,7 @@ function doc_mucus_layout(DocPdf $pdf, array $rows, ?array $scale, string $langu
 		$columns["temperature"] = ["label" => mb_strtoupper(res_t("pdf", $language, "mucus.col.temperature")), "w" => DOC_MUCUS_TEMPERATURE_W, "align" => 'L'];
 		$columns["curve"] = ["label" => "", "w" => DOC_MUCUS_CURVE_W, "align" => 'L'];
 
-		[$layout["temperature_min"], $layout["temperature_max"]] = $scale;
+		[$layout["temperature_min"], $layout["temperature_max"], $layout["temperature_step"]] = $scale;
 	}
 
 	$x = DOC_PDF_MARGIN;
@@ -199,6 +277,11 @@ function doc_mucus_layout(DocPdf $pdf, array $rows, ?array $scale, string $langu
 	}
 
 	return $layout;
+}
+
+// The width of a column that holds up to $boxes peak / counter boxes side by side.
+function doc_mucus_marks_width(int $boxes): float {
+	return $boxes * DOC_MUCUS_MARK_W + ($boxes + 1) * DOC_MUCUS_MARK_GAP;
 }
 
 // The height of a day's line that takes $lines lines of text.
@@ -370,25 +453,44 @@ function doc_mucus_paginate(DocPdf $pdf, array $rows): array {
 	return $pages;
 }
 
-// The top of a page: the logo, the name and what the chart covers, the link to the app and the page number. $name is UTF-8.
-function doc_mucus_draw_title(DocPdf $pdf, string $name, string $subtitle, string $page): void {
-	$left = DOC_PDF_MARGIN + DOC_MUCUS_LOGO_SIZE + 3;
-	$side_w = 32;
-	$text_w = $pdf->GetPageWidth() - DOC_PDF_MARGIN - $left;
+// The top of a page, two lines that the logo spans on the right. First line: the name, and "mon<b>cycle</b>.app" on its baseline; second
+// line: the cycle's pieces (the first in a chip, the others after it, joined) and the page number under the app's name. The app's name and
+// logo are a link: the chart is shared with people who do not know the app. $name is UTF-8; $page is "" on a chart of one page.
+function doc_mucus_draw_title(DocPdf $pdf, string $name, array $pieces, string $page): void {
+	$left = DOC_PDF_MARGIN;
+	$logo_x = $pdf->GetPageWidth() - DOC_PDF_MARGIN - DOC_MUCUS_LOGO_SIZE;
+	$right = $logo_x - DOC_MUCUS_TITLE_GAP;
+	$name_baseline = DOC_PDF_MARGIN + DOC_MUCUS_NAME_BASELINE;
+	$cycle_baseline = DOC_PDF_MARGIN + DOC_MUCUS_CYCLE_BASELINE;
 
-	$pdf->Logo(DOC_PDF_MARGIN, DOC_PDF_MARGIN, DOC_MUCUS_LOGO_SIZE);
+	// the app
+	$runs = [["mucus.link", "mon", 0], ["mucus.link_bold", "cycle", 0], ["mucus.link", ".app", 0]];
+	$link_w = $pdf->RunsWidth($runs);
+	$pdf->TextOnBaseline($right - $link_w, $name_baseline, $runs);
+	$pdf->Logo($logo_x, DOC_PDF_MARGIN + DOC_MUCUS_LOGO_TOP, DOC_MUCUS_LOGO_SIZE);
+	$pdf->Link($right - $link_w, DOC_PDF_MARGIN, $link_w + DOC_MUCUS_TITLE_GAP + DOC_MUCUS_LOGO_SIZE, DOC_MUCUS_LOGO_TOP + DOC_MUCUS_LOGO_SIZE, DOC_APP_URL);
 
-	$pdf->SetXY($left, DOC_PDF_MARGIN);
-	$pdf->UseStyle('mucus.title');
-	$pdf->Cell($text_w - $side_w, 6.5, $pdf->FitText($name, $text_w - $side_w), 0, 0, 'L');
-	$pdf->UseStyle('mucus.link');
-	$pdf->Cell($side_w, 6.5, "MONCYCLE.APP", 0, 1, 'R', false, "https://www.moncycle.app");
-
-	$pdf->SetX($left);
-	$pdf->UseStyle('mucus.subtitle');
-	$pdf->Cell($text_w - $side_w, 4.5, $pdf->FitText($subtitle, $text_w - $side_w), 0, 0, 'L');
 	$pdf->UseStyle('mucus.page');
-	$pdf->Cell($side_w, 4.5, $page, 0, 1, 'R');
+	$page_w = $pdf->GetStringWidth($page);
+	if ($page !== "") $pdf->Text($right - $page_w, DOC_PDF_MARGIN + DOC_MUCUS_PAGE_BASELINE, $page);
+
+	$pdf->UseStyle('mucus.title');
+	$pdf->Text($left, $name_baseline, $pdf->FitText($name, $right - $link_w - DOC_MUCUS_TITLE_GAP - $left));
+
+	if (empty($pieces)) return;
+	$room = $right - $page_w - DOC_MUCUS_TITLE_GAP - $left;
+
+	$pdf->UseStyle('mucus.chip');
+	$chip_text = $pdf->FitText(array_shift($pieces), $room - 2 * DOC_MUCUS_CHIP_PAD);
+	$chip_w = $pdf->GetStringWidth($chip_text) + 2 * DOC_MUCUS_CHIP_PAD;
+	$pdf->SetFillColor(...DOC_MUCUS_CHIP_FILL);
+	$pdf->RoundedRect($left, $cycle_baseline - DOC_MUCUS_CHIP_RISE, $chip_w, DOC_MUCUS_CHIP_H, DOC_MUCUS_CHIP_H * DOC_MUCUS_CHIP_RADIUS);
+	$pdf->Text($left + DOC_MUCUS_CHIP_PAD, $cycle_baseline, $chip_text);
+
+	if (empty($pieces)) return;
+	$x = $left + $chip_w + DOC_MUCUS_CHIP_PAD;
+	$pdf->UseStyle('mucus.cycle');
+	$pdf->Text($x, $cycle_baseline, $pdf->FitText(implode(DOC_MUCUS_CYCLE_JOINER, $pieces), $left + $room - $x));
 }
 
 // A rule across the table at $y.
@@ -411,15 +513,22 @@ function doc_mucus_draw_head(DocPdf $pdf, array $layout): void {
 		$pdf->Cell($column["w"], DOC_MUCUS_HEAD_H, $column["label"], 0, 0, $column["align"]);
 	}
 
+	// the values of the curve's grid lines, every one or every few so that they do not touch
 	if ($layout["temperature"]) {
 		$curve = $layout["columns"]["curve"];
-		$min = number_format($layout["temperature_min"], 2, '.', '') . "°";
-		$max = number_format($layout["temperature_max"], 2, '.', '') . "°";
+		$grid = doc_mucus_curve_grid($layout);
+		$decimals = $layout["temperature_step"] < 1 ? 1 : 0;
+		$labels = array_map(fn(float $t): string => number_format($t, $decimals, '.', ''), $grid);
 		$pdf->UseStyle('mucus.scale');
-		$pdf->SetXY($curve["x"], $y);
-		$pdf->Cell($curve["w"], DOC_MUCUS_HEAD_H, $min, 0, 0, 'L');
-		$pdf->SetXY($curve["x"], $y);
-		$pdf->Cell($curve["w"], DOC_MUCUS_HEAD_H, $max, 0, 0, 'R');
+		$room = doc_mucus_curve_x($layout, $grid[1]) - doc_mucus_curve_x($layout, $grid[0]);
+		$every = (int) ceil((max(array_map([$pdf, 'GetStringWidth'], $labels)) + 1) / $room);
+		foreach ($grid as $index => $t) {
+			if ($index % $every !== 0) continue;
+			$w = $pdf->GetStringWidth($labels[$index]);
+			$x = min(max(doc_mucus_curve_x($layout, $t) - $w / 2, $curve["x"]), $curve["x"] + $curve["w"] - $w);
+			$pdf->SetXY($x, $y);
+			$pdf->Cell($w, DOC_MUCUS_HEAD_H, $labels[$index], 0, 0, 'C');
+		}
 	}
 
 	doc_mucus_draw_rule($pdf, $layout, $y + DOC_MUCUS_HEAD_H, DOC_MUCUS_HEAD_RULE_COLOR, 0.25);
@@ -453,17 +562,16 @@ function doc_mucus_draw_row(DocPdf $pdf, array $row, array $layout, float $y, bo
 	doc_mucus_draw_stamp($pdf, $row["stamp"], $row["baby"],
 		$columns["stamp"]["x"] + ($columns["stamp"]["w"] - DOC_MUCUS_STAMP_SIZE) / 2, $middle - DOC_MUCUS_STAMP_SIZE / 2, DOC_MUCUS_STAMP_SIZE);
 
-	foreach (DOC_MUCUS_MARKERS as $kind) {
-		if (!isset($columns[$kind]) || is_null($row[$kind])) continue;
-		$center = $columns[$kind]["x"] + $columns[$kind]["w"] / 2;
-		if ($row[$kind][0] === "heart") $pdf->Heart($center, $middle, 3.2, DOC_MUCUS_UNION_COLOR);
-		elseif ($row[$kind][0] === "triangle") $pdf->Triangle($center, $middle, 3.2, DOC_MUCUS_PEAK_COLOR);
-		else {
-			[, $style, $text] = $row[$kind];
-			$pdf->UseStyle($style);
-			$pdf->SetXY($columns[$kind]["x"], $y);
-			$pdf->Cell($columns[$kind]["w"], $h, $text, 0, 0, 'C');
+	if (isset($columns["marks"]) && !is_null($row["marks"])) {
+		$column = $columns["marks"];
+		$x = $column["x"] + ($column["w"] - doc_mucus_marks_width(count($row["marks"])) + 2 * DOC_MUCUS_MARK_GAP) / 2;
+		foreach ($row["marks"] as [$colors, $text]) {
+			doc_mucus_draw_mark($pdf, $colors, $text, $x, $middle - DOC_MUCUS_MARK_H / 2);
+			$x += DOC_MUCUS_MARK_W + DOC_MUCUS_MARK_GAP;
 		}
+	}
+	if (isset($columns["union"]) && !is_null($row["union"])) {
+		$pdf->Heart($columns["union"]["x"] + $columns["union"]["w"] / 2, $middle, 3.2, DOC_MUCUS_UNION_COLOR);
 	}
 
 	// the lines of each text, as a block in the middle of the day's line
@@ -477,27 +585,58 @@ function doc_mucus_draw_row(DocPdf $pdf, array $row, array $layout, float $y, bo
 		}
 	}
 
-	// method 1: the reading and its time, then its point on the curve, joined to the day before's; a day without one breaks the curve
+	// method 1: the curve's grid on every day, so that it runs down the page unbroken
+	if ($layout["temperature"]) {
+		$pdf->SetDrawColor(...DOC_MUCUS_GRID_COLOR);
+		$pdf->SetLineWidth(DOC_MUCUS_BORDER_W);
+		foreach (doc_mucus_curve_grid($layout) as $t) {
+			$x = doc_mucus_curve_x($layout, $t);
+			$pdf->Line($x, $y, $x, $y + $h);
+		}
+	}
+
+	// the reading and its time, then its dot on the curve, joined to the day before's; a day without one breaks the curve. The day
+	// before's dot is drawn again over the line, so that both ends of it are clean.
 	if ($layout["temperature"] && !is_null($row["temperature"])) {
 		$runs = [['mucus.temperature', $row["temperature_label"], 0]];
 		if ($row["temperature_time"] !== '') $runs[] = ['mucus.temperature_time', $row["temperature_time"], 1];
 		$pdf->TextRuns($columns["temperature"]["x"] + $margin, $middle - DOC_MUCUS_LINE_H / 2, DOC_MUCUS_LINE_H, $runs);
 
-		$curve = $columns["curve"];
-		$scale = ($row["temperature"] - $layout["temperature_min"]) / ($layout["temperature_max"] - $layout["temperature_min"]);
-		$point = [$curve["x"] + DOC_MUCUS_CURVE_PAD + $scale * ($curve["w"] - 2 * DOC_MUCUS_CURVE_PAD), $middle];
+		$point = [doc_mucus_curve_x($layout, $row["temperature"]), $middle];
 		if (!is_null($previous_point)) {
 			$pdf->SetDrawColor(...DOC_MUCUS_TEMPERATURE_COLOR);
-			$pdf->SetLineWidth(0.25);
+			$pdf->SetLineWidth(DOC_MUCUS_CURVE_LINE_W);
 			$pdf->Line($previous_point[0], $previous_point[1], $point[0], $point[1]);
+			doc_mucus_draw_dot($pdf, $previous_point);
 		}
-		$pdf->SetFillColor(...DOC_MUCUS_TEMPERATURE_COLOR);
-		$pdf->Rect($point[0] - 0.6, $point[1] - 0.6, 1.2, 1.2, 'F');
+		doc_mucus_draw_dot($pdf, $point);
 		$previous_point = $point;
 	}
 	else $previous_point = null;
 
 	if (PDF_CERVICAL_MUCUS_BORDERS) doc_mucus_draw_rule($pdf, $layout, $y + $h);
+}
+
+// A reading's dot on the curve, in a white ring.
+function doc_mucus_draw_dot(DocPdf $pdf, array $point): void {
+	$pdf->SetFillColor(255, 255, 255);
+	$pdf->Circle($point[0], $point[1], DOC_MUCUS_DOT_R + DOC_MUCUS_DOT_RING);
+	$pdf->SetFillColor(...DOC_MUCUS_TEMPERATURE_COLOR);
+	$pdf->Circle($point[0], $point[1], DOC_MUCUS_DOT_R);
+}
+
+// A peak or counter box: a rounded rectangle, with its text or, when $text is null, the peak's triangle, in $colors (box, text).
+function doc_mucus_draw_mark(DocPdf $pdf, array $colors, ?string $text, float $x, float $y): void {
+	[$fill, $ink] = $colors;
+	$pdf->SetFillColor(...$fill);
+	$pdf->RoundedRect($x, $y, DOC_MUCUS_MARK_W, DOC_MUCUS_MARK_H, DOC_MUCUS_MARK_H * DOC_MUCUS_MARK_RADIUS);
+	if (is_null($text)) {
+		$pdf->Triangle($x + DOC_MUCUS_MARK_W / 2, $y + DOC_MUCUS_MARK_H / 2, DOC_MUCUS_MARK_H * 0.6, $ink);
+		return;
+	}
+	$pdf->UseStyle('mucus.mark', $ink);
+	$pdf->SetXY($x, $y);
+	$pdf->Cell(DOC_MUCUS_MARK_W, DOC_MUCUS_MARK_H, $text, 0, 0, 'C');
 }
 
 // The stamp: a square of the day's colour, with the baby on it. A day not observed is a grey "?", one nothing was entered on a grey "!", a
@@ -518,19 +657,29 @@ function doc_mucus_draw_stamp(DocPdf $pdf, ?string $kind, bool $baby, float $x, 
 		$pdf->RoundedRect($x, $y, $size, $size, $size * DOC_MUCUS_STAMP_RADIUS, 'D');
 	}
 
+	// a chip: the pause is two rounded bars on a tinted, outlined square, not a text
+	if ($kind === "paused") {
+		$pdf->SetDrawColor(...DOC_MUCUS_PAUSE_OUTLINE);
+		$pdf->SetLineWidth(0.15);
+		$pdf->RoundedRect($x, $y, $size, $size, $size * DOC_MUCUS_STAMP_RADIUS, 'D');
+		[$bar_w, $bar_h, $bar_gap] = array_map(fn($share) => $share * $size, DOC_MUCUS_PAUSE_BAR);
+		$pdf->SetFillColor(...$glyph_color);
+		$left = $x + ($size - 2 * $bar_w - $bar_gap) / 2;
+		foreach ([$left, $left + $bar_w + $bar_gap] as $bar_x) $pdf->RoundedRect($bar_x, $y + ($size - $bar_h) / 2, $bar_w, $bar_h, $bar_w / 2);
+		return;
+	}
 	if ($glyph !== '') {
 		$pdf->UseStyle('mucus.stamp', $glyph_color);
 		$pdf->SetFontSize($size * 1.45);
 		$pdf->SetXY($x, $y);
 		$pdf->Cell($size, $size, $glyph, 0, 0, 'C');
 	}
-	if ($baby) $pdf->Baby($x + $size * 0.1, $y + $size * 0.1, $size * 0.8, $fill);
+	if ($baby) $pdf->Baby($x + $size * 0.1, $y + $size * 0.1, $size * 0.8, $fill, DOC_MUCUS_BABY_INK[$kind] ?? null);
 }
 
-// What the stamps that are not self-explanatory mean, along the bottom of the page.
-function doc_mucus_draw_legend(DocPdf $pdf, array $legend): void {
-	if (empty($legend)) return;
-
+// The bottom of the page: on the left what the stamps that are not self-explanatory mean, on the right what the whole export covers ($summary,
+// may be "").
+function doc_mucus_draw_footer(DocPdf $pdf, array $legend, string $summary): void {
 	$size = 3.4;
 	$y = $pdf->GetPageHeight() - DOC_PDF_MARGIN - $size;
 	$x = DOC_PDF_MARGIN;
@@ -542,4 +691,10 @@ function doc_mucus_draw_legend(DocPdf $pdf, array $legend): void {
 		$pdf->Cell($width, $size, $text, 0, 0, 'L');
 		$x += $size + 1 + $width + 4;
 	}
+
+	if ($summary === "") return;
+	$right = $pdf->GetPageWidth() - DOC_PDF_MARGIN;
+	$pdf->UseStyle('mucus.legend');
+	$summary = $pdf->FitText($summary, $right - $x);
+	$pdf->TextRuns($right - $pdf->GetStringWidth($summary), $y, $size, [['mucus.legend', $summary, 0]]);
 }

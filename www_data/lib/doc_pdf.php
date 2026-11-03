@@ -49,14 +49,28 @@ class DocPdf extends tFPDF {
 	// Runs of differently styled text side by side, on the baseline Cell() would use at ($x, $y) in the first run's style, without the
 	// cell margin. $runs: [[style, text, space before it in mm], ...].
 	public function TextRuns(float $x, float $y, float $h, array $runs): void {
-		$baseline = null;
+		$this->UseStyle($runs[0][0]);
+		$this->TextOnBaseline($x, $y + .5 * $h + .3 * $this->FontSize, $runs);
+	}
+
+	// The same runs on a given baseline: texts of different sizes that must sit on one line.
+	public function TextOnBaseline(float $x, float $baseline, array $runs): void {
 		foreach ($runs as [$style, $text, $gap]) {
 			$this->UseStyle($style);
-			$baseline ??= $y + .5 * $h + .3 * $this->FontSize;
 			$x += $gap;
 			$this->Text($x, $baseline, $text);
 			$x += $this->GetStringWidth($text);
 		}
+	}
+
+	// The width of those runs, gaps included.
+	public function RunsWidth(array $runs): float {
+		$w = 0.0;
+		foreach ($runs as [$style, $text, $gap]) {
+			$this->UseStyle($style);
+			$w += $gap + $this->GetStringWidth($text);
+		}
+		return $w;
 	}
 
 	// The width of $text in the current font, measured once: a chart measures the same keywords thousands of times.
@@ -192,13 +206,14 @@ class DocPdf extends tFPDF {
 		$this->RoundedRect($cx - $r, $cy - $r, 2 * $r, 2 * $r, $r);
 	}
 
-	// The baby of a stamp, in a $size mm square at ($x, $y): a white round face with ears and a curl of hair. On a dark stamp
-	// ($background: r, g, b) its eyes and smile are cut out in the stamp's colour; on a light one, where white alone would not show, the face
-	// has a dark grey outline and dark grey eyes, smile and curl. It is drawn inside its own graphics state (q ... Q), so that the caller's
-	// colours and line width are the same after it.
-	public function Baby(float $x, float $y, float $size, array $background): void {
-		$light = 0.299 * $background[0] + 0.587 * $background[1] + 0.114 * $background[2] > 150;
-		$ink = $light ? [50, 50, 50] : $background;
+	// The baby of a stamp, in a $size mm square at ($x, $y): a round face with ears and a curl of hair. On a coloured stamp ($background: r, g, b)
+	// the face is white, outlined, and its eyes and smile are drawn in $ink (r, g, b; the stamp's colour when null); on a white one, where white
+	// alone would not show, the face is very light grey with a mid grey outline and mid grey eyes, smile and curl. It is drawn inside its own
+	// graphics state (q ... Q), so that the caller's colours and line width are the same after it.
+	public function Baby(float $x, float $y, float $size, array $background, ?array $ink = null): void {
+		$on_white = min($background) > 230;
+		$ink = $on_white ? [140, 140, 140] : ($ink ?? $background);
+		$face = $on_white ? [240, 240, 240] : [255, 255, 255];
 		$color = fn(array $rgb): string => vsprintf('%.3F %.3F %.3F rg %1$.3F %2$.3F %3$.3F RG', array_map(fn(int $c): float => $c / 255, $rgb));
 		// a point of the icon, (0, 0) its top left corner and (1, 1) its bottom right
 		$at = fn(float $u, float $v): string => sprintf('%.2F %.2F', ($x + $u * $size) * $this->k, ($this->h - $y - $v * $size) * $this->k);
@@ -208,16 +223,15 @@ class DocPdf extends tFPDF {
 		$width = fn(float $w): string => sprintf('%.2F w', $w * $size * $this->k);
 		$curl = $at(0.5, 0.23) . ' m ' . $at(0.46, 0.13) . ' ' . $at(0.53, 0.05) . ' ' . $at(0.61, 0.07) . ' c '
 			. $at(0.68, 0.09) . ' ' . $at(0.67, 0.18) . ' ' . $at(0.6, 0.17) . ' c S';
-		// the ears go first: the face covers their inner half, outline included
-		$paint = $light ? 'B' : 'f';
 
 		$this->_out(implode("\n", [
-			'q 1 J 1 j', $color([255, 255, 255]), $width(0.05),
-			$light ? '' : $width(0.075) . ' ' . $curl,           // white on a dark stamp
-			$color($ink), '1 g',                                 // white fill, $ink outline
-			$dot(0.16, 0.6, 0.09, $paint), $dot(0.84, 0.6, 0.09, $paint),   // the ears
-			$dot(0.5, 0.57, 0.35, $paint),                       // the face
-			$light ? $width(0.075) . ' ' . $curl : '',           // dark grey on a light stamp
+			'q 1 J 1 j', $color([255, 255, 255]),
+			$on_white ? '' : $width(0.075) . ' ' . $curl,        // white on a coloured stamp
+			$width(0.05), $color($ink), vsprintf('%.3F %.3F %.3F rg', array_map(fn(int $c): float => $c / 255, $face)),   // $face fill, $ink outline
+			// the ears go first: the face covers their inner half, outline included
+			$dot(0.16, 0.6, 0.09, 'B'), $dot(0.84, 0.6, 0.09, 'B'),   // the ears
+			$dot(0.5, 0.57, 0.35, 'B'),                          // the face
+			$on_white ? $width(0.075) . ' ' . $curl : '',        // dark grey on a white stamp
 			$color($ink),
 			$dot(0.375, 0.55, 0.05), $dot(0.625, 0.55, 0.05),    // the eyes
 			$width(0.06),                                        // the smile

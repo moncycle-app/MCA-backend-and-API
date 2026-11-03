@@ -647,6 +647,7 @@ const DOC_DAY_CONTENT_FIELDS = [
 ];
 
 const DOC_PDF_MARGIN = 10;                                  // mm kept free on every side of the page, in both charts
+const DOC_APP_URL = "https://moncycle.app";                 // where the app's name and logo on a chart link to
 const DOC_PAUSE_COLOR = [130, 21, 33];                      // r, g, b of the pause "II" and "PAUSE" text, in both charts
 const DOC_MUCUS_TEMPERATURE_COLOR = [135, 67, 176];          // r, g, b of the temperature reading, its curve and its points
 
@@ -668,8 +669,10 @@ const DOC_LOGO_RADIUS = 0.22;   // corner radius of the logo, as a share of its 
 // style => [font family, font style, size in pt, [r, g, b]]; "mucus.*" for the cervical mucus table, "fc.*" for the FertilityCare grid.
 const DOC_PDF_STYLES = [
 	'mucus.title' => ['NotoSans', 'B', 15, [30, 30, 30]],
-	'mucus.subtitle' => ['NotoSans', '', 8, [110, 110, 110]],
-	'mucus.link' => ['NotoSans', 'B', 8, [30, 130, 76]],
+	'mucus.chip' => ['NotoSans', 'B', 8.5, [30, 30, 30]],
+	'mucus.cycle' => ['NotoSans', '', 8.5, [90, 90, 90]],
+	'mucus.link' => ['NotoSans', '', 11, [30, 30, 30]],
+	'mucus.link_bold' => ['NotoSans', 'B', 11, [30, 30, 30]],
 	'mucus.page' => ['NotoSans', '', 7.5, [140, 140, 140]],
 	'mucus.head' => ['NotoSans', 'B', 5.8, [120, 120, 120]],
 	'mucus.scale' => ['NotoSans', '', 5.5, [140, 140, 140]],
@@ -678,8 +681,7 @@ const DOC_PDF_STYLES = [
 	'mucus.day_number' => ['NotoSans', '', 8.5, [30, 30, 30]],
 	'mucus.day_number.bold' => ['NotoSans', 'B', 8.5, [30, 30, 30]],
 	'mucus.stamp' => ['NotoSans', 'B', 8, [0, 0, 0]],
-	'mucus.peak_offset' => ['NotoSans', 'B', 7.5, [139, 69, 19]],
-	'mucus.counter' => ['NotoSans', 'B', 7.5, [30, 130, 76]],
+	'mucus.mark' => ['NotoSans', 'B', 5.5, [255, 255, 255]],
 	'mucus.text' => ['NotoSans', '', 8, [30, 30, 30]],
 	'mucus.comment' => ['NotoSans', 'I', 7.5, [80, 80, 80]],
 	'mucus.temperature' => ['NotoSans', '', 8, DOC_MUCUS_TEMPERATURE_COLOR],
@@ -701,8 +703,21 @@ const DOC_PDF_STYLES = [
 // CERVICAL MUCUS PDF (nfp_method 1 and 2) -- a table, one line per day, A4 portrait. Sizes are in mm.
 // ===========================================================================
 
-const DOC_MUCUS_TABLE_TOP = 25;          // where the table starts, under the page title
-const DOC_MUCUS_BOTTOM = 14;             // what the page keeps free under the table, for the legend
+const DOC_MUCUS_TABLE_TOP = 25;          // where the table starts, under the page title: with DOC_MUCUS_BOTTOM, 40 days fit a page
+const DOC_MUCUS_BOTTOM = 14;             // what the page keeps free under the table, for the legend and what the export covers
+// The page title, from the top margin: the baselines of its two lines, the chip of the second one, and the logo that spans both on the right.
+const DOC_MUCUS_NAME_BASELINE = 5.2;
+const DOC_MUCUS_CYCLE_BASELINE = 11.3;
+const DOC_MUCUS_CHIP_H = 4.4;
+const DOC_MUCUS_CHIP_RISE = 3.27;        // from the top of the chip to the baseline of its text, which centres its capitals
+const DOC_MUCUS_CHIP_PAD = 1.6;          // on each side of the chip's text, and between the chip and the rest of the line
+const DOC_MUCUS_CHIP_RADIUS = 0.3;       // corner radius of the chip, as a share of its height
+const DOC_MUCUS_CHIP_FILL = [236, 236, 236];
+const DOC_MUCUS_PAGE_BASELINE = 10.2;    // the page number, close under the app's name
+const DOC_MUCUS_LOGO_TOP = 1.4;          // level with the top of the name's capitals...
+const DOC_MUCUS_LOGO_SIZE = 9;           // ... and down to the foot of the page number
+const DOC_MUCUS_TITLE_GAP = 3;           // between the app's name and its logo, and kept free before the app's name and the page number
+const DOC_MUCUS_CYCLE_JOINER = "  ·  ";  // between the pieces of the second line
 const DOC_MUCUS_HEAD_H = 6;              // height of the column headers band
 const DOC_MUCUS_LINE_H = 3.5;            // a line of text in a cell
 const DOC_MUCUS_MIN_ROW_H = 6.2;         // a day's line, whatever it holds: 40 of them fit a page
@@ -710,10 +725,15 @@ const DOC_MUCUS_PAD = 1.35;              // above and below the lines of a day t
 const DOC_MUCUS_MAX_LINES = 8;           // a text taking more lines than this is cut short with an ellipsis
 const DOC_MUCUS_STAMP_RADIUS = 0.18;     // corner radius of a stamp, as a share of its side
 const DOC_MUCUS_STAMP_SIZE = 5.0;        // side of the stamp square: less than the day's line, so that two stamps never touch
-const DOC_MUCUS_LOGO_SIZE = 8;           // side of the logo, top left of every page
 const DOC_MUCUS_TEMPERATURE_W = 17;      // the temperature column: the reading and the time it was taken at
-const DOC_MUCUS_CURVE_W = 24;            // the curve column
+const DOC_MUCUS_CURVE_W = 30;            // the curve column
 const DOC_MUCUS_CURVE_PAD = 2.5;         // kept free at each end of the curve's width
+const DOC_MUCUS_CURVE_STEPS = [0.1, 0.2, 0.5, 1.0, 2.0];   // the curve's grid goes by the smallest of these that draws at most 8 lines
+const DOC_MUCUS_CURVE_MAX_LINES = 8;
+const DOC_MUCUS_CURVE_LINE_W = 0.3;      // thickness of the curve
+const DOC_MUCUS_DOT_R = 0.8;             // radius of a reading's dot...
+const DOC_MUCUS_DOT_RING = 0.3;          // ... and of the white ring around it, that keeps it apart from the line
+const DOC_MUCUS_GRID_COLOR = [232, 226, 238];   // r, g, b of the curve's grid lines
 const DOC_MUCUS_TEXT_MIN_W = 16;         // a description column is never narrower than this...
 const DOC_MUCUS_COMMENT_MIN_W = 30;      // ... nor the comment column
 const DOC_MUCUS_WIDTH_STEP = 1.0;        // the search of the text columns' widths goes by this step
@@ -721,21 +741,22 @@ const DOC_MUCUS_WIDTH_STEP = 1.0;        // the search of the text columns' widt
 const DOC_MUCUS_HEAD_FILL = [244, 244, 244];     // r, g, b of the column headers band
 const DOC_MUCUS_STRIPE_FILL = [248, 248, 248];   // r, g, b of every other day, when borders are off
 const DOC_MUCUS_BORDER_COLOR = [222, 222, 222];  // r, g, b of the table's lines and of a white stamp's outline
+const DOC_MUCUS_PAUSE_OUTLINE = [243, 196, 203];  // r, g, b of the outline of the pause chip
+const DOC_MUCUS_PAUSE_BAR = [0.15, 0.5, 0.14];     // the pause bars as shares of the stamp's side: width, height, gap between them
 const DOC_MUCUS_STAMP_OUTLINE = [190, 190, 190];  // r, g, b of the outline of a white stamp
 const DOC_MUCUS_BORDER_W = 0.1;                  // thickness of those lines
 const DOC_MUCUS_HEAD_RULE_COLOR = [170, 170, 170];   // r, g, b of the line under the column headers
 
-// The narrow columns, in order: key => [language key of the header, least width]. The three markers only get a column when a day has one;
-// a column is as wide as its header needs when that is more.
+// The narrow columns, in order: key => [language key of the header, least width]. The markers only get a column when a day has one;
+// a column is as wide as its header needs when that is more, except the marks' (peak and counter boxes), whose width the boxes set.
 const DOC_MUCUS_FIXED_COLUMNS = [
 	"date" => ["mucus.col.date", 17],
 	"day" => ["mucus.col.day", 9],
 	"stamp" => ["mucus.col.stamp", 9],
-	"peak" => ["mucus.col.peak", 8],
-	"counter" => ["mucus.col.counter", 12],
+	"marks" => ["mucus.col.peak", 10],
 	"union" => ["mucus.col.union", 8],
 ];
-const DOC_MUCUS_MARKERS = ["peak", "counter", "union"];   // the optional columns of those, also the keys of a day's row
+const DOC_MUCUS_MARKERS = ["marks", "union"];   // the optional columns of those, also the keys of a day's row
 
 // The text columns, in order: day field => [language key of the header, style, what its text is cut in]. The columns no day uses are not
 // drawn. A description list is cut at its commas (a keyword stays whole on a line), a comment at its spaces.
@@ -746,11 +767,11 @@ const DOC_MUCUS_TEXT_COLUMNS = [
 ];
 
 // The stamps that are not a colour of the app: kind => [fill, glyph, glyph colour]. "unknown" (?) is a day marked not observed, "missing"
-// (!) a day nothing was entered on.
+// (!) a day nothing was entered on. Those two are light blue, so as not to pass for a white stamp's grey baby.
 const DOC_MUCUS_SPECIAL_STAMPS = [
-	"unknown" => [[226, 226, 226], "?", [120, 120, 120]],
-	"missing" => [[226, 226, 226], "!", [120, 120, 120]],
-	"paused" => [[255, 226, 230], "II", DOC_PAUSE_COLOR],
+	"unknown" => [[219, 232, 248], "?", [36, 96, 170]],
+	"missing" => [[219, 232, 248], "!", [36, 96, 170]],
+	"paused" => [[255, 226, 230], "", DOC_PAUSE_COLOR],   // no glyph: doc_mucus_draw_stamp() draws the two bars of a pause
 ];
 const DOC_MUCUS_STATE_STAMPS = ["paused" => "paused", "not_observed" => "unknown", "not_filled" => "missing"];   // doc_day_stamp_state() => stamp
 const DOC_MUCUS_STAMP_COLORS = [          // stampColor => r, g, b of the stamp
@@ -759,7 +780,18 @@ const DOC_MUCUS_STAMP_COLORS = [          // stampColor => r, g, b of the stamp
 	"Yellow" => [251, 202, 11],
 	"White" => [255, 255, 255],
 ];
-const DOC_MUCUS_PEAK_COLOR = [139, 69, 19];    // r, g, b of the peak's triangle
+// stampColor => r, g, b of the baby's eyes, smile and outline: a deep shade of the stamp, warmer for yellow (a dark yellow turns olive)
+const DOC_MUCUS_BABY_INK = [
+	"Red" => [112, 14, 28],
+	"Green" => [12, 78, 42],
+	"Yellow" => [150, 96, 0],
+];
+const DOC_MUCUS_PEAK_COLORS = [[0, 0, 0], [255, 255, 255]];   // r, g, b of the peak's box (the peak day and the 3 days after it), and of its text
+const DOC_MUCUS_COUNTER_COLORS = [[226, 226, 226], [120, 120, 120]];   // r, g, b of the counter's box and of its text
+const DOC_MUCUS_MARK_W = 4.6;                 // width of a peak / counter box
+const DOC_MUCUS_MARK_H = 3.4;                 // height of a peak / counter box
+const DOC_MUCUS_MARK_GAP = 0.7;               // between the two boxes of a day, and kept free at each end of the column
+const DOC_MUCUS_MARK_RADIUS = 0.3;            // corner radius of a box, as a share of its height
 const DOC_MUCUS_UNION_COLOR = [172, 36, 51];   // r, g, b of the union's heart
 
 // ===========================================================================

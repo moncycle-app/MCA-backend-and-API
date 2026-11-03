@@ -34,6 +34,15 @@ class Export(ApiTest):
         self.assertEqual(r.headers["Content-Type"], "application/pdf")
         self.assertTrue(r.body.startswith(b"%PDF"))
 
+    def test_pdf_with_a_peak_and_a_counter_on_the_same_days(self):
+        b = account_with_a_cycle()
+        b.post("day/2026-09-22", {"isPeak": True, "counterStart": 4, "sexUnion": True})
+        for day in (23, 24, 25, 26):
+            b.post("day/2026-09-%d" % day, {"stampColor": "White"})
+        r = b.get("export/pdf" + FROM_TO)
+        self.assertStatus(r, 200)
+        self.assertTrue(r.body.startswith(b"%PDF"))
+
     def test_pdf_of_the_fertilitycare_chart(self):
         b = account_with_a_cycle(method=3)
         self.assertTrue(b.get("export/pdf" + FROM_TO).body.startswith(b"%PDF"))
