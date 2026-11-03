@@ -29,6 +29,18 @@ const APP_COMMIT = "dev";
 // to the code that runs them.
 
 // ===========================================================================
+// RESOURCES -- what the code reads and does not run: res/ (lib/res.php)
+// ===========================================================================
+
+const RES_DIR = __DIR__ . "/res";
+// The words a user reads: res/lang/<language of the account, lower case>/<domain>.php ("mail", "pdf"), read by res_t().
+const RES_LANG_DIR = RES_DIR . "/lang";
+// The fonts of the PDFs (TrueType, embedded as a subset).
+const RES_FONT_DIR = RES_DIR . "/fonts";
+// Where tFPDF (lib/doc_pdf.php) looks for a font file first; the name is its own.
+const _SYSTEM_TTFONTS = RES_FONT_DIR . "/";
+
+// ===========================================================================
 // ACCOUNT -- two-factor authentication, data retention
 // ===========================================================================
 
@@ -175,8 +187,6 @@ const ACCOUNT_INACTIVITY_WARNING_DAYS_BEFORE = 10;
 // The frame of every mail to a user, in HTML and in plain text, filled by mail_render().
 const MAIL_LAYOUT = __DIR__ . "/mail/layout.html";
 const MAIL_LAYOUT_TEXT = __DIR__ . "/mail/layout.txt";
-// The words of the mails: mail/lang/<language of the account, lower case>.php holds every word they say (mail_t()).
-const MAIL_LANG_DIR = __DIR__ . "/mail/lang";
 // Where an answer to any mail goes, and the address the mails give to write to the team.
 const MAIL_REPLY_TO = "hello@tech4fertility.org";
 // The site the logo and the sign-off link to.
@@ -616,8 +626,6 @@ const NFP_CYCLE_FIELDS_STORED = ["endOfCycleFollowUp"];                    // re
 // CSV AND PDF EXPORTS -- what both charts and the CSV share (lib/doc.php)
 // ===========================================================================
 
-const DOC_WEEK_DAYS = ["D", "L", "M", "M", "J", "V", "S"];   // initials of the days, Sunday first, on the charts
-const DOC_BABY_IMAGE = __DIR__ . "/img/baby.png";            // drawn on a stamp that has the baby
 const DOC_CSV_LIST_JOINER = " | ";                           // joins the descriptions of a day in one CSV cell, in both CSV exports
 const DOC_COMMENT_OTHER_JOINER = " | ";                      // between a day's comment and its descriptions with no type yet, which follow it in the CSV and in both PDFs
 
@@ -631,96 +639,128 @@ const DOC_MUCUS_FIELDS = [
 	"freeOther",
 ];
 
+// The fields of a day that make it a day with something on it (the comment aside): doc_day_is_blank().
+const DOC_DAY_CONTENT_FIELDS = [
+	"stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "observationPaused", "cycleFirstDay", "temperature", "codifiedArrow",
+	"freeMucusSensation", "freeMucusObservation", "freeOther",
+	"codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations",
+];
+
 const DOC_PDF_MARGIN = 10;                                  // mm kept free on every side of the page, in both charts
 const DOC_PAUSE_COLOR = [130, 21, 33];                      // r, g, b of the pause "II" and "PAUSE" text, in both charts
 const DOC_MUCUS_TEMPERATURE_COLOR = [135, 67, 176];          // r, g, b of the temperature reading, its curve and its points
 
+// The TrueType fonts of both charts (embedded as a subset): [family, style, file]. A file is looked for in res/fonts, then in tFPDF's own
+// font/unifont (DejaVu Sans Mono).
+const DOC_PDF_FONTS = [
+	['NotoSans', '', 'NotoSans-Regular.ttf'],
+	['NotoSans', 'B', 'NotoSans-Bold.ttf'],
+	['NotoSans', 'I', 'NotoSans-Italic.ttf'],
+	['DejaVuSansMono', '', 'DejaVuSansMono.ttf'],
+	['DejaVuSansMono', 'B', 'DejaVuSansMono-Bold.ttf'],
+];
+
+// The logo of the app drawn on a page: its four squares in reading order (as the favicon), and the outline that keeps the white one visible.
+const DOC_LOGO_SQUARES = [[172, 35, 51], [251, 202, 11], [30, 130, 76], [255, 255, 255]];
+const DOC_LOGO_OUTLINE = [200, 200, 200];
+const DOC_LOGO_RADIUS = 0.22;   // corner radius of the logo, as a share of its side
+
 // style => [font family, font style, size in pt, [r, g, b]]; "mucus.*" for the cervical mucus table, "fc.*" for the FertilityCare grid.
 const DOC_PDF_STYLES = [
-	'mucus.title' => ['Helvetica', 'B', 14, [0, 0, 0]],
-	'mucus.subtitle' => ['Helvetica', '', 8.5, [110, 110, 110]],
-	'mucus.link' => ['Helvetica', 'B', 8, [30, 130, 76]],
-	'mucus.head' => ['Helvetica', 'B', 6, [110, 110, 110]],
-	'mucus.scale' => ['Helvetica', '', 5.5, [140, 140, 140]],
-	'mucus.date' => ['Helvetica', '', 7, [110, 110, 110]],
-	'mucus.date.sunday' => ['Helvetica', 'B', 7, [50, 50, 50]],
-	'mucus.day_number' => ['Helvetica', '', 8.5, [0, 0, 0]],
-	'mucus.stamp' => ['Helvetica', 'B', 8, [0, 0, 0]],
-	'mucus.peak' => ['ZapfDingbats', '', 8, [139, 69, 19]],
-	'mucus.peak_offset' => ['Helvetica', 'B', 7.5, [139, 69, 19]],
-	'mucus.counter' => ['Helvetica', 'B', 7.5, [30, 130, 76]],
-	'mucus.union' => ['ZapfDingbats', '', 8, [172, 36, 51]],
-	'mucus.text' => ['Helvetica', '', 8, [30, 30, 30]],
-	'mucus.comment' => ['Helvetica', 'I', 7.5, [70, 70, 70]],
-	'mucus.temperature' => ['Helvetica', '', 8, DOC_MUCUS_TEMPERATURE_COLOR],
-	'mucus.temperature_time' => ['Helvetica', '', 6, [140, 140, 140]],
-	'mucus.legend' => ['Helvetica', '', 6.5, [110, 110, 110]],
-	'fc.header' => ['Courier', '', 10, [0, 0, 0]],
-	'fc.header.name' => ['Courier', 'B', 10, [0, 0, 0]],
-	'fc.header.link' => ['Courier', 'B', 10, [30, 130, 76]],
-	'fc.day_numbers' => ['Courier', '', 8, [0, 0, 0]],
-	'fc.cell' => ['Courier', '', 6, [0, 0, 0]],
-	'fc.cell.sunday' => ['Courier', 'B', 6, [0, 0, 0]],
-	'fc.baby' => ['Courier', '', 5, [0, 0, 0]],
-	'fc.arrow' => ['Symbol', '', 6, [0, 0, 0]],
-	'fc.temperature' => ['Courier', '', 3.8, [0, 0, 0]],
-	'fc.comment.small' => ['Courier', '', 3, [0, 0, 0]],
+	'mucus.title' => ['NotoSans', 'B', 15, [30, 30, 30]],
+	'mucus.subtitle' => ['NotoSans', '', 8, [110, 110, 110]],
+	'mucus.link' => ['NotoSans', 'B', 8, [30, 130, 76]],
+	'mucus.page' => ['NotoSans', '', 7.5, [140, 140, 140]],
+	'mucus.head' => ['NotoSans', 'B', 5.8, [120, 120, 120]],
+	'mucus.scale' => ['NotoSans', '', 5.5, [140, 140, 140]],
+	'mucus.date' => ['NotoSans', '', 7, [110, 110, 110]],
+	'mucus.date.sunday' => ['NotoSans', 'B', 7, [40, 40, 40]],
+	'mucus.day_number' => ['NotoSans', '', 8.5, [30, 30, 30]],
+	'mucus.day_number.bold' => ['NotoSans', 'B', 8.5, [30, 30, 30]],
+	'mucus.stamp' => ['NotoSans', 'B', 8, [0, 0, 0]],
+	'mucus.peak_offset' => ['NotoSans', 'B', 7.5, [139, 69, 19]],
+	'mucus.counter' => ['NotoSans', 'B', 7.5, [30, 130, 76]],
+	'mucus.text' => ['NotoSans', '', 8, [30, 30, 30]],
+	'mucus.comment' => ['NotoSans', 'I', 7.5, [80, 80, 80]],
+	'mucus.temperature' => ['NotoSans', '', 8, DOC_MUCUS_TEMPERATURE_COLOR],
+	'mucus.temperature_time' => ['NotoSans', '', 6, [140, 140, 140]],
+	'mucus.legend' => ['NotoSans', '', 6.5, [110, 110, 110]],
+	'fc.header' => ['DejaVuSansMono', '', 10, [0, 0, 0]],
+	'fc.header.name' => ['DejaVuSansMono', 'B', 10, [0, 0, 0]],
+	'fc.header.link' => ['DejaVuSansMono', 'B', 10, [30, 130, 76]],
+	'fc.day_numbers' => ['DejaVuSansMono', '', 8, [0, 0, 0]],
+	'fc.cell' => ['DejaVuSansMono', '', 6, [0, 0, 0]],
+	'fc.cell.sunday' => ['DejaVuSansMono', 'B', 6, [0, 0, 0]],
+	'fc.baby' => ['DejaVuSansMono', '', 5, [0, 0, 0]],
+	'fc.arrow' => ['DejaVuSansMono', '', 6, [0, 0, 0]],
+	'fc.temperature' => ['DejaVuSansMono', '', 3.8, [0, 0, 0]],
+	'fc.comment.small' => ['DejaVuSansMono', '', 3, [0, 0, 0]],
 ];
 
 // ===========================================================================
 // CERVICAL MUCUS PDF (nfp_method 1 and 2) -- a table, one line per day, A4 portrait. Sizes are in mm.
 // ===========================================================================
 
-const DOC_MUCUS_TABLE_TOP = 24;          // where the table starts, under the page title
+const DOC_MUCUS_TABLE_TOP = 25;          // where the table starts, under the page title
 const DOC_MUCUS_BOTTOM = 14;             // what the page keeps free under the table, for the legend
 const DOC_MUCUS_HEAD_H = 6;              // height of the column headers band
-const DOC_MUCUS_LINE_H = 3.6;            // a line of text in a cell
-const DOC_MUCUS_MIN_ROW_H = 6.5;         // a day's line, whatever it holds
-const DOC_MUCUS_PAD = (DOC_MUCUS_MIN_ROW_H - DOC_MUCUS_LINE_H) / 2;   // above the first line of text
-const DOC_MUCUS_MAX_LINES = 10;          // a text taking more lines than this is cut short with an ellipsis
-const DOC_MUCUS_STAMP_SIZE = 5.5;        // side of the stamp square
+const DOC_MUCUS_LINE_H = 3.5;            // a line of text in a cell
+const DOC_MUCUS_MIN_ROW_H = 6.2;         // a day's line, whatever it holds: 40 of them fit a page
+const DOC_MUCUS_PAD = 1.35;              // above and below the lines of a day that has several
+const DOC_MUCUS_MAX_LINES = 8;           // a text taking more lines than this is cut short with an ellipsis
+const DOC_MUCUS_STAMP_RADIUS = 0.18;     // corner radius of a stamp, as a share of its side
+const DOC_MUCUS_STAMP_SIZE = 5.0;        // side of the stamp square: less than the day's line, so that two stamps never touch
+const DOC_MUCUS_LOGO_SIZE = 8;           // side of the logo, top left of every page
 const DOC_MUCUS_TEMPERATURE_W = 17;      // the temperature column: the reading and the time it was taken at
 const DOC_MUCUS_CURVE_W = 24;            // the curve column
 const DOC_MUCUS_CURVE_PAD = 2.5;         // kept free at each end of the curve's width
-const DOC_MUCUS_TEXT_MIN_W = 14;         // a description column is never narrower than this...
-const DOC_MUCUS_TEXT_MAX_W = 40;         // ... nor wider, as the comment is the one to take the room
-const DOC_MUCUS_TEXT_TYPICAL = 0.85;     // share of a column's values that must fit it on one line
-const DOC_MUCUS_COMMENT_WANTED_W = 40;   // the width the description columns give way to keep for the comment
+const DOC_MUCUS_TEXT_MIN_W = 16;         // a description column is never narrower than this...
+const DOC_MUCUS_COMMENT_MIN_W = 30;      // ... nor the comment column
+const DOC_MUCUS_WIDTH_STEP = 1.0;        // the search of the text columns' widths goes by this step
 
-const DOC_MUCUS_HEAD_FILL = [240, 240, 240];     // r, g, b of the column headers band
+const DOC_MUCUS_HEAD_FILL = [244, 244, 244];     // r, g, b of the column headers band
 const DOC_MUCUS_STRIPE_FILL = [248, 248, 248];   // r, g, b of every other day, when borders are off
-const DOC_MUCUS_BORDER_COLOR = [210, 210, 210];  // r, g, b of the table's lines and of a white stamp's outline
+const DOC_MUCUS_BORDER_COLOR = [222, 222, 222];  // r, g, b of the table's lines and of a white stamp's outline
+const DOC_MUCUS_STAMP_OUTLINE = [190, 190, 190];  // r, g, b of the outline of a white stamp
 const DOC_MUCUS_BORDER_W = 0.1;                  // thickness of those lines
+const DOC_MUCUS_HEAD_RULE_COLOR = [170, 170, 170];   // r, g, b of the line under the column headers
 
-// The narrow columns, in order: key => [header, width]. The three markers only get a column when a day has one.
+// The narrow columns, in order: key => [language key of the header, least width]. The three markers only get a column when a day has one;
+// a column is as wide as its header needs when that is more.
 const DOC_MUCUS_FIXED_COLUMNS = [
-	"date" => ["DATE", 13],
-	"day" => ["JOUR", 9],
-	"stamp" => ["TAMPON", 11],
-	"peak" => ["PIC", 9],
-	"counter" => ["COMPTEUR", 15],
-	"union" => ["UNION", 10],
+	"date" => ["mucus.col.date", 17],
+	"day" => ["mucus.col.day", 9],
+	"stamp" => ["mucus.col.stamp", 9],
+	"peak" => ["mucus.col.peak", 8],
+	"counter" => ["mucus.col.counter", 12],
+	"union" => ["mucus.col.union", 8],
 ];
 const DOC_MUCUS_MARKERS = ["peak", "counter", "union"];   // the optional columns of those, also the keys of a day's row
 
-// The text columns, in order: day field => [header, style]. The comment takes what the others leave.
+// The text columns, in order: day field => [language key of the header, style, what its text is cut in]. The columns no day uses are not
+// drawn. A description list is cut at its commas (a keyword stays whole on a line), a comment at its spaces.
 const DOC_MUCUS_TEXT_COLUMNS = [
-	"freeMucusSensation" => ["SENSATIONS", 'mucus.text'],
-	"freeMucusObservation" => ["OBSERVATIONS", 'mucus.text'],
-	"comments" => ["COMMENTAIRE", 'mucus.comment'],
+	"freeMucusSensation" => ["mucus.col.sensations", 'mucus.text'],
+	"freeMucusObservation" => ["mucus.col.observations", 'mucus.text'],
+	"comments" => ["mucus.col.comment", 'mucus.comment'],
 ];
 
-// The stamps that are not a colour of the app: kind => [fill, glyph, glyph colour].
+// The stamps that are not a colour of the app: kind => [fill, glyph, glyph colour]. "unknown" (?) is a day marked not observed, "missing"
+// (!) a day nothing was entered on.
 const DOC_MUCUS_SPECIAL_STAMPS = [
-	"unknown" => [[226, 226, 226], "?", [130, 130, 130]],
+	"unknown" => [[226, 226, 226], "?", [120, 120, 120]],
+	"missing" => [[226, 226, 226], "!", [120, 120, 120]],
 	"paused" => [[255, 226, 230], "II", DOC_PAUSE_COLOR],
 ];
+const DOC_MUCUS_STATE_STAMPS = ["paused" => "paused", "not_observed" => "unknown", "not_filled" => "missing"];   // doc_day_stamp_state() => stamp
 const DOC_MUCUS_STAMP_COLORS = [          // stampColor => r, g, b of the stamp
 	"Red" => [172, 36, 51],
 	"Green" => [30, 130, 76],
 	"Yellow" => [251, 202, 11],
 	"White" => [255, 255, 255],
 ];
+const DOC_MUCUS_PEAK_COLOR = [139, 69, 19];    // r, g, b of the peak's triangle
+const DOC_MUCUS_UNION_COLOR = [172, 36, 51];   // r, g, b of the union's heart
 
 // ===========================================================================
 // FERTILITYCARE PDF (nfp_method 3 and 4) -- a grid, A3 landscape. Sizes are in mm.
@@ -736,32 +776,31 @@ const DOC_FC_COLOR_COEF = 1.1;                  // a cell's border is its stamp 
 const DOC_FC_LINES_PER_PAGE = 8;                // rows of the grid on a page...
 const DOC_FC_LINES_PER_PAGE_TEMPERATURE = 7;    // ... and when the temperature row takes room
 
-// The legend column, top to bottom: row => label. The temperature row only exists for a method that tracks it.
+// The legend column, top to bottom: row => language key of its label ("" = none). The temperature row only exists for a method that tracks it.
 const DOC_FC_ROW_LABELS = [
-	"stamp" => "TAMPON",
+	"stamp" => "fc.row.stamp",
 	"baby" => "",
-	"peak" => "PEAK",
-	"date" => "DATE",
-	"bleeding" => "SAIGNEMENT",
-	"mucus" => "GLAIRE",
-	"other" => "AUTRE INFO",
-	"temperature" => "TEMPERATURE",
-	"comment" => "COMMENTAIRE",
+	"peak" => "fc.row.peak",
+	"date" => "fc.row.date",
+	"bleeding" => "fc.row.bleeding",
+	"mucus" => "fc.row.mucus",
+	"other" => "fc.row.other",
+	"temperature" => "fc.row.temperature",
+	"comment" => "fc.row.comment",
 ];
 
-// stamp code (see doc_fc_stamp_key()) => [text drawn, r, g, b]
+// stampColor => [language key of its letter, r, g, b of the stamp, r, g, b of the stamp with the baby on it]. The baby adds its own letters
+// before the colour's. A day with a baby on no colour is "White".
 const DOC_FC_STAMPS = [
-	"" => ["", 255, 255, 255],
-	"?" => ["???", 210, 210, 210],
-	"R" => ['R', 190, 0, 4],
-	"G" => ['V', 45, 102, 23],
-	"Y" => ['J', 255, 255, 9],
-	"BB" => ['BBB', 255, 255, 255],  // bébé blanc
-	'RBB' => ['BBR', 190, 0, 0],     // bébé rouge
-	'GBB' => ['BBV', 130, 187, 106], // bébé vert
-	'YBB' => ['BBJ', 255, 255, 9],   // bébé jaune
-	'pause' => ['II', 255, 236, 238], // observations paused
+	"Red" => ['fc.stamp.red', [190, 0, 4], [190, 0, 0]],
+	"Green" => ['fc.stamp.green', [45, 102, 23], [130, 187, 106]],
+	"Yellow" => ['fc.stamp.yellow', [255, 255, 9], [255, 255, 9]],
+	"White" => ['fc.stamp.white', [255, 255, 255], [255, 255, 255]],
 ];
+const DOC_FC_STAMP_NONE = [255, 255, 255];                    // no stamp, and the padding after a cycle's last day
+const DOC_FC_STAMP_GREY = [210, 210, 210];                    // a day not observed (???) and a day not filled in (!!!)
+const DOC_FC_STAMP_PAUSE = [255, 236, 238];                   // a pause of the observations
+const DOC_FC_STATE_GLYPHS = ["not_observed" => "???", "not_filled" => "!!!"];   // doc_day_stamp_state() => what the grey stamp says
 
-// codifiedArrow => its glyph in the Symbol font
-const DOC_FC_ARROWS = ["Up" => "\xAD", "Down" => "\xAF", "Right" => "\xAE"];
+// codifiedArrow => its glyph
+const DOC_FC_ARROWS = ["Up" => "↑", "Down" => "↓", "Right" => "→"];

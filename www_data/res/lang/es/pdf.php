@@ -1,0 +1,62 @@
+<?php
+/* moncycle.app
+**
+** Copyright (C) 2021-2026 Tech 4 Fertility, aka. T4F (https://tech4fertility.org)
+** SPDX-License-Identifier: AGPL-3.0-or-later
+**
+** This program is free software: you can redistribute it and/or modify it under
+** the terms of the GNU Affero General Public License as published by the Free
+** Software Foundation, either version 3 of the License, or (at your option) any
+** later version. It is distributed WITHOUT ANY WARRANTY; see the licence for details.
+**
+** https://www.moncycle.app
+** https://github.com/moncycle-app/backend-api-web-app
+*/
+
+declare(strict_types=1);
+
+// Every word of the PDF charts, in Spanish (one file per ACCOUNT_LANGUAGES code; read by res_t("pdf", ...) in lib/res.php). A string has {name} marks
+// the code fills, and may take another string of this file with {@key}. A heading is written as a word: the chart puts it in capitals.
+return [
+	"title" => "Tabla moncycle.app del {date}",
+	"anonymous" => "(anónimo)",
+	"page" => "página {page} de {count}",
+	// the days of the week from Sunday, one letter each
+	"week_days" => ["D", "L", "M", "X", "J", "V", "S"],
+	"days.one" => "{n} día",
+	"days.other" => "{n} días",
+	"mucus.subtitle" => "Tabla de {days}, del {start} al {end}",
+	"mucus.subtitle_anonymous" => "Tabla de {days}",
+	"mucus.col.date" => "Fecha",
+	"mucus.col.day" => "Día",
+	"mucus.col.stamp" => "Sello",
+	"mucus.col.peak" => "Pico",
+	"mucus.col.counter" => "Contador",
+	"mucus.col.union" => "Unión",
+	"mucus.col.sensations" => "Sensaciones",
+	"mucus.col.observations" => "Observaciones",
+	"mucus.col.comment" => "Comentario",
+	"mucus.col.temperature" => "Temp.",
+	"legend.not_observed" => "día no observado",
+	"legend.not_filled" => "día no rellenado",
+	"legend.paused" => "pausa de las observaciones",
+	"fc.title" => "- observaciones del {start} al {end} - documento creado el {today} - página {page} de {count} - ",
+	"fc.title_anonymous" => "{@anonymous} - documento creado el {today} - página {page} de {count} - ",
+	"fc.row.stamp" => "Sello",
+	"fc.row.peak" => "Pico",
+	"fc.row.date" => "Fecha",
+	"fc.row.bleeding" => "Sangrado",
+	"fc.row.mucus" => "Moco",
+	"fc.row.other" => "Otra info",
+	"fc.row.temperature" => "Temperatura",
+	"fc.row.comment" => "Comentario",
+	"fc.peak" => "PICO",
+	"fc.pause" => "PAUSA",
+	"fc.union" => "R",
+	"fc.at" => "a las",
+	"fc.stamp.red" => "R",
+	"fc.stamp.green" => "V",
+	"fc.stamp.yellow" => "A",
+	"fc.stamp.white" => "B",
+	"fc.stamp.baby" => "BB",
+];

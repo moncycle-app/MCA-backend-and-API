@@ -28,7 +28,7 @@ require_once __DIR__ . "/user_account.php";
 
 // The days of [$start_date, $end_date], oldest first, each day_format_to_json()'s with the NFP names of two fields (mucusNotObserved,
 // comments: one string) and isGap false. A date with no row between two recorded days is a gap: the same keys, empty, isGap true;
-// gaps never run past today. The period is exactly the one asked for (not widened to a cycle start, unlike the NFP export): cycleDay
+// gaps, and the days after the last row, never run past today. The period is exactly the one asked for (not widened to a cycle start, unlike the NFP export): cycleDay
 // counts from the latest cycleFirstDay inside it, and is null before the first one. Two queries, whatever the length.
 function doc_export_days($db, string $start_date, string $end_date, array $user_account): array {
 	$no_user_account = intval($user_account["no_user_account"]);
@@ -48,6 +48,12 @@ function doc_export_days($db, string $start_date, string $end_date, array $user_
 		$days[] = doc_export_day(data_day($row, $cycle_start, $descriptions[$row["no_day"]] ?? []));
 		$previous_date = $date;
 	}
+	// the days after the last one recorded, up to the end of the period or today: still to fill in
+	if (!is_null($previous_date)) {
+		for ($gap = date_next_day($previous_date); $gap <= $end_date && $gap <= $today; $gap = date_next_day($gap)) {
+			$days[] = array_merge(doc_export_day(data_day(["date_obs" => $gap], $cycle_start)), ["isGap" => true]);
+		}
+	}
 	return $days;
 }
 
@@ -65,10 +71,10 @@ function doc_export_day(array $day): array {
 	return $day;
 }
 
-// $display: user_setting_display() of the account, the date format and the temperature unit it chose.
-function doc_export_pdf(array $days, int $nfp_method, string $name, array $display, bool $anonymous = false): DocPdf {
+// $language: the account's, the words of the chart. $display: user_setting_display() of the account, the date format and the temperature unit it chose.
+function doc_export_pdf(array $days, int $nfp_method, string $name, string $language, array $display, bool $anonymous = false): DocPdf {
 	$days = doc_temperature_unit($days, $display["temperature_unit"]);
-	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $anonymous, $display["date_pattern"]);
-	return doc_mucus_pdf($days, $nfp_method, $name, $anonymous, $display["date_pattern"]);
+	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $language, $anonymous, $display["date_pattern"]);
+	return doc_mucus_pdf($days, $nfp_method, $name, $language, $anonymous, $display["date_pattern"]);
 }
 

@@ -16,12 +16,13 @@
 declare(strict_types=1);
 
 // The mails of the app. A name or an address comes from a user: it is escaped before it reaches the HTML. No word a user reads is in
-// this file: they are in mail/lang/<language>.php, read through mail_t().
+// this file: they are in res/lang/<language>/mail.php, read through mail_t().
 
 use PHPMailer\PHPMailer\PHPMailer;
 
 require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/log.php";
+require_once __DIR__ . "/res.php";
 
 // Sends one mail. $kind names it in the log, which keeps nothing else of it but how many addresses and files (never an address, a
 // subject or a body: several hold a link that opens an account). $body is the slots of the template (the subject added), or a whole HTML
@@ -64,7 +65,7 @@ function mail_send(string $kind, array $to, string $subject, array|string $body,
 }
 
 // ---------------------------------------------------------------------------
-// The words (MAIL_LANG_DIR, one file per language of an account) and the template (MAIL_LAYOUT, MAIL_LAYOUT_TEXT)
+// The words (res/lang/<language>/mail.php, one file per language of an account) and the template (MAIL_LAYOUT, MAIL_LAYOUT_TEXT)
 // ---------------------------------------------------------------------------
 
 // The language of the mails being made, an ACCOUNT_LANGUAGES code. Every mail_send_*() sets it from the language of the account it is for
@@ -75,23 +76,9 @@ function mail_language(?string $code = null): string {
 	return $current;
 }
 
-// Every word of the current language of the mails: [key => string, or a list].
-function mail_words(): array {
-	static $words = [];
-	$language = mail_language();
-	$words[$language] ??= require MAIL_LANG_DIR . "/" . strtolower($language) . ".php";
-	return $words[$language];
-}
-
-// A string of the language file: a {@other.key} is replaced by that string (a phrase said in several mails is written once), then its
-// {name} marks by $vars. The caller escapes what it passes for HTML, and passes plain text for a slot the template escapes.
+// A string of the mails' language file (res/lang/<language>/mail.php), in the language being made: res_t().
 function mail_t(string $key, array $vars = []): string {
-	$text = mail_words()[$key] ?? throw new RuntimeException("mail text missing: {$key}");
-	if (!is_string($text)) throw new RuntimeException("mail text is not a string: {$key}");
-	$text = preg_replace_callback('/\{@([\w.]+)\}/', fn(array $m): string => mail_t($m[1]), $text);
-	$marks = [];
-	foreach ($vars as $name => $value) $marks["{" . $name . "}"] = (string) $value;
-	return strtr($text, $marks);
+	return res_t("mail", mail_language(), $key, $vars);
 }
 
 // MAIL_LAYOUT ($html) or MAIL_LAYOUT_TEXT filled with $slots. The sections are resolved on the layout alone, then every tag in one pass: a
@@ -243,7 +230,7 @@ function mail_when(): string {
 function mail_long_date(string $ymd): string {
 	$date = new DateTimeImmutable($ymd);
 	$day = $date->format("j") === "1" ? mail_t("date.first") : $date->format("j");
-	return mail_t("format.long_date", ["day" => $day, "month" => mail_words()["months"][intval($date->format("n")) - 1], "year" => $date->format("Y")]);
+	return mail_t("format.long_date", ["day" => $day, "month" => res_words("mail", mail_language())["months"][intval($date->format("n")) - 1], "year" => $date->format("Y")]);
 }
 
 // How long a link lives, in words: "3 jours", "5 heures".

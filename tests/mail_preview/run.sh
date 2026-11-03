@@ -20,12 +20,12 @@ status=0
 kinds="verify_email account_exists reset_password confirm_email"
 used=$( { grep -oE 'mail_t\("[^"]+"' "$ROOT/www_data/lib/mail.php" | sed -E 's/mail_t\("//; s/"$//' | grep -v '{\$kind}'
   for k in $kinds; do grep -oE 'mail_t\("\{\$kind\}\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | sed -E "s/mail_t\\(\"\\{\\\$kind\\}/$k/; s/\"\$//"; done; } | sort -u)
-defined=$(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$ROOT/www_data/mail/lang/fr.php" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u)
+defined=$(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$ROOT/www_data/res/lang/fr/mail.php" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u)
 # the other languages carry the same keys as fr.php
-for f in "$ROOT"/www_data/mail/lang/*.php; do
-  diff <(echo "$defined") <(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$f" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u) >/dev/null || { echo "$(basename "$f") DOES NOT HAVE THE KEYS OF fr.php"; status=1; }
+for f in "$ROOT"/www_data/res/lang/*/mail.php; do
+  diff <(echo "$defined") <(grep -oE '^[[:space:]]*"[a-z_.]+" =>' "$f" | sed -E 's/^[[:space:]]*"//; s/" =>$//' | sort -u) >/dev/null || { echo "$(basename "$(dirname "$f")")/mail.php DOES NOT HAVE THE KEYS OF fr/mail.php"; status=1; }
 done
-refs=$(grep -oE '\{@[a-z_.]+\}' "$ROOT/www_data/mail/lang/fr.php" | sed -E 's/^\{@//; s/\}$//')
+refs=$(grep -oE '\{@[a-z_.]+\}' "$ROOT/www_data/res/lang/fr/mail.php" | sed -E 's/^\{@//; s/\}$//')
 literals=$( { echo "$used"; echo "$refs"; grep -oE '"[a-z_]+\.[a-z_]+"' "$ROOT/www_data/lib/mail.php" | tr -d '"'; } | sort -u)
 missing=$(comm -23 <(echo "$used") <(echo "$defined"))
 unused=$(comm -13 <(echo "$literals") <(echo "$defined") | grep -v '^months$')

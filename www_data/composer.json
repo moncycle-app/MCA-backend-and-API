@@ -5,11 +5,11 @@
 	"license": "AGPL-3.0-or-later",
 	"require": {
 		"phpmailer/phpmailer": "7.*",
-		"fpdf/fpdf" : "1.*",
 		"swagger-api/swagger-ui" : "5.*",
 		"spomky-labs/otphp" : "11.*",
 		"bacon/bacon-qr-code" : "3.*",
 		"gregwar/captcha": "2.*",
-		"justinrainbow/json-schema" : "6.*" 
+		"justinrainbow/json-schema" : "6.*",
+		"setasign/tfpdf": "1.*" 
 	}
 }

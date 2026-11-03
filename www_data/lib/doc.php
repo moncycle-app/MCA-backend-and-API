@@ -44,6 +44,24 @@ function doc_display_day(array $day): array {
 	return $day;
 }
 
+// What a day's stamp says when it has no colour of its own: "paused" (observations paused), "not_observed" (the user marked the day not
+// observed: "?") or "not_filled" (nothing was entered: no row for the date, or a row that holds nothing: "!"); null otherwise. $day is
+// doc_display_day()'s.
+function doc_day_stamp_state(array $day): ?string {
+	if (!empty($day["observationPaused"])) return "paused";
+	if (!empty($day["mucusNotObserved"])) return "not_observed";
+	if (!empty($day["isGap"]) || doc_day_is_blank($day)) return "not_filled";
+	return null;
+}
+
+// A stored day with nothing on it: no stamp, description, comment, temperature, marker or FertilityCare code.
+function doc_day_is_blank(array $day): bool {
+	foreach (DOC_DAY_CONTENT_FIELDS as $field) {
+		if (!empty($day[$field])) return false;
+	}
+	return trim((string) ($day["comments"] ?? '')) === '';
+}
+
 // Free text on one line: line breaks and runs of blanks become one space.
 function doc_one_line(?string $text): string {
 	$text = $text ?? '';

@@ -26,6 +26,7 @@ framework and no build step: PHP files, one script per endpoint. The web app (jQ
 - `www_data/api/v3/*.php` the endpoints, `www_data/api/moncycle_app_open_api.yaml` the contract
 - `tests/` the API regression tests, committed (see [Running and checking a change](#running-and-checking-a-change))
 - `www_data/lib/*.php` every function and class
+- `www_data/res/` what the code reads and does not run: `lang/<language>/<domain>.php` (the words a user reads: `mail.php`, `pdf.php`), `fonts/` (TrueType, with its licence)
 - `www_data/script/` cron, statistics, migrations (`script/migration/`), `db_init.php`, `auto_upgrade.php`, `demo_reset.php`; `script/db/` holds
   `schema.sql` (the canonical schema) and `demo.sql`
 - the image (Dockerfile, `server_conf/`: Apache and PHP settings, entrypoint, crontabs, compose example) is the repository MCA-Docker-image
@@ -85,8 +86,14 @@ Also:
   `NFP_FILE_SCHEMA`, normalising of older variants), the file out, and the four-stage import (parse, schema, plan, write; the plan is
   built from small steps that add to one report array).
 - **`doc.php`, `doc_export.php`, `doc_csv.php`, `doc_pdf.php`, `doc_mucus.php`, `doc_fc.php`** the CSV and PDF exports: the shared display
-  rule; the front door (`doc_export_days`, `doc_export_pdf`); the CSV and the raw data dump; `DocPdf` and core-font text; the cervical mucus
-  chart; the FertilityCare chart.
+  rule, and what a day's stamp says when it has no colour (`doc_day_stamp_state()`: paused, `not_observed` = "?", `not_filled` = "!": no row for
+  the date, or a row with nothing on it); the front door (`doc_export_days`, `doc_export_pdf`, which takes the account's language); the CSV and
+  the raw data dump; `DocPdf` (a tFPDF: UTF-8 text, Noto Sans and DejaVu Sans Mono embedded as subsets; the logo, a heart, line packing); the
+  cervical mucus chart (the text columns' widths are searched over the whole export to spend the least height, keywords never split, a column no
+  day uses is not drawn); the FertilityCare chart. Both charts say their words through `res_t("pdf", $language, $key)`.
+- **`res.php`** `res_words($domain, $language)` and `res_t($domain, $language, $key, $vars)`: the words of `res/lang/<language>/<domain>.php`
+  (`{name}` marks, `{@other.key}` to say a phrase once). `mail_t()` is `res_t("mail", mail_language(), ...)`. A new language is a folder with every
+  domain in it; one that is missing a key throws.
 - **`user_setting.php`** the table `user_setting` (one row per account and name; a number in `value_int`, a text in `value_str`; no row = the
   default of `constants.php`). Three kinds of rows: the **optional settings** (`USER_SETTINGS`: JSON name => name in the table, type, default;
   `timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `temperatureUnit`, `notificationEmails`), the **two-factor state**
@@ -150,7 +157,7 @@ Also:
   the mail of a link, by kind (verify_email, account_exists, reset_password, confirm_email). The links are
   `APP_URL` + `/#/verify_email?purpose=..&t=..` (the web app's `verify_email` screen, routed in the URL hash, posts the
   parameters to `POST /api/v3/verify_email`). A mail never holds a password. Every mail to a user is the template `www_data/mail/layout.html`
-  (`MAIL_LAYOUT`; its plain-text part is `layout.txt`) and says its words through `mail_t()` from `www_data/mail/lang/<language>.php` (the language of the account the mail is for, `mail_language()`): **no word a user reads is in `mail.php`**,
+  (`MAIL_LAYOUT`; its plain-text part is `layout.txt`) and says its words through `mail_t()` from `www_data/res/lang/<language>/mail.php` (the language of the account the mail is for, `mail_language()`): **no word a user reads is in `mail.php`**,
   none in the layout (see `docs/mail.md`): `mail_send()` takes its slots and `mail_render()` fills it; the body is made
   of `mail_p()`, `mail_facts()`, `mail_callout()`... never of hand-written HTML. Every mail has `Reply-To: MAIL_REPLY_TO`.
 - **`log.php`** the app's own log: see [The log](#the-log).
@@ -297,8 +304,8 @@ must be optional and ignored by an older reader. The user's date format and temp
 The web app is its own repository, **MCA-web-APP**, with its own AGENT.md (CSP rules, forms, `store.js`, `config.js`). It talks to this
 API only through the contract, `www_data/api/moncycle_app_open_api.yaml`, which stays here: a change of an endpoint is made here, with its
 YAML, and the web app follows. The API's generation is the integer at the start of `APP_VERSION`; the web app declares the range it
-supports (`src/version.json`, `api`) and the image build refuses a pair outside it. `www_data/js/swagger-init.js` and `img/baby.png`
-(drawn on the PDF) are the only front files kept here.
+supports (`src/version.json`, `api`) and the image build refuses a pair outside it. `www_data/js/swagger-init.js`
+is the only front file kept here.
 
 ## The log
 

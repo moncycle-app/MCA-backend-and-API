@@ -5,7 +5,7 @@ Every mail to a user (`lib/mail.php`) is made of three things, each in its place
 | What | Where | Holds |
 |---|---|---|
 | the frame | `www_data/mail/layout.html`, `layout.txt` | the HTML and CSS (header, card, button, footer, dark theme) and the plain-text part (greeting, body, link, sign-off, footer). **No word of any language.** |
-| the words | `www_data/mail/lang/<language>.php` (`fr.php`) | every text a user reads: subjects, titles, sentences, labels, date formats. **The only file to translate.** |
+| the words | `www_data/res/lang/<language>/mail.php` (`fr/mail.php`) | every text a user reads: subjects, titles, sentences, labels, date formats. **The only file to translate.** |
 | the code | `www_data/lib/mail.php` | which mail says what, with which values. **No word a user reads.** |
 
 The weekly report of the team (`lib/weekly_report.php`) is not one of them: it has a page of its own.
@@ -82,7 +82,7 @@ answer to a mail reaches the team.
 
 ## The words, and a new language
 
-`mail_t($key, $vars)` reads a string of `mail/lang/<language>.php` (the language of the account the mail is for: `user_account.language`, lower case) (a PHP file that returns `[key => string]`) and replaces its `{name}`
+`mail_t($key, $vars)` reads a string of `res/lang/<language>/mail.php` (the language of the account the mail is for: `user_account.language`, lower case) (a PHP file that returns `[key => string]`) and replaces its `{name}`
 marks. Rules for the file:
 
 - A key is `<mail>.<part>` (`reminder.title`), or `layout.*`, `why.*`, `format.*`, `greeting.*`, `lifetime.*`, `app.*`, `action.*`, `eyebrow.*`,
@@ -96,7 +96,7 @@ marks. Rules for the file:
 - A value the code passes in is escaped by the code for an HTML string, and raw for a slot the template escapes.
 - The date formats (`format.*`), the month names and the plural forms (`lifetime.*`) are words too: they are in the file.
 
-To add a language: copy `fr.php` to `<code>.php` (lower case), translate the values (keep the keys and the `{marks}`), add the code to
+To add a language: copy the folder `res/lang/fr` to `res/lang/<code>` (lower case; `mail.php` and `pdf.php`, the words of the PDF charts), translate the values (keep the keys and the `{marks}`), add the code to
 `ACCOUNT_LANGUAGES` in `constants.php`, run `tests/mail_preview/run.sh` (`MAIL_PREVIEW_LANGUAGE=DE` renders another language).
 Every `mail_send_*()` sets the language from the account it is for (`mail_language()`): the row it is given has `language`, or the
 caller passes it. A mail sent to an address that is not (yet) an account of its own uses the language of the account that asked for it

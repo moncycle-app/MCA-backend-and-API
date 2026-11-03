@@ -91,7 +91,7 @@ if ($type === EXPORT_TYPE_CSV) {
 }
 
 elseif ($type === EXPORT_TYPE_PDF) {
-	$pdf = doc_export_pdf($days, $nfp_method, $user_account["name_user_account"], $display, $anonymous);
+	$pdf = doc_export_pdf($days, $nfp_method, $user_account["name_user_account"], $user_account["language"], $display, $anonymous);
 	// 'D' sends the Content-Type and an attachment Content-Disposition itself
 	$pdf->Output('D', $filename . '.pdf', true);
 }

@@ -38,6 +38,18 @@ class Export(ApiTest):
         b = account_with_a_cycle(method=3)
         self.assertTrue(b.get("export/pdf" + FROM_TO).body.startswith(b"%PDF"))
 
+    def test_pdf_in_every_language_with_text_a_user_typed(self):
+        for method in (2, 3):
+            b = account_with_a_cycle(method=method)
+            b.post("day/2026-09-23", {"comment": "ból brzucha, żółty śluz łagodny", "freeMucusObservation": ["żółty", "filant", "przezroczysty"]})
+            b.post("day/2026-09-24", {"dayNotObserved": True})
+            b.post("day/2026-09-25", {})   # a day with a row and nothing on it; 09-22 has no row at all
+            for language in ("EN", "FR", "ES", "DE", "IT", "PL", "PT"):
+                self.assertStatus(b.post("account", {"language": language}), 200)
+                r = b.get("export/pdf" + FROM_TO)
+                self.assertStatus(r, 200)
+                self.assertTrue(r.body.startswith(b"%PDF"), (method, language))
+
     def test_nfp_has_the_cycles_and_the_days(self):
         f = self.a.get("export/nfp" + FROM_TO).json
         self.assertEqual(f["schemaVersion"], "1.0")

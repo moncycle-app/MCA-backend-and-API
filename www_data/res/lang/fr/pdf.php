@@ -1,0 +1,62 @@
+<?php
+/* moncycle.app
+**
+** Copyright (C) 2021-2026 Tech 4 Fertility, aka. T4F (https://tech4fertility.org)
+** SPDX-License-Identifier: AGPL-3.0-or-later
+**
+** This program is free software: you can redistribute it and/or modify it under
+** the terms of the GNU Affero General Public License as published by the Free
+** Software Foundation, either version 3 of the License, or (at your option) any
+** later version. It is distributed WITHOUT ANY WARRANTY; see the licence for details.
+**
+** https://www.moncycle.app
+** https://github.com/moncycle-app/backend-api-web-app
+*/
+
+declare(strict_types=1);
+
+// Every word of the PDF charts, in French (one file per ACCOUNT_LANGUAGES code; read by res_t("pdf", ...) in lib/res.php). A string has {name} marks
+// the code fills, and may take another string of this file with {@key}. A heading is written as a word: the chart puts it in capitals.
+return [
+	"title" => "Tableau moncycle.app du {date}",
+	"anonymous" => "(anonyme)",
+	"page" => "page {page} sur {count}",
+	// the days of the week from Sunday, one letter each
+	"week_days" => ["D", "L", "M", "M", "J", "V", "S"],
+	"days.one" => "{n} jour",
+	"days.other" => "{n} jours",
+	"mucus.subtitle" => "Tableau de {days}, du {start} au {end}",
+	"mucus.subtitle_anonymous" => "Tableau de {days}",
+	"mucus.col.date" => "Date",
+	"mucus.col.day" => "Jour",
+	"mucus.col.stamp" => "Tampon",
+	"mucus.col.peak" => "Pic",
+	"mucus.col.counter" => "Compteur",
+	"mucus.col.union" => "Union",
+	"mucus.col.sensations" => "Sensations",
+	"mucus.col.observations" => "Observations",
+	"mucus.col.comment" => "Commentaire",
+	"mucus.col.temperature" => "Temp.",
+	"legend.not_observed" => "jour non observé",
+	"legend.not_filled" => "jour non renseigné",
+	"legend.paused" => "pause des observations",
+	"fc.title" => "- observations du {start} au {end} - document créé le {today} - page {page} sur {count} - ",
+	"fc.title_anonymous" => "{@anonymous} - document créé le {today} - page {page} sur {count} - ",
+	"fc.row.stamp" => "Tampon",
+	"fc.row.peak" => "Peak",
+	"fc.row.date" => "Date",
+	"fc.row.bleeding" => "Saignement",
+	"fc.row.mucus" => "Glaire",
+	"fc.row.other" => "Autre info",
+	"fc.row.temperature" => "Température",
+	"fc.row.comment" => "Commentaire",
+	"fc.peak" => "PIC",
+	"fc.pause" => "PAUSE",
+	"fc.union" => "G",
+	"fc.at" => "à",
+	"fc.stamp.red" => "R",
+	"fc.stamp.green" => "V",
+	"fc.stamp.yellow" => "J",
+	"fc.stamp.white" => "B",
+	"fc.stamp.baby" => "BB",
+];
