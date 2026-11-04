@@ -270,19 +270,13 @@ const USER_SETTING_CUSTOM_VALUE_MAX_CHARS = 255; // user_setting.value_str varch
 const USER_SETTING_INT_MIN = -2147483648;        // user_setting.value_int int(11)
 const USER_SETTING_INT_MAX = 2147483647;
 
-// The date formats a person can choose (dates only, never times): code => PHP date() pattern, the year on two digits.
-const USER_SETTING_DATE_FORMATS = [
-	"DMY_SLASH" => "d/m/y",   // 31/12/26: France, Spain, Italy, Portugal, United Kingdom...
-	"DMY_DOT" => "d.m.y",     // 31.12.26: Germany, Poland, Switzerland, Russia
-	"DMY_DASH" => "d-m-y",    // 31-12-26: Netherlands
-	"MDY_SLASH" => "m/d/y",   // 12/31/26: United States
-	"YMD_DASH" => "y-m-d",    // 26-12-31: Sweden, Canada
-	"YMD_SLASH" => "y/m/d",   // 26/12/31: Japan, China
-	"YMD_DOT" => "y.m.d",     // 26.12.31: Korea, Hungary
-];
-// The keys of USER_SETTING_DATE_FORMATS (a constant expression cannot call array_keys()).
+// The order of the day and the month in the compact date a person reads ("M 3 NOV" or "T NOV 3"), whatever the language.
+const USER_SETTING_DATE_ORDERS = ["DAY_FIRST", "MONTH_FIRST"];
+const USER_SETTING_DATE_ORDER_DEFAULT = "DAY_FIRST";
+
+// `dateFormat` is DEPRECATED: still accepted and told (v3 does not lose a field), but nothing reads it any more (the CSV writes ISO dates,
+// the PDF and the clients the compact date). Its codes, and the one an account that chose none has, by its language:
 const USER_SETTING_DATE_FORMAT_CODES = ["DMY_SLASH", "DMY_DOT", "DMY_DASH", "MDY_SLASH", "YMD_DASH", "YMD_SLASH", "YMD_DOT"];
-// The date format of an account that chose none, by the language of the account.
 const USER_SETTING_DATE_FORMAT_BY_LANGUAGE = [
 	"EN" => "DMY_SLASH", "FR" => "DMY_SLASH", "ES" => "DMY_SLASH", "IT" => "DMY_SLASH", "PT" => "DMY_SLASH", "DE" => "DMY_DOT", "PL" => "DMY_DOT",
 ];
@@ -296,6 +290,7 @@ const USER_SETTINGS = [
 	"autoMailExport" => ["auto_mail_export", USER_SETTING_TYPE_BOOL, false, null],              // the export of each finished cycle by mail
 	"dayBackgroundColor" => ["day_background_color", USER_SETTING_TYPE_BOOL, true, null],      // the colour behind each day
 	"dateFormat" => ["date_format", USER_SETTING_TYPE_CHOICE, null, USER_SETTING_DATE_FORMAT_CODES],
+	"dateOrder" => ["date_order", USER_SETTING_TYPE_CHOICE, USER_SETTING_DATE_ORDER_DEFAULT, USER_SETTING_DATE_ORDERS],
 	"temperatureUnit" => ["temperature_unit", USER_SETTING_TYPE_CHOICE, "C", USER_SETTING_TEMPERATURE_UNITS],
 	"notificationEmails" => ["notification_emails", USER_SETTING_TYPE_EMAILS, "", null],       // wants the current password to change (user_account_update())
 ];

@@ -20,7 +20,6 @@ declare(strict_types=1);
 // many fields on every row as in the header.
 
 require_once __DIR__ . "/data.php";
-require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/doc.php";
@@ -42,7 +41,8 @@ function doc_csv_columns(int $nfp_method): array {
 		...$temperature, "isPeak", "counterStart", "sexUnion", "observationPaused", "comments"];
 }
 
-// $display: user_setting_display() of the account: the dates and the temperatures are written the way it chose.
+// $display: user_setting_display() of the account: the temperatures are written in the unit it chose. The dates are ISO (YYYY-MM-DD), which
+// Excel and Google Sheets read as dates in every locale.
 function doc_csv_cycle($out, array $days, int $nfp_method, array $display): void {
 	$columns = doc_csv_columns($nfp_method);
 	$days = doc_temperature_unit($days, $display["temperature_unit"]);
@@ -50,7 +50,6 @@ function doc_csv_cycle($out, array $days, int $nfp_method, array $display): void
 	doc_csv_row($out, $columns);
 	foreach ($days as $day) {
 		$day = doc_display_day($day);
-		$day["date"] = date_human(new DateTime($day["date"]), $display["date_pattern"]);
 		doc_csv_row($out, array_map(fn($column) => doc_csv_value($day, $column), $columns));
 	}
 }

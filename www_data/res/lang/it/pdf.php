@@ -23,6 +23,8 @@ return [
 	"page" => "pagina {page} di {count}",
 	// the days of the week from Sunday, one letter each
 	"week_days" => ["D", "L", "M", "M", "G", "V", "S"],
+	// the months on 3 letters (shown in capitals), for the compact date
+	"months_short" => ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"],
 	"days.one" => "{n} giorno",
 	"days.other" => "{n} giorni",
 	"cycles.one" => "{n} ciclo",
@@ -58,7 +60,7 @@ return [
 	"fc.row.comment" => "Commento",
 	"fc.peak" => "PICCO",
 	"fc.pause" => "PAUSA",
-	"fc.union" => "R",
+	"fc.intercourse" => "I",
 	"fc.at" => "alle",
 	"fc.stamp.red" => "R",
 	"fc.stamp.green" => "V",

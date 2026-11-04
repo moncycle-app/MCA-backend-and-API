@@ -101,7 +101,7 @@ Also:
   domain in it; one that is missing a key throws.
 - **`user_setting.php`** the table `user_setting` (one row per account and name; a number in `value_int`, a text in `value_str`; no row = the
   default of `constants.php`). Three kinds of rows: the **optional settings** (`USER_SETTINGS`: JSON name => name in the table, type, default;
-  `timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `temperatureUnit`, `notificationEmails`), the **two-factor state**
+  `timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat` (deprecated, no effect), `dateOrder`, `temperatureUnit`, `notificationEmails`), the **two-factor state**
   (`totp_state`, `totp_secret`: written by `user_setting_set_totp()` only, never shown as a setting) and the **custom keys** of third parties
   (`customSettings`, stored as `custom.<key>`, so that a key can never be a setting of the app). `user_setting_check_body()` /
   `user_setting_check_custom()` check what a client sends (a wrong value is an issue; `null` resets to the default; a value equal to the stored

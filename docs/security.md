@@ -87,7 +87,7 @@ from the settings page). It sleeps 1 to 5 s on purpose, holding a worker: rate-l
 
 **Account settings.** `POST /api/v3/account` changes every setting. The mandatory ones (nickname, method, birth year, language, research
 consent, address, password) are columns of `user_account`; the optional ones (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`,
-`dateFormat`, `temperatureUnit`, `notificationEmails`), the two-factor state and the keys of third parties (`customSettings`) are rows of
+`dateFormat`, `dateOrder`, `temperatureUnit`, `notificationEmails`), the two-factor state and the keys of third parties (`customSettings`) are rows of
 `user_setting`. Every value is checked in PHP before it is written, and only what is sent is written. A key of `customSettings` is stored as
 `custom.<key>`: it can never reach the two-factor secret or a setting of the app, and the raw data export masks `totp_secret`. Three changes
 want the current password again as `password`:

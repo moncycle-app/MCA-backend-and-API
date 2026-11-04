@@ -1484,7 +1484,7 @@ paths:
 
         - **Mandatory** (asked at sign-up, kept in the account): `nickname`, `method`, `temperatureTracking`, `birthYear`,
           `language`, `research`, `loginEmail`, `newPassword`. `GET /account` shows them flat.
-        - **Optional** (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `temperatureUnit`,
+        - **Optional** (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `dateOrder`, `temperatureUnit`,
           `notificationEmails`): sent flat in the same body, e.g. `{"temperatureUnit": "F"}`. `GET /account` lists them all in
           `settings`, each as `{value, isSet, default}`: `isSet: false` means the account never chose, `value` is then the
           `default`. **`null` puts an optional setting back to its default** (the only place where `null` means something).
@@ -1500,9 +1500,23 @@ paths:
         | `timelineAscending` | boolean: `false` puts today at the top of the table | `true` |
         | `autoMailExport` | boolean: mail the export of each finished cycle | `false` |
         | `dayBackgroundColor` | boolean: show the colour behind each day | `true` |
-        | `dateFormat` | `DMY_SLASH` 31/12/26, `DMY_DOT` 31.12.26, `DMY_DASH` 31-12-26, `MDY_SLASH` 12/31/26, `YMD_DASH` 26-12-31, `YMD_SLASH` 26/12/31, `YMD_DOT` 26.12.31 (dates only, never times; the PDF and the CSV of an export follow it) | by `language`: `DMY_DOT` for `DE` and `PL`, `DMY_SLASH` for the others |
+        | `dateFormat` | `DMY_SLASH` 31/12/26, `DMY_DOT` 31.12.26, `DMY_DASH` 31-12-26, `MDY_SLASH` 12/31/26, `YMD_DASH` 26-12-31, `YMD_SLASH` 26/12/31, `YMD_DOT` 26.12.31 (dates only, never times). **Deprecated, no effect**: still accepted and told so that no client breaks, but nothing reads it. The CSV of an export writes ISO dates (spreadsheets read them in any locale), and every date a person reads is the compact or the long date (`dateOrder`, below). Do not offer it | by `language`: `DMY_DOT` for `DE` and `PL`, `DMY_SLASH` for the others |
+        | `dateOrder` | `DAY_FIRST` or `MONTH_FIRST`: the order of the day and the month in the compact and the long date, whatever the language of the account | `DAY_FIRST` |
         | `temperatureUnit` | `C` or `F`. **Temperatures stay in Celsius in the API and in the NFP files**: the client converts. The PDF and the CSV of an export follow it. | `C` |
         | `notificationEmails` | see below (needs the password) | `""` |
+
+        ### Dates a person reads
+
+        The API carries ISO dates (`2026-11-03`) only. A client shows them in one of two forms, in the language of the account and in
+        the `dateOrder` the account chose (not the language's habit). The PDF of an export uses the compact form; the NFP file and the
+        CSV never do (ISO dates, `YYYY-MM-DD`, in both).
+
+        | Form | `DAY_FIRST` | `MONTH_FIRST` | Where |
+        |---|---|---|---|
+        | **Compact**: weekday initial, day, month on 3 letters in capitals; the year on two digits **only when it is not the current year** | `M 3 NOV`, `M 3 NOV 25` | `T NOV 3`, `T NOV 3, 25` | lists, timeline rows, cycle titles, charts, PDF |
+        | **Long**: the whole weekday, the day, the whole month, **always the year** | `Tuesday 3 November 2026` | `Tuesday, November 3, 2026` | the form of a day, confirmations |
+
+        The words (weekdays, months, their layout) belong to the client's language; the server's own are in the PDF.
 
         **Partial update:** only the fields you send change. (`POST /day/{date}` is the opposite.) `{}` is valid and changes
         nothing; `null` is the same as not sent. Send only the one of `method` / `temperatureTracking` you change.
@@ -1553,7 +1567,7 @@ paths:
         | `birthYear` | integer | This year or up to 100 years earlier. |
         | `language` | `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | Language of the account. |
         | `timelineAscending`, `autoMailExport`, `dayBackgroundColor` | boolean | Optional settings, see above. |
-        | `dateFormat`, `temperatureUnit` | string | Optional settings, see above. |
+        | `dateFormat`, `dateOrder`, `temperatureUnit` | string | Optional settings, see above. |
         | `customSettings` | object | Keys of third parties, see above. |
         | `research` | boolean | Consent to contribute anonymous data to research. |
         | `lastWriteClientUtc` | string (RFC 3339) | Your own clock. |
@@ -2251,7 +2265,7 @@ paths:
         | `format` | Content type | Purpose |
         |---|---|---|
         | `nfp` | `application/json` | **Portable data**: the NFP format, to move data to another app. `POST /import` reads it. See the `NfpFile` schema. |
-        | `csv` | `text/csv; charset=utf-8` | A spreadsheet, one row per day. Dates are written in the account's `dateFormat` and temperatures in its `temperatureUnit`, like the `pdf`; the `nfp` file never changes (ISO dates, Celsius). |
+        | `csv` | `text/csv; charset=utf-8` | A spreadsheet, one row per day. Dates are ISO (`2026-09-20`, read as dates by Excel and Google Sheets) and temperatures are in the account's `temperatureUnit`; the `nfp` file never changes (ISO dates, Celsius). The `pdf` writes its dates in the compact form of `dateOrder` (see "Dates a person reads") and its temperatures in `temperatureUnit`. |
         | `pdf` | `application/pdf` | A printable chart, laid out for the account's method. |
 
         Only a `200` is a file. A failure is the usual `error` envelope: `validation_failed` (missing or malformed date,
@@ -2928,7 +2942,7 @@ components:
           description: |-
             The optional settings, all of them, whether the account set them or not. Read-only here: write them flat in `POST /account`
             (`null` puts one back to its default).
-          required: [timelineAscending, autoMailExport, dayBackgroundColor, dateFormat, temperatureUnit, notificationEmails]
+          required: [timelineAscending, autoMailExport, dayBackgroundColor, dateFormat, dateOrder, temperatureUnit, notificationEmails]
           properties:
             timelineAscending:
               $ref: '#/components/schemas/SettingBoolean'
@@ -2938,6 +2952,8 @@ components:
               $ref: '#/components/schemas/SettingBoolean'
             dateFormat:
               $ref: '#/components/schemas/SettingDateFormat'
+            dateOrder:
+              $ref: '#/components/schemas/SettingDateOrder'
             temperatureUnit:
               $ref: '#/components/schemas/SettingTemperatureUnit'
             notificationEmails:
@@ -2967,6 +2983,8 @@ components:
 
     SettingDateFormat:
       type: object
+      deprecated: true
+      description: Deprecated, no effect: see `dateOrder`.
       required: [value, isSet, default]
       properties:
         value:
@@ -2979,6 +2997,21 @@ components:
           type: string
           enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
           description: What `value` is when the account chose nothing; it follows the `language` of the account.
+
+    SettingDateOrder:
+      type: object
+      required: [value, isSet, default]
+      properties:
+        value:
+          type: string
+          enum: [DAY_FIRST, MONTH_FIRST]
+          description: The value in force. The default when `isSet` is `false`.
+        isSet:
+          type: boolean
+        default:
+          type: string
+          enum: [DAY_FIRST, MONTH_FIRST]
+          description: What `value` is when the account chose nothing (`DAY_FIRST`, whatever the language).
 
     SettingTemperatureUnit:
       type: object
@@ -3903,7 +3936,13 @@ components:
           type: string
           nullable: true
           enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
-          description: Optional setting. How dates are written (the year on two digits), in the app and in the PDF and CSV exports. `null` puts it back to the default of the account's language.
+          deprecated: true
+          description: Deprecated, no effect (see `dateOrder`; the CSV export writes ISO dates). Still accepted, checked and told, so that no client breaks. `null` puts it back to the default of the account's language.
+        dateOrder:
+          type: string
+          nullable: true
+          enum: [DAY_FIRST, MONTH_FIRST]
+          description: Optional setting. The order of the day and the month in the compact and the long date, in the app and in the PDF. `null` puts it back to `DAY_FIRST`.
         temperatureUnit:
           type: string
           nullable: true

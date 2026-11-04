@@ -80,10 +80,11 @@ function user_setting_custom_to_json(array $rows): array {
 	return $custom;
 }
 
-// How a server-made document shows what is stored: the PHP date() pattern and the temperature unit of the account.
+// How a server-made document shows what is stored: the order of day and month of the compact date (the PDF) and the temperature unit
+// of the account.
 function user_setting_display(array $rows, string $language): array {
 	return [
-		"date_pattern" => USER_SETTING_DATE_FORMATS[user_setting_value($rows, "dateFormat", $language)],
+		"date_order" => user_setting_value($rows, "dateOrder", $language),
 		"temperature_unit" => user_setting_value($rows, "temperatureUnit", $language),
 	];
 }

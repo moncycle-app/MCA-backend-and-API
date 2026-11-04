@@ -33,13 +33,14 @@ require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_pdf.php";
 require_once __DIR__ . "/res.php";
 
-function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $language, bool $anonymous = false, string $date_pattern = 'd/m/y'): DocPdf {
+function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $language, bool $anonymous = false, string $date_order = USER_SETTING_DATE_ORDER_DEFAULT): DocPdf {
 	$days = doc_days_without_paused($days);
 	$first_date = new DateTime($days[0]["date"]);
 	$last_date = new DateTime(end($days)["date"]);
 	if ($anonymous) $name = doc_get_initials($name) . " " . res_t("pdf", $language, "anonymous");
 
-	$pdf = new DocPdf('P', 'A4', res_t("pdf", $language, "title", ["date" => date_human($first_date, $date_pattern)]), $name);
+	$words = res_words("pdf", $language);
+	$pdf = new DocPdf('P', 'A4', res_t("pdf", $language, "title", ["date" => date_compact($first_date, $words, $date_order, false)]), $name);
 	$pdf->SetMargins(DOC_PDF_MARGIN, DOC_PDF_MARGIN);
 
 	$rows = doc_mucus_rows($days);
@@ -53,7 +54,7 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 		$cycles_text = res_t("pdf", $language, $cycle_count > 1 ? "cycles.other" : "cycles.one", ["n" => $cycle_count]);
 		$summary = $anonymous
 			? res_t("pdf", $language, "mucus.subtitle_anonymous", ["days" => $days_text, "cycles" => $cycles_text])
-			: res_t("pdf", $language, "mucus.subtitle", ["days" => $days_text, "cycles" => $cycles_text, "start" => date_human($first_date, $date_pattern), "end" => date_human($last_date, $date_pattern)]);
+			: res_t("pdf", $language, "mucus.subtitle", ["days" => $days_text, "cycles" => $cycles_text, "start" => date_compact($first_date, $words, $date_order, false), "end" => date_compact($last_date, $words, $date_order, false)]);
 	}
 
 	// one layout per cycle (a cycle starts a page): its columns are the ones its days use. The temperature scale is the export's.
@@ -63,8 +64,8 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 	$layouts = [];
 	foreach (doc_mucus_cycles($rows) as $group => $indexes) {
 		$layout = doc_mucus_layout($pdf, array_intersect_key($rows, array_flip($indexes)), $scale, $language);
-		$layout["date_pattern"] = $date_pattern;
-		$layout["week_days"] = res_words("pdf", $language)["week_days"];
+		$layout["date_order"] = $date_order;
+		$layout["words"] = $words;
 		$layouts[$group] = $layout;
 		foreach ($indexes as $index) $rows[$index]["group"] = $group;
 	}
@@ -75,7 +76,7 @@ function doc_mucus_pdf(array $days, int $nfp_method, string $name, string $langu
 		$pdf->AddPage();
 		$layout = $layouts[$rows[$first]["group"]];
 		$page = count($pages) > 1 ? res_t("pdf", $language, "page", ["page" => $page_index + 1, "count" => count($pages)]) : "";
-		$pdf->PageTitle($name, doc_mucus_cycle_pieces($cycles[$rows[$first]["group"]], $cycle_count, $language, $anonymous, $date_pattern), $page);
+		$pdf->PageTitle($name, doc_mucus_cycle_pieces($cycles[$rows[$first]["group"]], $cycle_count, $language, $anonymous, $date_order), $page);
 		doc_mucus_draw_head($pdf, $layout);
 
 		$previous_point = null;   // the last point drawn on the temperature curve
@@ -212,13 +213,14 @@ function doc_mucus_cycle_summaries(array $rows): array {
 
 // The line under the name, in pieces: the cycle of the page, its number among the export's when there are several, its length, its dates, its
 // peak. The first piece is drawn in a chip. No piece for the days before the first cycle start.
-function doc_mucus_cycle_pieces(array $cycle, int $count, string $language, bool $anonymous, string $date_pattern): array {
+function doc_mucus_cycle_pieces(array $cycle, int $count, string $language, bool $anonymous, string $date_order): array {
 	if (is_null($cycle["n"])) return [];
+	$words = res_words("pdf", $language);
 	$pieces = [];
 	if ($count > 1) $pieces[] = res_t("pdf", $language, "mucus.cycle", ["n" => $cycle["n"], "count" => $count]);
 	$pieces[] = res_t("pdf", $language, $cycle["days"] > 1 ? "days.other" : "days.one", ["n" => $cycle["days"]]);
 	if (!$anonymous) {
-		$pieces[] = res_t("pdf", $language, "mucus.cycle_dates", ["start" => date_human(new DateTime($cycle["start"]), $date_pattern), "end" => date_human(new DateTime($cycle["end"]), $date_pattern)]);
+		$pieces[] = res_t("pdf", $language, "mucus.cycle_dates", ["start" => date_compact(new DateTime($cycle["start"]), $words, $date_order, false), "end" => date_compact(new DateTime($cycle["end"]), $words, $date_order, false)]);
 	}
 	if (!is_null($cycle["peak"])) $pieces[] = res_t("pdf", $language, "mucus.cycle_peak", ["day" => $cycle["peak"]]);
 	return $pieces;
@@ -498,9 +500,10 @@ function doc_mucus_draw_row(DocPdf $pdf, array $row, array $layout, float $y, bo
 	// the date and the day of the cycle, bold on a Sunday
 	$date = new DateTime($day["date"]);
 	$week_day = intval($date->format('w'));
-	$date_label = $layout["week_days"][$week_day] . ($anonymous ? "" : " " . date_human($date, $layout["date_pattern"]));
+	$date_label = $anonymous ? $layout["words"]["week_days"][$week_day] : date_compact($date, $layout["words"], $layout["date_order"]);
 	$bold = $week_day === 0;
 	$pdf->UseStyle($bold ? 'mucus.date.sunday' : 'mucus.date');
+	$pdf->ShrinkToFit($date_label, $columns["date"]["w"]);
 	$pdf->SetXY($columns["date"]["x"], $y);
 	$pdf->Cell($columns["date"]["w"], $h, $date_label, 0, 0, 'C');
 	$pdf->UseStyle($bold ? 'mucus.day_number.bold' : 'mucus.day_number');

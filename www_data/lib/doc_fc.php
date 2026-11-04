@@ -26,20 +26,20 @@ require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_pdf.php";
 require_once __DIR__ . "/res.php";
 
-function doc_fc_pdf(array $days, int $nfp_method, string $name, string $language, bool $anonymous = false, string $date_pattern = 'd/m/y'): DocPdf {
+function doc_fc_pdf(array $days, int $nfp_method, string $name, string $language, bool $anonymous = false, string $date_order = USER_SETTING_DATE_ORDER_DEFAULT): DocPdf {
 	$days = doc_days_without_paused($days);
 	$with_temperature = user_account_tracks_temperature($nfp_method);
 	if ($anonymous) $name = doc_get_initials($name) . " " . res_t("pdf", $language, "anonymous");
 
-	$pdf = new DocPdf('L', 'A3', res_t("pdf", $language, "title", ["date" => date_human(new DateTime($days[0]["date"]), $date_pattern)]), $name);
+	$pdf = new DocPdf('L', 'A3', res_t("pdf", $language, "title", ["date" => date_compact(new DateTime($days[0]["date"]), res_words("pdf", $language), $date_order, false)]), $name);
 	$pdf->SetMargins(DOC_PDF_MARGIN, DOC_PDF_MARGIN);
 	$grid = doc_fc_layout($pdf, $with_temperature, $anonymous, $language);
-	$grid["date_pattern"] = $date_pattern;
+	$grid["date_order"] = $date_order;
 
 	// built once, then paginated: the page count cannot disagree with what is drawn
 	$lines_per_page = $with_temperature ? DOC_FC_LINES_PER_PAGE_TEMPERATURE : DOC_FC_LINES_PER_PAGE;
 	$pages = array_chunk(doc_fc_grid_rows($days, $language), $lines_per_page);
-	$pieces = doc_fc_title_pieces($days, $language, $anonymous, $date_pattern);
+	$pieces = doc_fc_title_pieces($days, $language, $anonymous, $date_order);
 
 	foreach ($pages as $page_index => $page_rows) {
 		$pdf->AddPage();
@@ -59,17 +59,18 @@ function doc_fc_pdf(array $days, int $nfp_method, string $name, string $language
 
 // The line under the name, in pieces: what the export covers (in the chip; its length only when anonymous), its days and cycles, and the day
 // it was made.
-function doc_fc_title_pieces(array $days, string $language, bool $anonymous, string $date_pattern): array {
+function doc_fc_title_pieces(array $days, string $language, bool $anonymous, string $date_order): array {
+	$words = res_words("pdf", $language);
 	$cycles = count(array_filter($days, fn($day) => !empty($day["cycleFirstDay"])));
 	$days_text = res_t("pdf", $language, count($days) > 1 ? "days.other" : "days.one", ["n" => count($days)]);
 	$pieces = $anonymous ? [$days_text] : [
 		res_t("pdf", $language, "fc.observations", [
-			"start" => date_human(new DateTime($days[0]["date"]), $date_pattern), "end" => date_human(new DateTime(end($days)["date"]), $date_pattern),
+			"start" => date_compact(new DateTime($days[0]["date"]), $words, $date_order, false), "end" => date_compact(new DateTime(end($days)["date"]), $words, $date_order, false),
 		]),
 		$days_text,
 	];
 	if ($cycles > 0) $pieces[] = res_t("pdf", $language, $cycles > 1 ? "cycles.other" : "cycles.one", ["n" => $cycles]);
-	$pieces[] = res_t("pdf", $language, "fc.created", ["today" => date_human(new DateTime(), $date_pattern)]);
+	$pieces[] = res_t("pdf", $language, "fc.created", ["today" => date_compact(new DateTime(), $words, $date_order, false)]);
 	return $pieces;
 }
 
@@ -286,11 +287,12 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 	if (!is_null($day)) {
 		$date = new DateTime($day["date"]);
 		$week_day = intval($date->format('w'));
-		$week_days = res_words("pdf", $grid["language"])["week_days"];
-		$date_text = $grid["anonymous"] ? $week_days[$week_day] : date_human_week_day($date, $week_days, $grid["date_pattern"]);
+		$words = res_words("pdf", $grid["language"]);
+		$date_text = $grid["anonymous"] ? $words["week_days"][$week_day] : date_compact($date, $words, $grid["date_order"]);
 		if ($week_day === 0) $date_style = 'fc.date.sunday';
 	}
 	$pdf->UseStyle($date_style, $paused ? $text_color : null);
+	$pdf->ShrinkToFit($date_text, $w);   // "M 30 NOV 25" is wider than a day's cell
 	$pdf->SetXY($x, $row_y(2));
 	$pdf->Cell($w, $line_h, $date_text, 'B', 0, 'C');
 
@@ -304,9 +306,9 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 	$pdf->SetXY($x, $row_y(4));
 	$pdf->Cell($w, $line_h, $mucus, 'B', 0, 'C');
 
-	// other info: the arrow, the pain codes and the union (`fc.union`, a letter per language)
+	// other info: the arrow, the pain codes and the intercourse (`fc.intercourse`, "I")
 	$pain = $day["codifiedPainObservations"] ?? '';
-	$other = $pain . ($pain !== '' ? ' ' : '') . (!empty($day["sexUnion"]) ? res_t("pdf", $grid["language"], "fc.union") : '');
+	$other = $pain . ($pain !== '' ? ' ' : '') . (!empty($day["sexUnion"]) ? res_t("pdf", $grid["language"], "fc.intercourse") : '');
 	$arrow = DOC_FC_ARROWS[$day["codifiedArrow"] ?? ''] ?? '';
 	$pdf->SetXY($x, $row_y(5));
 	if ($other !== '' && $arrow !== '') {

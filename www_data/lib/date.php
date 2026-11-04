@@ -15,14 +15,20 @@
 
 declare(strict_types=1);
 
-// A date as the account wants to read it: $pattern is one of USER_SETTING_DATE_FORMATS, the year on two digits.
+// A date in a PHP date() pattern: 31/12/26 by default (the cycle mail's dates), or a file name's.
 function date_human(DateTimeInterface $date, string $pattern = 'd/m/y'): string {
 	return $date->format($pattern);
 }
 
-// The day of the week, then the date without its year ("lun. 31/12", "Mon 12/31", "Mon 12-31").
-function date_human_week_day(DateTimeInterface $date, array $week_days, string $pattern = 'd/m/y'): string {
-	return $week_days[intval($date->format('w'))] . $date->format(' ' . preg_replace('/^y[\/.\-]|[\/.\-]y$/', '', $pattern));
+// The compact date: the weekday's initial, the day and the month on 3 letters, in capitals, in the order the account chose ("M 3 NOV",
+// "T NOV 3"); the year on two digits follows when it is not the current one ("M 3 NOV 25", "T NOV 3, 25"). $words are the words of the
+// language (res_words("pdf")): "week_days" from Sunday and "months_short". No weekday initial when $week_day is false.
+function date_compact(DateTimeInterface $date, array $words, string $order, bool $week_day = true): string {
+	$day = $date->format('j');
+	$month = mb_strtoupper($words["months_short"][intval($date->format('n')) - 1]);
+	$text = $order === "MONTH_FIRST" ? "$month $day" : "$day $month";
+	if ($date->format('Y') !== date('Y')) $text .= ($order === "MONTH_FIRST" ? ", " : " ") . $date->format('y');
+	return $week_day ? $words["week_days"][intval($date->format('w'))] . " " . $text : $text;
 }
 
 function date_next_day(string $date): string {

@@ -7,10 +7,18 @@ def setting(a, name):
     return a.get("account").data["settings"][name]
 
 
+def account_with_a_cycle(method=2):
+    a = Account(method=method)
+    a.post("day/2026-09-20", {"cycleFirstDay": True, "stampColor": "Red"})
+    a.post("day/2026-09-21", {"stampColor": "Green"})
+    return a
+
+
 class OptionalSettings(ApiTest):
     def test_every_optional_setting_is_listed_with_its_default_even_when_not_set(self):
         s = Account().get("account").data["settings"]
-        self.assertEqual(sorted(s), ["autoMailExport", "dateFormat", "dayBackgroundColor", "notificationEmails", "temperatureUnit", "timelineAscending"])
+        self.assertEqual(sorted(s), ["autoMailExport", "dateFormat", "dateOrder", "dayBackgroundColor", "notificationEmails", "temperatureUnit", "timelineAscending"])
+        self.assertEqual(s["dateOrder"], {"value": "DAY_FIRST", "isSet": False, "default": "DAY_FIRST"})
         self.assertEqual(s["timelineAscending"], {"value": True, "isSet": False, "default": True})
         self.assertEqual(s["autoMailExport"], {"value": False, "isSet": False, "default": False})
         self.assertEqual(s["autoMailExport"], {"value": False, "isSet": False, "default": False})
@@ -56,6 +64,22 @@ class OptionalSettings(ApiTest):
         self.assertEqual(setting(a, "dateFormat"), {"value": "DMY_DOT", "isSet": False, "default": "DMY_DOT"})
         a.post("account", {"dateFormat": "MDY_SLASH"})
         self.assertEqual(setting(a, "dateFormat"), {"value": "MDY_SLASH", "isSet": True, "default": "DMY_DOT"})
+
+    def test_the_date_order_does_not_follow_the_language(self):
+        a = Account()
+        a.post("account", {"language": "EN"})
+        self.assertEqual(setting(a, "dateOrder"), {"value": "DAY_FIRST", "isSet": False, "default": "DAY_FIRST"})
+        a.post("account", {"dateOrder": "MONTH_FIRST"})
+        a.post("account", {"language": "FR"})
+        self.assertEqual(setting(a, "dateOrder"), {"value": "MONTH_FIRST", "isSet": True, "default": "DAY_FIRST"})
+        a.post("account", {"dateOrder": None})
+        self.assertEqual(setting(a, "dateOrder")["isSet"], False)
+
+    def test_a_date_order_that_is_not_one_is_refused(self):
+        a = Account()
+        self.assertIssues(a.post("account", {"dateOrder": "DMY_SLASH"}), "dateOrder")
+        self.assertIssues(a.post("account", {"dateOrder": 1}), "dateOrder")
+        self.assertEqual(setting(a, "dateOrder")["isSet"], False)
 
     def test_sponsor_is_gone(self):
         self.assertIssues(Account().post("account", {"sponsor": True}), "sponsor")
@@ -113,12 +137,28 @@ class CustomSettings(ApiTest):
 
 
 class Exports(ApiTest):
-    def test_the_csv_follows_the_date_format_and_the_temperature_unit(self):
+    def test_the_csv_has_iso_dates_and_follows_the_temperature_unit(self):
         a = Account(method=4)
         a.post("day/2026-09-20", {"temperature": 36.5, "cycleFirstDay": True})
-        a.post("account", {"dateFormat": "MDY_SLASH", "temperatureUnit": "F"})
+        a.post("account", {"dateFormat": "MDY_SLASH", "temperatureUnit": "F"})   # the deprecated date format has no effect
         r = a.get("export/csv?from=2026-09-20&to=2026-09-20")
         self.assertStatus(r, 200)
         text = r.body.decode("utf-8")
-        self.assertIn("09/20/26", text)
+        self.assertIn("2026-09-20", text)
+        self.assertNotIn("09/20/26", text)
         self.assertIn("97,7", text)   # the decimal comma of the ";" separator
+
+    def test_the_date_order_does_not_change_the_csv_nor_the_nfp_file(self):
+        a = account_with_a_cycle()
+        a.post("account", {"dateOrder": "MONTH_FIRST"})
+        self.assertIn("2026-09-20", a.get("export/csv?from=2026-09-01&to=2026-09-30").body.decode("utf-8-sig"))
+        self.assertEqual(a.get("export/nfp?from=2026-09-01&to=2026-09-30").json["cycles"][0]["cycleStartDate"], "2026-09-20")
+
+    def test_the_pdf_is_made_in_both_date_orders_and_every_method(self):
+        for method in (2, 4):
+            a = account_with_a_cycle(method)
+            for order in ("DAY_FIRST", "MONTH_FIRST"):
+                a.post("account", {"dateOrder": order})
+                r = a.get("export/pdf?from=2026-09-01&to=2026-09-30")
+                self.assertStatus(r, 200)
+                self.assertTrue(r.body.startswith(b"%PDF"))

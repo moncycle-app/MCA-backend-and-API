@@ -71,10 +71,10 @@ function doc_export_day(array $day): array {
 	return $day;
 }
 
-// $language: the account's, the words of the chart. $display: user_setting_display() of the account, the date format and the temperature unit it chose.
+// $language: the account's, the words of the chart. $display: user_setting_display() of the account, the order of day and month and the temperature unit it chose.
 function doc_export_pdf(array $days, int $nfp_method, string $name, string $language, array $display, bool $anonymous = false): DocPdf {
 	$days = doc_temperature_unit($days, $display["temperature_unit"]);
-	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $language, $anonymous, $display["date_pattern"]);
-	return doc_mucus_pdf($days, $nfp_method, $name, $language, $anonymous, $display["date_pattern"]);
+	if (user_account_method_name($nfp_method) === NFP_METHOD_FERTILITY_CARE) return doc_fc_pdf($days, $nfp_method, $name, $language, $anonymous, $display["date_order"]);
+	return doc_mucus_pdf($days, $nfp_method, $name, $language, $anonymous, $display["date_order"]);
 }
 
