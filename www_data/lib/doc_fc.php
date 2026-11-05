@@ -234,9 +234,9 @@ function doc_fc_draw_cell(DocPdf $pdf, ?array $cell, array $grid, float $x, floa
 	$pdf->SetXY($x, $row_y(4));
 	$pdf->Cell($w, $line_h, $mucus, 'B', 0, 'C');
 
-	// other info: the arrow, the pain codes and the union ("G")
+	// other info: the arrow, the pain codes and the union ("I", the FertilityCare letter for intercourse)
 	$pain = $day["codifiedPainObservations"] ?? '';
-	$other = $pain . ($pain !== '' ? ' ' : '') . (!empty($day["sexUnion"]) ? "G" : '');
+	$other = $pain . ($pain !== '' ? ' ' : '') . (!empty($day["sexUnion"]) ? "I" : '');
 	$arrow = DOC_FC_ARROWS[$day["codifiedArrow"] ?? ''] ?? '';
 	$pdf->SetXY($x, $row_y(5));
 	if ($other !== '' && $arrow !== '') {

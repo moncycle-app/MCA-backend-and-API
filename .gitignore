@@ -18,3 +18,5 @@ TODO.md
 CLAUDE.md
 dev.env
 SECURITY_AUDIT.md
+tests/
+www_data/api/v3/
