@@ -22,6 +22,7 @@ if (PHP_SAPI !== "cli") {
 
 require_once __DIR__ . "/../../config.php";
 require_once __DIR__ . "/../../lib/db_ops.php";
+require_once __DIR__ . "/../../lib/upgrade.php";
 
 print("MONCYCLE.APP");
 print(PHP_EOL);
@@ -43,8 +44,6 @@ $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 // dump taken before (docs/upgrading.md), do not run the script again on it.
 try {
 
-    $db->exec("START TRANSACTION");
-
     print("reading v15_to_v16.sql file ...");
     print(PHP_EOL);
 
@@ -53,6 +52,19 @@ try {
     if ($v15_to_v16_schema_migration === false) {
         throw new RuntimeException("cannot read v15_to_v16.sql: nothing has been changed");
     }
+
+    // The FertilityCare note, split in columns: they must exist before the data step that fills them, and v15_to_v16.sql drops fc_score
+    // after it. Here and not in the .sql, which runs as a whole, after the data steps. An ALTER TABLE commits: before the transaction.
+    $db->exec("ALTER TABLE `day_timeline`
+        ADD `fc_bleeding` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_score`,
+        ADD `fc_bleeding_brown` tinyint(1) unsigned DEFAULT NULL AFTER `fc_bleeding`,
+        ADD `fc_mucus_sensation` varchar(4) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_bleeding_brown`,
+        ADD `fc_mucus_observation` set('B','C','G','K','P','Y','L') COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_mucus_sensation`,
+        ADD `fc_number_observations` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_mucus_observation`,
+        ADD `fc_pain` varchar(3) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_number_observations`,
+        ALGORITHM=INSTANT");
+
+    $db->exec("START TRANSACTION");
 
     // Data steps (before the schema ones).
     // user_setting.value_str holds 255 characters, notification_emails held 1024: a list that does not fit keeps the addresses that do.
@@ -68,10 +80,18 @@ try {
         print(PHP_EOL);
     }
 
+    $fc_split = upgrade_split_fc_score($db);
+    print($fc_split["read"] . " FertilityCare notes split in columns");
+    print(PHP_EOL);
+    foreach ($fc_split["approximated"] as $no_day) {
+        print("day " . $no_day . ": its FertilityCare note said more than the columns hold, the strongest codes were kept");
+        print(PHP_EOL);
+    }
+
     print("migrating schema (executing v15_to_v16.sql) ...");
     print(PHP_EOL);
 
-    $db->exec($v15_to_v16_schema_migration);
+    db_ops_exec_script($db, $v15_to_v16_schema_migration);
 
     print("commiting DB changes ...");
     print(PHP_EOL);

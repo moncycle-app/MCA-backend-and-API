@@ -62,9 +62,46 @@ class WriteAndRead(ApiTest):
 
     def test_fertilitycare_codes(self):
         b = Account(method=3)
-        b.post("day/" + D, {"stampColor": "Green", "codifiedMucusObservation": "CK", "codifiedArrow": "Up"})
+        b.post("day/" + D, {"stampColor": "Green", "codifiedMucusObservation": ["C", "K"], "codifiedArrow": "Up"})
         d = b.get("day/" + D).data
-        self.assertEqual((d["codifiedMucusObservation"], d["codifiedArrow"]), ("CK", "Up"))
+        self.assertEqual((d["codifiedMucusObservation"], d["codifiedArrow"]), (["C", "K"], "Up"))
+
+    def test_each_part_of_a_fertilitycare_note_comes_back_in_its_own_field(self):
+        b = Account(method=3)
+        note = {"codifiedBleedingObservation": "VL", "codifiedBleedingBrown": True, "codifiedMucusSensation": "10WL",
+                "codifiedMucusObservation": ["K", "L"], "codifiedNumberObservations": "AD", "codifiedPainObservations": "RAP"}
+        self.assertStatus(b.post("day/" + D, note), 201)
+        d = b.get("day/" + D).data
+        self.assertEqual({k: d[k] for k in note}, note)
+
+    def test_a_fertilitycare_day_read_can_be_sent_back_and_a_day_without_a_note_says_so(self):
+        b = Account(method=3)
+        b.post("day/" + D, {"stampColor": "Green"})
+        d = b.get("day/" + D).data
+        self.assertEqual((d["codifiedBleedingObservation"], d["codifiedBleedingBrown"], d["codifiedMucusObservation"]), (None, False, []))
+        self.assertStatus(b.post("day/" + D, d), 200)
+
+    def test_zero_is_a_fertilitycare_code_not_an_empty_one(self):
+        b = Account(method=3)
+        b.post("day/" + D, {"codifiedMucusSensation": "0"})
+        self.assertEqual(b.get("day/" + D).data["codifiedMucusSensation"], "0")
+
+    def test_the_mucus_letters_are_answered_in_one_order_each_once_and_any_case_is_read(self):
+        b = Account(method=3)
+        b.post("day/" + D, {"codifiedMucusObservation": ["l", "K", "B", "K"], "codifiedNumberObservations": "x1"})
+        d = b.get("day/" + D).data
+        self.assertEqual((d["codifiedMucusObservation"], d["codifiedNumberObservations"]), (["B", "K", "L"], "X1"))
+
+    def test_a_fertilitycare_note_must_be_given_in_its_parts(self):
+        b = Account(method=3)
+        for field, value in (("codifiedBleedingObservation", "VLB"), ("codifiedBleedingObservation", "B"), ("codifiedBleedingObservation", "HM"),
+                             ("codifiedMucusSensation", "10KL"), ("codifiedMucusSensation", "24"), ("codifiedNumberObservations", "X1X2"),
+                             ("codifiedPainObservations", "APLAP"), ("codifiedMucusObservation", "CK"), ("codifiedMucusObservation", ["CK"]),
+                             ("codifiedMucusObservation", [1]), ("codifiedBleedingBrown", "B")):
+            with self.subTest(field=field, value=value):
+                r = b.post("day/" + D, {field: value})
+                self.assertError(r, 400, "validation_failed")
+                self.assertEqual(r.error["details"]["issues"][0]["field"], field)
 
     def test_clearing_a_day(self):
         a = Account()

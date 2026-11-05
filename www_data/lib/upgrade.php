@@ -92,3 +92,61 @@ function upgrade_run($db): bool {
 		db_querie_release_lock($db, UPGRADE_LOCK_NAME);
 	}
 }
+
+// The note v15 kept in one string (day_timeline.fc_score) as the columns of v16, the way v15 read it. The tables are written out here and
+// not taken from constants.php: what a v15 string means does not change with the notation of later versions. 'approximated' tells
+// that the string said more than the columns hold: two codes where one fits (the strongest stays: the handbook notes the most fertile
+// sign of the day), or characters no code explains ("12KL" is 2KL, as v15 showed it).
+function upgrade_fc_score_parts(string $fc_score): array {
+	$rest = strtoupper(trim($fc_score));
+
+	// B beside the flow, at the head of the note, is the bleeding; further on ("6BC") it is a letter of the mucus
+	$brown = preg_match('/^(VH|VL|H|M|L(?!AP))?\s*B/', $rest) === 1;
+	// a leading L (not the start of LAP) is the light flow; any other L is the lubrication letter
+	$light = str_starts_with($rest, 'L') && !str_starts_with($rest, 'LAP');
+	if ($light) $rest = substr($rest, 1);
+
+	// a longer code first ("10DL" is not "10" and "L"), each taken out once found; R is in no group: taken out and ignored
+	$found = [];
+	foreach (['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', 'X2', 'X3', 'AD', 'AP', 'VL', 'VH', '2W', '10', 'H', 'M', 'L', 'B', '0', '2', '4', '6', '8', 'C', 'G', 'K', 'P', 'Y', 'R'] as $code) {
+		if (!str_contains($rest, $code)) continue;
+		$found[$code] = true;
+		$rest = str_replace($code, '', $rest);
+	}
+
+	// the lists run from the strongest to the weakest
+	$flows = array_values(array_filter(['VH', 'H', 'M', 'L', 'VL'], fn($code) => $code === 'L' ? $light : isset($found[$code])));
+	$sensations = array_values(array_filter(['10WL', '10SL', '10DL', '10', '8', '6', '4', '2W', '2', '0'], fn($code) => isset($found[$code])));
+	$numbers = array_values(array_filter(['AD', 'X3', 'X2', 'X1'], fn($code) => isset($found[$code])));
+	$pains = array_values(array_filter(['LAP', 'RAP', 'AP'], fn($code) => isset($found[$code])));
+	$letters = array_filter(['C', 'G', 'K', 'P', 'Y', 'L'], fn($code) => isset($found[$code]));
+	if (isset($found['B']) && !$brown) array_unshift($letters, 'B');
+
+	return [
+		'fc_bleeding' => $flows[0] ?? null,
+		'fc_bleeding_brown' => $brown ? 1 : null,
+		'fc_mucus_sensation' => $sensations[0] ?? null,
+		'fc_mucus_observation' => !empty($letters) ? implode(',', $letters) : null,
+		'fc_number_observations' => $numbers[0] ?? null,
+		'fc_pain' => $pains[0] ?? null,
+		'approximated' => max(count($flows), count($sensations), count($numbers), count($pains)) > 1 || trim($rest, " /") !== '',   // the / of a C/K says nothing more
+	];
+}
+
+// Fills the columns of v16 from fc_score, page by page on the primary key. Answers the days read and the no_day of those approximated.
+function upgrade_split_fc_score($db): array {
+	$read = 0;
+	$approximated = [];
+	$after_no_day = 0;
+	while ($rows = db_querie_select_day_timeline_fc_scores($db, $after_no_day, 5000)) {
+		foreach ($rows as $row) {
+			$after_no_day = intval($row["no_day"]);
+			$parts = upgrade_fc_score_parts($row["fc_score"]);
+			if ($parts["approximated"]) $approximated[] = $after_no_day;
+			unset($parts["approximated"]);
+			db_querie_update_day_timeline_fc_parts($db, $after_no_day, $parts);
+			$read++;
+		}
+	}
+	return ["read" => $read, "approximated" => $approximated];
+}

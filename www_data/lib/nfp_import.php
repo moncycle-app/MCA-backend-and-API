@@ -352,12 +352,6 @@ function nfp_import_cycle_days(array $cycle, string $where, array &$dates_seen, 
 
 		$fields = day_format_from_json($mapping["day"] + ["cycleFirstDay" => $is_cycle_first_day]);
 
-		// the five note groups packed in fc_score: only here is the packed length known
-		if (!is_null($fields["fc_score"]) && mb_strlen($fields["fc_score"]) > DAY_LIMIT_FC_SCORE_CHARS) {
-			$report["issues"][] = sprintf("[%s] the FertilityCare notes pack into %d characters; the limit is %d.", $date, mb_strlen($fields["fc_score"]), DAY_LIMIT_FC_SCORE_CHARS);
-			continue;
-		}
-
 		$plan[] = [
 			"date" => $date,
 			"cycleStartDate" => $cycle["start_date"],
@@ -445,16 +439,16 @@ function nfp_import_day_stamp(object $nfp_day, string $date, array &$day, array 
 // The codified note groups and the arrow
 function nfp_import_day_notes(object $nfp_day, string $method, string $date, array &$day, array &$report): void {
 	if ($method === NFP_METHOD_FERTILITY_CARE) {
-		foreach (array_keys(DAY_FORMAT_FC_GROUPS) as $field) {
+		foreach (["codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations"] as $field) {
 			$value = nfp_format_get($nfp_day, $field);
 			if (!is_string($value) || trim($value) === '') continue;
 
-			$canonical = day_format_fc_canonical($field, $value);
-			if (is_null($canonical)) {
+			$fields = nfp_format_note_to_day($field, $value);
+			if (is_null($fields)) {
 				$report["ignored"][] = sprintf("[%s] %s '%s': outside the FertilityCare notation this app stores.", $date, $field, trim($value));
 				continue;
 			}
-			$day[$field] = $canonical;
+			$day += $fields;
 		}
 
 		$arrow = nfp_format_get($nfp_day, "codifiedArrow");

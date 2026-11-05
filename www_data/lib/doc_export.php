@@ -24,10 +24,11 @@ require_once __DIR__ . "/db_querie.php";
 require_once __DIR__ . "/doc.php";
 require_once __DIR__ . "/doc_mucus.php";
 require_once __DIR__ . "/doc_fc.php";
+require_once __DIR__ . "/nfp_format.php";
 require_once __DIR__ . "/user_account.php";
 
-// The days of [$start_date, $end_date], oldest first, each day_format_to_json()'s with the NFP names of two fields (mucusNotObserved,
-// comments: one string) and isGap false. A date with no row between two recorded days is a gap: the same keys, empty, isGap true;
+// The days of [$start_date, $end_date], oldest first, each day_format_to_json()'s with the NFP names and shapes of four fields
+// (mucusNotObserved; comments, codifiedBleedingObservation and codifiedMucusObservation: one string each) and isGap false. A date with no row between two recorded days is a gap: the same keys, empty, isGap true;
 // gaps, and the days after the last row, never run past today. The period is exactly the one asked for (not widened to a cycle start, unlike the NFP export): cycleDay
 // counts from the latest cycleFirstDay inside it, and is null before the first one. Two queries, whatever the length.
 function doc_export_days($db, string $start_date, string $end_date, array $user_account): array {
@@ -66,7 +67,9 @@ function doc_export_day(array $day): array {
 	$day = day_format_to_json($day);
 	$day["mucusNotObserved"] = $day["dayNotObserved"];
 	$day["comments"] = $day["comment"];
-	unset($day["dayNotObserved"], $day["comment"], $day["lastWriteClientUtc"], $day["lastWriteDb"]);   // sync metadata, not content
+	$day["codifiedBleedingObservation"] = nfp_format_bleeding_note($day) ?: null;
+	$day["codifiedMucusObservation"] = implode('', $day["codifiedMucusObservation"]) ?: null;
+	unset($day["dayNotObserved"], $day["comment"], $day["codifiedBleedingBrown"], $day["lastWriteClientUtc"], $day["lastWriteDb"]);   // sync metadata, not content
 	$day["isGap"] = false;
 	return $day;
 }

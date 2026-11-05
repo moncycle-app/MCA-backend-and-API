@@ -15,90 +15,28 @@
 
 declare(strict_types=1);
 
-// A day in its shapes: the row of day_timeline with its packed columns (stamp, fc_score, fc_arrow), and the JSON day of the API on the
-// vocabulary of the NFP format (stampColor, isPeak, codifiedArrow...), which the NFP export and import also go through. The only file
-// that knows the packed encoding, and the rules a day must follow to be stored.
+// A day in its shapes: the row of day_timeline (the stamp packed, the FertilityCare notation in its fc_* columns), and the JSON day of the
+// API on the vocabulary of the NFP format (stampColor, isPeak, codifiedArrow...), which the NFP export and import also go through. The only
+// file that knows the columns of a day, and the rules a day must follow to be stored.
 
 require_once __DIR__ . "/http.php";
 require_once __DIR__ . "/input.php";
 
 // ---------------------------------------------------------------------------
-// fc_score: the five FertilityCare note groups (DAY_FORMAT_FC_GROUPS) packed in one string, one nullable string per group in the API.
-// They are joined with a space: decoding only looks for known codes, and the space stops two groups from spelling a third code (a
-// sensation ending "...WL" before a pain "AP..." would read "LAP").
+// The FertilityCare notation
 // ---------------------------------------------------------------------------
 
-function day_format_fc_score_decode(?string $fc_score): array {
-	$rest = strtoupper(trim((string) $fc_score));
-
-	// a leading "L" (not the start of "LAP") is the spotting of the bleeding group
-	$spotting = str_starts_with($rest, 'L') && !str_starts_with($rest, 'LAP');
-	if ($spotting) $rest = substr($rest, 1);
-
-	$found = [];
-	foreach (DAY_FORMAT_FC_PARSE_ORDER as $code) {
-		if (!str_contains($rest, $code)) continue;
-		$found[$code] = true;
-		$rest = str_replace($code, '', $rest);
-	}
-
-	$decoded = [];
-	foreach (DAY_FORMAT_FC_GROUPS as $field => $codes) {
-		$value = implode('', array_filter($codes, fn($code) => isset($found[$code])));
-		if ($field === 'codifiedBleedingObservation' && $spotting) $value .= 'L';
-		$decoded[$field] = $value !== '' ? $value : null;
-	}
-	return $decoded;
+// The code as the notation writes it, whatever its case; null when it is not one of the field's codes.
+function day_format_fc_code(string $field, string $value): ?string {
+	$code = strtoupper(trim($value));
+	return in_array($code, DAY_FORMAT_FC_CODES[$field], true) ? $code : null;
 }
 
-function day_format_fc_score_encode(array $codified): string {
-	$bleeding_codes = DAY_FORMAT_FC_GROUPS['codifiedBleedingObservation'];
-	$bleeding = trim((string) ($codified['codifiedBleedingObservation'] ?? ''));
-
-	// Decoding shows the spotting as a trailing "L" of the bleeding; stored, it is a leading "L" of the whole. A trailing "L" is the
-	// spotting only when what is left is empty or a bleeding code: "VL" (very light) is a code of its own.
-	$spotting = false;
-	if ($bleeding !== '' && !in_array($bleeding, $bleeding_codes, true) && str_ends_with($bleeding, 'L')) {
-		$without = substr($bleeding, 0, -1);
-		if ($without === '' || in_array($without, $bleeding_codes, true)) {
-			$spotting = true;
-			$bleeding = $without;
-		}
-	}
-
-	$parts = $bleeding !== '' ? [$bleeding] : [];
-	foreach (array_slice(array_keys(DAY_FORMAT_FC_GROUPS), 1) as $field) {
-		$value = trim((string) ($codified[$field] ?? ''));
-		if ($value !== '') $parts[] = $value;
-	}
-
-	$joined = implode(' ', $parts);
-	if ($spotting) return 'L' . ($joined !== '' ? ' ' . $joined : '');
-	// another group's value that starts with "L" and comes first: the leading space keeps it from reading as the spotting
-	if (str_starts_with($joined, 'L') && !str_starts_with($joined, 'LAP')) $joined = ' ' . $joined;
-	return $joined;
-}
-
-// A note value as the codes of its group (several in a row: "CK"), or null when it is outside them: fc_score is read back by looking for
-// codes, so an unknown one would corrupt the day. The NFP spelling of three codes is accepted (NFP_FC_CODE_ALIASES). Longest code first,
-// so that "10DL" is not "10" and junk.
-function day_format_fc_canonical(string $field, string $value): ?string {
-	$codes = DAY_FORMAT_FC_GROUPS[$field] ?? [];
-	if ($field === 'codifiedBleedingObservation') $codes[] = 'L';   // the spotting, as decoding shows it
-	usort($codes, fn($a, $b) => strlen($b) <=> strlen($a));
-
-	$rest = strtoupper(trim($value));
-	if ($rest === '') return null;
-	$rest = NFP_FC_CODE_ALIASES[$rest] ?? $rest;
-
-	$canonical = '';
-	while ($rest !== '') {
-		$code = current(array_filter($codes, fn($code) => str_starts_with($rest, $code)));
-		if ($code === false) return null;
-		$canonical .= $code;
-		$rest = substr($rest, strlen($code));
-	}
-	return $canonical;
+// The letters in the order they are stored, each once. Null when one is not a letter of the notation.
+function day_format_fc_mucus_letters(array $letters): ?array {
+	$letters = array_map(fn($letter) => is_string($letter) ? strtoupper(trim($letter)) : null, $letters);
+	if (!empty(array_diff($letters, DAY_FORMAT_FC_MUCUS_LETTERS))) return null;
+	return array_values(array_intersect(DAY_FORMAT_FC_MUCUS_LETTERS, $letters));
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +96,7 @@ function day_format_filled(array $day, string $field): bool {
 // The day checked against what can be stored and cleaned for day_format_from_json(), its problems added to $issues. A day is its full
 // state: a field left out is empty, not a problem. The types are JSON's: a flag is true or false, a count a whole number.
 function day_format_validate(array $day, array &$issues): array {
-	foreach (['cycleFirstDay', 'dayNotObserved', 'stampBaby', 'isPeak', 'sexUnion', 'observationPaused'] as $field) {
+	foreach (['cycleFirstDay', 'dayNotObserved', 'stampBaby', 'isPeak', 'sexUnion', 'observationPaused', 'codifiedBleedingBrown'] as $field) {
 		if (array_key_exists($field, $day) && !is_bool($day[$field])) input_wrong_type($issues, $field, $day[$field], "true or false");
 	}
 
@@ -168,25 +106,24 @@ function day_format_validate(array $day, array &$issues): array {
 		elseif (!in_array($day[$field], $vocabulary, true)) $issues[] = input_issue($field, "invalid_value", "'$field' must be one of " . implode(", ", $vocabulary) . ", or null.");
 	}
 
-	$codes_ok = true;
-	foreach (array_keys(DAY_FORMAT_FC_GROUPS) as $field) {
+	foreach (DAY_FORMAT_FC_CODES as $field => $codes) {
 		if (!array_key_exists($field, $day)) continue;
-		if (!is_string($day[$field])) {
-			input_wrong_type($issues, $field, $day[$field], "a string (FertilityCare codes) or null");
-			$codes_ok = false;
-		}
+		if (!is_string($day[$field])) input_wrong_type($issues, $field, $day[$field], "a string (one FertilityCare code) or null");
 		elseif (day_format_filled($day, $field)) {
-			$canonical = day_format_fc_canonical($field, $day[$field]);
-			if (is_null($canonical)) {
-				$issues[] = input_issue($field, "invalid_value", "'$field' holds a code outside the FertilityCare notation. The codes of this group are: " . implode(", ", DAY_FORMAT_FC_GROUPS[$field]) . ".");
-				$codes_ok = false;
-			}
-			else $day[$field] = $canonical;
+			$code = day_format_fc_code($field, $day[$field]);
+			if (is_null($code)) $issues[] = input_issue($field, "invalid_value", "'$field' must be one of " . implode(", ", $codes) . ", or null.");
+			else $day[$field] = $code;
 		}
 	}
-	if ($codes_ok) {
-		$packed = mb_strlen(day_format_fc_score_encode($day));
-		if ($packed > DAY_LIMIT_FC_SCORE_CHARS) $issues[] = input_issue("codifiedBleedingObservation", "too_long", "The FertilityCare notes take $packed characters packed; the limit is " . DAY_LIMIT_FC_SCORE_CHARS . ".");
+
+	if (array_key_exists('codifiedMucusObservation', $day)) {
+		$letters = $day['codifiedMucusObservation'];
+		if (!is_array($letters) || !array_is_list($letters)) input_wrong_type($issues, 'codifiedMucusObservation', $letters, "a list of strings");
+		else {
+			$letters = day_format_fc_mucus_letters($letters);
+			if (is_null($letters)) $issues[] = input_issue('codifiedMucusObservation', "invalid_value", "'codifiedMucusObservation' is a list of " . implode(", ", DAY_FORMAT_FC_MUCUS_LETTERS) . ".");
+			else $day['codifiedMucusObservation'] = $letters;
+		}
 	}
 
 	if (array_key_exists('comment', $day)) $day['comment'] = day_format_text($day['comment'], 'comment', DAY_LIMIT_COMMENT_CHARS, $issues);
@@ -250,6 +187,10 @@ function day_format_to_json(array $day): array {
 	$descriptions = [DESCRIPTION_TYPE_SENSATION => [], DESCRIPTION_TYPE_OBSERVATION => [], DESCRIPTION_TYPE_UNDEFINED => []];
 	foreach ($day['description'] ?? [] as $description) $descriptions[intval($description['type'])][] = $description['name'];
 
+	$fc_codes = [];
+	foreach (DAY_FORMAT_FC_COLUMNS as $field => $column) $fc_codes[$field] = day_format_filled($day, $column) ? $day[$column] : null;
+	$mucus_letters = $day['fc_mucus_observation'] ?? '';   // a SET column reads as "C,K"
+
 	return array_merge([
 		'date' => $day['date_obs'],
 		'cycleStartDate' => $day['cycle'] ?? null,
@@ -271,7 +212,9 @@ function day_format_to_json(array $day): array {
 		'comment' => $day['comment'] ?? '',
 		'lastWriteClientUtc' => http_iso8601($day['last_write_client_UTC'] ?? null),
 		'lastWriteDb' => http_iso8601($day['last_write_db'] ?? null),
-	], day_format_fc_score_decode($day['fc_score'] ?? null));
+		'codifiedBleedingBrown' => boolval($day['fc_bleeding_brown'] ?? false),
+		'codifiedMucusObservation' => $mucus_letters !== '' ? explode(',', $mucus_letters) : [],
+	], $fc_codes);
 }
 
 // The stamp as stored: a colour letter, then "BB" with the baby (White and no colour have no letter).
@@ -282,12 +225,15 @@ function day_format_stamp_encode(?string $color, bool $baby): string {
 // The fields db_querie_update_day_timeline() takes. A day is its full state, not a patch: a field left out is written empty. The descriptions
 // are names, resolved to ids by lib/data.php.
 function day_format_from_json(array $json): array {
-	$fc_score = day_format_fc_score_encode($json);
+	$fc_codes = [];
+	foreach (DAY_FORMAT_FC_COLUMNS as $field => $column) $fc_codes[$column] = day_format_filled($json, $field) ? $json[$field] : null;
+	$mucus_letters = implode(',', $json['codifiedMucusObservation'] ?? []);
 	$has_temperature = isset($json['temperature']) && floatval($json['temperature']) > 0;
 
-	return [
+	return $fc_codes + [
 		'stamp' => day_format_stamp_encode($json['stampColor'] ?? null, boolval($json['stampBaby'] ?? false)),
-		'fc_score' => $fc_score !== '' ? $fc_score : null,
+		'fc_bleeding_brown' => boolval($json['codifiedBleedingBrown'] ?? false),
+		'fc_mucus_observation' => $mucus_letters !== '' ? $mucus_letters : null,
 		'fc_arrow' => DAY_ARROW_GLYPHS[$json['codifiedArrow'] ?? ''] ?? null,
 		'temp' => $has_temperature ? floatval($json['temperature']) : null,
 		'htemp' => $has_temperature && !empty($json['temperatureTime']) ? trim($json['temperatureTime']) : null,

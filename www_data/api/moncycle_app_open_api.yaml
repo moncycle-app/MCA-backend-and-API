@@ -250,7 +250,7 @@ info:
     | Method | How a day is recorded | Fields used |
     |---|---|---|
     | `cervicalMucus` | free text | `freeMucusSensation`, `freeMucusObservation`, `freeOther` |
-    | `fertilityCare` | short standard codes | the six `codified*` fields |
+    | `fertilityCare` | short standard codes | the seven `codified*` fields |
 
     Both use `stampColor`, `stampBaby`, `isPeak`, `cycleFirstDay`, `sexUnion`, `temperature`, `comment`...
     `temperatureTracking` is a separate boolean (does the user also record basal body temperature), so there are four
@@ -1904,9 +1904,10 @@ paths:
         | `freeOther` | array of string (max 256 each) | Cervical mucus: labels with no type yet. |
         | `temperature` | number or null (0 to 99.99) | Basal body temperature. `0` means none. |
         | `temperatureTime` | string or null (`hh:mm:ss`) | When it was taken. Ignored without a `temperature`. |
-        | `codifiedBleedingObservation` | string or null | FertilityCare: `VH`, `H`, `M`, `VL`, `B`, optional `L` suffix, or `L` alone. |
+        | `codifiedBleedingObservation` | string or null | FertilityCare, the flow: `VH`, `H`, `M`, `L`, `VL`. |
+        | `codifiedBleedingBrown` | boolean | FertilityCare: brown or black bleeding (`B`), with a flow or without one. |
         | `codifiedMucusSensation` | string or null | FertilityCare: `0`, `2`, `2W`, `4`, `6`, `8`, `10`, `10DL`, `10SL`, `10WL`. |
-        | `codifiedMucusObservation` | string or null | FertilityCare: any combination of `C`, `G`, `K`, `P`, `Y`, `L`. |
+        | `codifiedMucusObservation` | array of string | FertilityCare: the letters of the day, among `B`, `C`, `G`, `K`, `P`, `Y`, `L` (`C/K` is `C` and `K`). |
         | `codifiedNumberObservations` | string or null | FertilityCare: `X1`, `X2`, `X3`, `AD`. |
         | `codifiedPainObservations` | string or null | FertilityCare: `AP`, `RAP`, `LAP`. |
         | `codifiedArrow` | `Up`, `Down`, `Right` or null | FertilityCare: the arrow drawn on the chart. |
@@ -1944,7 +1945,7 @@ paths:
                 value:
                   stampColor: Green
                   codifiedMucusSensation: "10WL"
-                  codifiedMucusObservation: CK
+                  codifiedMucusObservation: [C, K]
                   codifiedArrow: Up
       responses:
         "201":
@@ -2315,7 +2316,9 @@ paths:
 
         `fileInformation`, `userMethodPreferences.preferredMethod`, `userInformation` (unless `anonymous=true`) and the cycles
         of the period. Re-importing an exported file reproduces the account, with these normalisations of the FertilityCare
-        notation: `Br` becomes `B`, `x1`/`x2`/`x3` become uppercase, `C/K` becomes `CK`. The labels with no type yet
+        notation: `Br` becomes `B`, `x1`/`x2`/`x3` become uppercase, `C/K` becomes `CK`. The file holds the flow and the brown
+        bleeding in its one field `codifiedBleedingObservation` (`VLB`, `MB`, `B`, and `BL` for `L` with brown), the mucus letters
+        as one string (`CK`). The CSV and the PDF write them the same way. The labels with no type yet
         (`freeOther`) have no field in the file: they are written in the day's `comments` and come back as part of the comment.
       parameters:
         - name: format
@@ -2463,7 +2466,6 @@ paths:
 
         - **`requestBodyMaxBytes`** per request (`GET /server_info`; 10 MB by default, the operator's `REQUEST_BODY_MAX_BYTES`): `413 file_too_large`. This holds for every endpoint, and the number of days or cycles in a file is not limited otherwise: 15 years of full days are about 7.7 MB. Split a bigger file into fewer cycles.
         - 256 characters per label and 512 per joined comment.
-        - 32 characters for the packed FertilityCare notes of a day.
         - A temperature outside `0.00`–`99.99`.
         - Dates must be real, from `1900-01-01`, and not in the future (one day of slack). Two cycles covering the same date
           reject the file.
@@ -3161,28 +3163,42 @@ components:
         codifiedBleedingObservation:
           type: string
           nullable: true
+          enum: [VH, H, M, L, VL]
           description: |-
-            **FertilityCare only.** One of `VH`, `H`, `M`, `VL`, `B`, with an optional `L` suffix for
-            spotting (for example `BL`), or `L` alone for spotting only.
-          example: BL
+            **FertilityCare only.** The flow: `VH` very heavy, `H` heavy, `M` moderate, `L` light, `VL` very light (spotting).
+            Brown bleeding is `codifiedBleedingBrown`.
+          example: VL
+        codifiedBleedingBrown:
+          type: boolean
+          description: "**FertilityCare only.** Brown or black bleeding (`B`), with a flow (`VLB` on a chart) or without one."
+          example: true
         codifiedMucusSensation:
           type: string
           nullable: true
-          description: "**FertilityCare only.** One of `0`, `2`, `2W`, `4`, `6`, `8`, `10`, `10DL`, `10SL`, `10WL`."
+          enum: ["0", "2", "2W", "4", "6", "8", "10", "10DL", "10SL", "10WL"]
+          description: |-
+            **FertilityCare only.** The appearance and stretch of the discharge, one code: `0` dry, `2` damp, `2W` wet, `4` shiny (all
+            without lubrication), `6`, `8`, `10` the stretch, `10DL`, `10SL`, `10WL` damp, shiny, wet with lubrication.
           example: "10"
         codifiedMucusObservation:
-          type: string
-          nullable: true
-          description: "**FertilityCare only.** Any combination of `C`, `G`, `K`, `P`, `Y`, `L`."
-          example: KL
+          type: array
+          items:
+            type: string
+            enum: [B, C, G, K, P, Y, L]
+          description: |-
+            **FertilityCare only.** The letters of the day, always answered in this order and each once: `B` brown or black, `C` opaque
+            (white), `G` gummy, `K` clear, `P` pasty, `Y` yellow, `L` lubricative. `C/K` is `C` and `K`. Empty when there is none.
+          example: [K, L]
         codifiedNumberObservations:
           type: string
           nullable: true
-          description: "**FertilityCare only.** One of `X1`, `X2`, `X3`, `AD`."
+          enum: [X1, X2, X3, AD]
+          description: "**FertilityCare only.** How often the day's most fertile sign was seen: once, twice, three times, all day."
           example: X2
         codifiedPainObservations:
           type: string
           nullable: true
+          enum: [AP, RAP, LAP]
           description: "**FertilityCare only.** One of `AP`, `RAP`, `LAP`."
           example: AP
         codifiedArrow:
@@ -3505,7 +3521,7 @@ components:
           type: string
           maxLength: 32
           description: |-
-            **FertilityCare:** `VH`, `H`, `M`, `L`, `VL`, `Br` (stored as `B`).
+            **FertilityCare:** `VH`, `H`, `M`, `L`, `VL`, `Br` (stored as `B`). A flow and brown come together (`VLB`, `MB`, `LB` or `BL`).
 
             **Other methods:** *narrowed.* A value becomes a **Red stamp** when the day has no `stampColor`, and is
             reported otherwise (how a `symptothermic_fr` `Traces`/`Medium`/`Heavy` is kept).
@@ -3521,7 +3537,7 @@ components:
           type: string
           maxLength: 32
           description: |-
-            **FertilityCare:** `C`, `C/K` (stored as `CK`), `K`, `G`, `L`, `P`, `Y`.
+            **FertilityCare:** `C`, `C/K` (stored as `C` and `K`), `K`, `G`, `L`, `P`, `Y`, `B`, several in a row (`KL`).
             *Not stored for other methods*, as above.
           example: K
         codifiedNumberObservations:

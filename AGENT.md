@@ -79,9 +79,11 @@ Also:
   the API and the NFP import alike), `data_resolve_description`, `data_reactivate_account`, and the two SQL files of `script/db/`:
   `data_init_database` (schema, plus demo when `DEMO_ENABLED`, into a database with no table) and `data_reload_demo_accounts` (the
   hourly reset of `script/demo_reset.php`).
-- **`day_format.php`** a day in its shapes: packed DB columns to and from the JSON day (`day_format_to_json` / `_from_json`), and the
-  rules to store one (`day_format_validate`, `_fc_canonical`, `_clean_text`, `_time`). The only file that knows the packed `stamp` /
-  `fc_score` / `fc_arrow` encoding.
+- **`day_format.php`** a day in its shapes: DB columns to and from the JSON day (`day_format_to_json` / `_from_json`), and the
+  rules to store one (`day_format_validate`, `_fc_code`, `_fc_mucus_letters`, `_clean_text`, `_time`). The only file that knows the packed
+  `stamp` and the `fc_*` columns: the FertilityCare note is never one string in the database or the API (`fc_bleeding`, `fc_bleeding_brown`,
+  `fc_mucus_sensation`, `fc_mucus_observation`, `fc_number_observations`, `fc_pain`). The NFP file is where the parts of bleeding and the
+  mucus letters are written together, and nowhere else (`nfp_format_bleeding_note`, `nfp_format_note_to_day`); the CSV and the PDF read that.
 - **`nfp_format.php`, `nfp_export.php`, `nfp_import.php`** the NFP interchange format (vocabulary helpers, the JSON Schema
   `NFP_FILE_SCHEMA`, normalising of older variants), the file out, and the four-stage import (parse, schema, plan, write; the plan is
   built from small steps that add to one report array).

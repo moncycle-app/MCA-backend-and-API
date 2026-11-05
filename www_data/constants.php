@@ -298,7 +298,7 @@ const USER_SETTINGS = [
 const DAY_INPUT_FIELDS = [
 	"date", "cycleFirstDay", "dayNotObserved", "stampColor", "stampBaby", "isPeak", "counterStart", "sexUnion", "observationPaused",
 	"freeMucusSensation", "freeMucusObservation", "freeOther", "temperature", "temperatureTime", "codifiedArrow",
-	"codifiedBleedingObservation", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations",
+	"codifiedBleedingObservation", "codifiedBleedingBrown", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations",
 	"comment", "lastWriteClientUtc",
 ];
 const DAY_OUTPUT_ONLY_FIELDS = ["cycleStartDate", "cycleDay", "lastWriteDb"];
@@ -493,18 +493,24 @@ const DAY_STAMP_COLOR_CODES = ['Red' => 'R', 'Green' => 'G', 'Yellow' => 'Y'];
 // The FertilityCare arrow: the glyph day_timeline.fc_arrow holds => the name the JSON API and the NFP format use.
 const DAY_ARROW_GLYPHS = ['Up' => "\u{2191}", 'Down' => "\u{2193}", 'Right' => "\u{2192}"];
 
-// The FertilityCare note codes: day field => its codes, the groups in the order of day_timeline.fc_score.
-const DAY_FORMAT_FC_GROUPS = [
-	'codifiedBleedingObservation' => ['VH', 'H', 'M', 'VL', 'B'], // the 'L' (Lsaignement) *prefix* is handled separately
-	'codifiedMucusSensation' => ['0', '2', '2W', '4', '6', '8', '10', '10DL', '10SL', '10WL'],
-	'codifiedMucusObservation' => ['C', 'G', 'K', 'P', 'Y', 'L'], // this 'L' is a standalone mucus-observation code, distinct from the Lsaignement *prefix*
+// The FertilityCare notation (the handbook's table of vaginal discharge recording, plus VH and the pain codes), each part in a column of
+// its own. A field with one code at most => its codes, in the order of the notation.
+const DAY_FORMAT_FC_CODES = [
+	'codifiedBleedingObservation' => ['VH', 'H', 'M', 'L', 'VL'],   // the flow; brown (B) is codifiedBleedingBrown, with or without a flow
+	'codifiedMucusSensation' => ['0', '2', '2W', '4', '6', '8', '10', '10DL', '10SL', '10WL'],   // "10DL" is one code of the table, not "10" and letters
 	'codifiedNumberObservations' => ['X1', 'X2', 'X3', 'AD'],
 	'codifiedPainObservations' => ['AP', 'RAP', 'LAP'],
 ];
-
-// The order the codes are looked for in an fc_score, each taken out once found: a longer code first ("10DL" is not "10" and "L"), and
-// where two overlap ("X1" and "10" in "X10") the order decides. 'R' belongs to no group: taken out and ignored.
-const DAY_FORMAT_FC_PARSE_ORDER = ['10DL', '10SL', '10WL', 'RAP', 'LAP', 'X1', 'X2', 'X3', 'AD', 'AP', 'VL', 'VH', '2W', '10', 'H', 'M', 'L', 'B', '0', '2', '4', '6', '8', 'C', 'G', 'K', 'P', 'Y', 'R'];
+// The day field of a code above => its column of day_timeline.
+const DAY_FORMAT_FC_COLUMNS = [
+	'codifiedBleedingObservation' => 'fc_bleeding',
+	'codifiedMucusSensation' => 'fc_mucus_sensation',
+	'codifiedNumberObservations' => 'fc_number_observations',
+	'codifiedPainObservations' => 'fc_pain',
+];
+// The letters of codifiedMucusObservation (colour, consistency, lubrication: several on a day; C/K is C and K), in the order they are
+// written: the order of the SET of day_timeline.fc_mucus_observation, so changing it needs a migration.
+const DAY_FORMAT_FC_MUCUS_LETTERS = ['B', 'C', 'G', 'K', 'P', 'Y', 'L'];
 
 // How many days one GET /api/v3/day reads ("dates=a,b,c", or "from" to "to" both counted).
 const DAY_LIMIT_QUERY_DAYS = 100;
@@ -512,7 +518,6 @@ const DAY_LIMIT_QUERY_DAYS = 100;
 // What day_timeline and description can hold: the widths of their columns.
 const DAY_LIMIT_COMMENT_CHARS = 512;        // day_timeline.comment    varchar(512)
 const DAY_LIMIT_DESCRIPTION_CHARS = 256;    // description.name        varchar(256)
-const DAY_LIMIT_FC_SCORE_CHARS = 32;        // day_timeline.fc_score   varchar(32), the five groups packed
 const DAY_LIMIT_COUNTER_START = 255;        // day_timeline.counter_start tinyint unsigned
 const DAY_TEMPERATURE_STORABLE_MIN = 0.0;   // day_timeline.temperature decimal(4,2) unsigned
 const DAY_TEMPERATURE_STORABLE_MAX = 99.99;
@@ -558,15 +563,6 @@ const NFP_MUCUS_NOT_OBSERVED_INCOMPATIBLE = [
 	"freeMucusSensation",
 	"booleanCervixMucus",
 	"booleanCervixAperture",
-];
-
-// The spec's FertilityCare codes the app stores under another spelling; any other code outside DAY_FORMAT_FC_GROUPS is never written.
-const NFP_FC_CODE_ALIASES = [
-	"BR" => "B",      // spec writes brown bleeding "Br", the app stores "B"
-	"X1" => "X1",     // spec writes "x1".."x3" lowercase; matching is case-insensitive
-	"X2" => "X2",
-	"X3" => "X3",
-	"C/K" => "CK",    // spec's "between C and K"; the app stores the two codes together
 ];
 
 // The day and cycle fields of schema 1.0: a "not stored" one is reported with its reason, a key in neither list as unknown.

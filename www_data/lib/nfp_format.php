@@ -15,6 +15,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . "/day_format.php";
+
 // The NFP interchange format: its JSON Schema, its reading helpers, and the older variants of the format brought to the one shape the
 // rest of the code reads. Its constants are the NFP FILE FORMAT section of constants.php. How the format maps onto this app's storage is
 // lib/nfp_export.php and lib/nfp_import.php; nothing here touches the DB or the request.
@@ -140,6 +142,33 @@ JSON;
 // Reading a decoded file. A null is a field not set: the format marks almost everything optional, and most serialisers write "not
 // set" as null.
 // ---------------------------------------------------------------------------
+
+// A file holds the flow and the brown bleeding in one field, the way every earlier export wrote them: "VLB", "MB", "B", and "BL" for a
+// light brown bleeding.
+function nfp_format_bleeding_note(array $day): string {
+	$flow = $day['codifiedBleedingObservation'] ?? '';
+	$brown = !empty($day['codifiedBleedingBrown']) ? 'B' : '';
+	return $flow === 'L' ? $brown . 'L' : $flow . $brown;
+}
+
+// A FertilityCare note of a file as the fields of the JSON day it fills; null when it is outside the notation. The spec's spellings are
+// read too: "Br" for B, "C/K" for C and K, lower case.
+function nfp_format_note_to_day(string $field, string $value): ?array {
+	$note = strtoupper(trim($value));
+	if ($field === 'codifiedMucusObservation') {
+		$letters = day_format_fc_mucus_letters(str_split(str_replace('/', '', $note)));
+		return is_null($letters) ? null : [$field => $letters];
+	}
+	if ($field === 'codifiedBleedingObservation') {
+		if (!preg_match('/^(VH|VL|H|M|L)?(BR?)?$/', $note === 'BL' ? 'LB' : $note, $parts)) return null;
+		$fields = [];
+		if (($parts[1] ?? '') !== '') $fields[$field] = $parts[1];
+		if (($parts[2] ?? '') !== '') $fields['codifiedBleedingBrown'] = true;
+		return $fields;
+	}
+	$code = day_format_fc_code($field, $note);
+	return is_null($code) ? null : [$field => $code];
+}
 
 function nfp_format_get(mixed $holder, string $key): mixed {
 	if (!is_object($holder) || !property_exists($holder, $key)) return null;

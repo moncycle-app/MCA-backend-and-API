@@ -60,6 +60,11 @@ ALTER TABLE `day_timeline`
 MODIFY `comment` varchar(512) COLLATE utf8mb4_bin DEFAULT NULL,
 ALGORITHM=INPLACE, LOCK=NONE;
 
+-- The FertilityCare note was one string that every read had to parse. v15_to_v16.php has added a column per part and filled them.
+ALTER TABLE `day_timeline`
+DROP `fc_score`,
+ALGORITHM=INSTANT;
+
 -- The version of the schema, which the code checks at every request (APP_VERSION, constants.php): a database that says another
 -- number is not served (503 schema_mismatch). Every migration ends by setting it to its own number.
 INSERT INTO `key_value` (`key`, `value`) VALUES ('schema_version', 16) ON DUPLICATE KEY UPDATE `value` = 16;

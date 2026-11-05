@@ -22,6 +22,7 @@ require_once __DIR__ . "/data.php";
 require_once __DIR__ . "/date.php";
 require_once __DIR__ . "/day_format.php";
 require_once __DIR__ . "/db_querie.php";
+require_once __DIR__ . "/nfp_format.php";
 require_once __DIR__ . "/user_account.php";
 
 // One JSON day as an NFP day, with only what the format defines and nothing empty ([] is a day with nothing, "{}" in the file). Every
@@ -47,8 +48,16 @@ function nfp_export_day(array $day): array {
 	if (!empty($day['dayNotObserved'])) $nfp['mucusNotObserved'] = true;
 	if (day_format_filled($day, 'stampColor')) $nfp['stampColor'] = $day['stampColor'];
 	if (!empty($day['stampBaby'])) $nfp['stampBaby'] = true;
-	foreach ([...array_keys(DAY_FORMAT_FC_GROUPS), 'codifiedArrow'] as $field) {
-		if (day_format_filled($day, $field)) $nfp[$field] = (string) $day[$field];
+	$notes = [
+		'codifiedBleedingObservation' => nfp_format_bleeding_note($day),
+		'codifiedMucusSensation' => $day['codifiedMucusSensation'] ?? null,
+		'codifiedMucusObservation' => implode('', $day['codifiedMucusObservation'] ?? []),
+		'codifiedNumberObservations' => $day['codifiedNumberObservations'] ?? null,
+		'codifiedPainObservations' => $day['codifiedPainObservations'] ?? null,
+		'codifiedArrow' => $day['codifiedArrow'] ?? null,
+	];
+	foreach ($notes as $field => $note) {
+		if (day_format_filled($notes, $field)) $nfp[$field] = $note;
 	}
 	foreach (['freeMucusSensation', 'freeMucusObservation'] as $field) {
 		if (!empty($day[$field]) && is_array($day[$field])) $nfp[$field] = array_values($day[$field]);

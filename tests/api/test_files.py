@@ -10,7 +10,7 @@ FROM_TO = "?from=2026-09-01&to=2026-09-30"
 def account_with_a_cycle(method=2):
     a = Account(method=method)
     a.post("day/2026-09-20", {"cycleFirstDay": True, "stampColor": "Red", "freeMucusObservation": ["creamy"], "comment": "first day"})
-    a.post("day/2026-09-21", {"stampColor": "Green", "temperature": 36.5, "temperatureTime": "07:00:00"} if method < 3 else {"stampColor": "Green", "codifiedMucusObservation": "CK"})
+    a.post("day/2026-09-21", {"stampColor": "Green", "temperature": 36.5, "temperatureTime": "07:00:00"} if method < 3 else {"stampColor": "Green", "codifiedMucusObservation": ["C", "K"]})
     return a
 
 
@@ -99,6 +99,54 @@ class Import(ApiTest):
             want, got = src.get("day/" + date).data, dst.get("day/" + date).data
             for key in ("stampColor", "comment", "temperature", "freeMucusObservation", "cycleFirstDay"):
                 self.assertEqual(got[key], want[key], (date, key))
+
+    def test_a_file_writes_the_parts_of_a_fertilitycare_note_as_the_format_has_them(self):
+        a = Account(method=3)
+        a.post("day/2026-09-20", {"cycleFirstDay": True, "codifiedBleedingObservation": "VL", "codifiedBleedingBrown": True, "codifiedMucusSensation": "0"})
+        a.post("day/2026-09-21", {"codifiedBleedingObservation": "L", "codifiedBleedingBrown": True, "codifiedMucusObservation": ["K", "C"]})
+        a.post("day/2026-09-22", {"codifiedBleedingBrown": True})
+        days = a.get("export/nfp" + FROM_TO).json["cycles"][0]["days"]
+        self.assertEqual((days[0]["codifiedBleedingObservation"], days[0]["codifiedMucusSensation"]), ("VLB", "0"))
+        self.assertEqual((days[1]["codifiedBleedingObservation"], days[1]["codifiedMucusObservation"]), ("BL", "CK"))
+        self.assertEqual(days[2]["codifiedBleedingObservation"], "B")
+        cells = a.get("export/csv" + FROM_TO).body.decode()
+        self.assertIn(";VLB;0;", cells)
+        self.assertIn(";BL;;CK;", cells)
+
+    def test_a_file_this_app_exports_gives_back_each_part_of_a_fertilitycare_note(self):
+        src = Account(method=3)
+        src.post("day/2026-09-20", {"cycleFirstDay": True, "codifiedBleedingObservation": "L", "codifiedBleedingBrown": True, "codifiedMucusSensation": "10WL",
+                                    "codifiedMucusObservation": ["K", "L"], "codifiedNumberObservations": "AD", "codifiedPainObservations": "LAP"})
+        dst = Account(method=3)
+        self.assertStatus(dst.post("import", src.get("export/nfp" + FROM_TO).json), 200)
+        want, got = src.get("day/2026-09-20").data, dst.get("day/2026-09-20").data
+        for key in ("codifiedBleedingObservation", "codifiedBleedingBrown", "codifiedMucusSensation", "codifiedMucusObservation", "codifiedNumberObservations", "codifiedPainObservations"):
+            self.assertEqual(got[key], want[key], key)
+
+    def test_a_file_may_write_a_fertilitycare_note_the_older_ways(self):
+        f = Account(method=3)
+        f.post("day/2026-09-20", {"cycleFirstDay": True, "stampColor": "Red"})
+        file = f.get("export/nfp" + FROM_TO).json
+        for note, flow, brown in (("VLB", "VL", True), ("BL", "L", True), ("LB", "L", True), ("Br", None, True), ("vl", "VL", False)):
+            with self.subTest(note=note):
+                file["cycles"][0]["days"][0].update({"codifiedBleedingObservation": note, "codifiedMucusObservation": "C/K", "codifiedNumberObservations": "x2"})
+                dst = Account(method=3)
+                self.assertStatus(dst.post("import", file), 200)
+                d = dst.get("day/2026-09-20").data
+                self.assertEqual((d["codifiedBleedingObservation"], d["codifiedBleedingBrown"]), (flow, brown))
+                self.assertEqual((d["codifiedMucusObservation"], d["codifiedNumberObservations"]), (["C", "K"], "X2"))
+
+    def test_a_note_of_a_file_outside_the_notation_is_reported_and_the_day_is_kept(self):
+        f = Account(method=3)
+        f.post("day/2026-09-20", {"cycleFirstDay": True, "stampColor": "Red"})
+        file = f.get("export/nfp" + FROM_TO).json
+        file["cycles"][0]["days"][0]["codifiedBleedingObservation"] = "HM"
+        dst = Account(method=3)
+        r = dst.post("import", file)
+        self.assertStatus(r, 200)
+        self.assertIn("codifiedBleedingObservation 'HM'", json.dumps(r.data))
+        d = dst.get("day/2026-09-20").data
+        self.assertEqual((d["stampColor"], d["codifiedBleedingObservation"]), ("Red", None))
 
     def test_a_dry_run_writes_nothing(self):
         f = account_with_a_cycle().get("export/nfp" + FROM_TO).json

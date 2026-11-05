@@ -454,7 +454,8 @@ function db_querie_select_day_timeline_dates_written_since($db, string $since, i
 // The days from $start_date up to $end_date excluded (null: no end), with the columns a day shows.
 function db_querie_select_day_timelines_range($db, string $start_date, ?string $end_date, $no_user_account): array {
 	return db_ops_rows($db,
-		"SELECT no_day, date_obs, day_not_observed, fc_score, fc_arrow, stamp, temperature, time_temp_taken, is_peak, counter_start,
+		"SELECT no_day, date_obs, day_not_observed, fc_bleeding, fc_bleeding_brown, fc_mucus_sensation, fc_mucus_observation, fc_number_observations,
+		fc_pain, fc_arrow, stamp, temperature, time_temp_taken, is_peak, counter_start,
 		union_sex, cycle_1st_day, observation_paused, comment, last_write_client_UTC, last_write_db
 		FROM day_timeline
 		WHERE no_user_account = :no_user_account AND date_obs >= :start_date AND (:end_date IS NULL OR date_obs < :end_date)
@@ -484,16 +485,36 @@ function db_querie_insert_day_timeline($db, string $date, $no_user_account): str
 // write that changes only the labels a day carries must still reach the sync.
 function db_querie_update_day_timeline($db, string $date, $no_user_account, string $last_write_client_UTC, array $fields = []): int {
 	$fields += [
-		"stamp" => '', "fc_score" => null, "fc_arrow" => null, "temp" => null, "htemp" => null, "is_peak" => null, "union_sex" => null,
+		"stamp" => '', "fc_bleeding" => null, "fc_bleeding_brown" => null, "fc_mucus_sensation" => null, "fc_mucus_observation" => null,
+		"fc_number_observations" => null, "fc_pain" => null, "fc_arrow" => null, "temp" => null, "htemp" => null, "is_peak" => null, "union_sex" => null,
 		"cycle_1st_day" => null, "day_not_observed" => null, "observation_paused" => null, "comment" => null, "counter_start" => null,
 	];
 	return db_ops_exec($db,
-		"UPDATE day_timeline SET stamp = :stamp, fc_score = :fc_score, fc_arrow = :fc_arrow, temperature = :temp, time_temp_taken = :htemp,
+		"UPDATE day_timeline SET stamp = :stamp, fc_bleeding = :fc_bleeding, fc_bleeding_brown = :fc_bleeding_brown, fc_mucus_sensation = :fc_mucus_sensation,
+		fc_mucus_observation = :fc_mucus_observation, fc_number_observations = :fc_number_observations, fc_pain = :fc_pain, fc_arrow = :fc_arrow, temperature = :temp, time_temp_taken = :htemp,
 		is_peak = :is_peak, union_sex = :union_sex, cycle_1st_day = :cycle_1st_day, day_not_observed = :day_not_observed,
 		observation_paused = :observation_paused, comment = :comment, counter_start = :counter_start, last_write_client_UTC = :last_write_client_UTC,
 		last_write_db = CURRENT_TIMESTAMP
 		WHERE date_obs = :date AND no_user_account = :no_user_account",
 		$fields + ["last_write_client_UTC" => $last_write_client_UTC, "date" => $date, "no_user_account" => $no_user_account]
+	);
+}
+
+// The migration from v15 to v16 (upgrade_split_fc_score()): a page of the days that have the old packed note.
+function db_querie_select_day_timeline_fc_scores($db, int $after_no_day, int $limit): array {
+	return db_ops_rows($db,
+		"SELECT no_day, fc_score FROM day_timeline WHERE no_day > :after_no_day AND fc_score IS NOT NULL ORDER BY no_day ASC LIMIT :limit",
+		["after_no_day" => $after_no_day, "limit" => $limit]
+	);
+}
+
+// The note of one day in its columns. last_write_db is kept as it is: the day says what it said, so no client has to read it again.
+function db_querie_update_day_timeline_fc_parts($db, int $no_day, array $parts): int {
+	return db_ops_exec($db,
+		"UPDATE day_timeline SET fc_bleeding = :fc_bleeding, fc_bleeding_brown = :fc_bleeding_brown, fc_mucus_sensation = :fc_mucus_sensation,
+		fc_mucus_observation = :fc_mucus_observation, fc_number_observations = :fc_number_observations, fc_pain = :fc_pain, last_write_db = last_write_db
+		WHERE no_day = :no_day",
+		$parts + ["no_day" => $no_day]
 	);
 }
 
