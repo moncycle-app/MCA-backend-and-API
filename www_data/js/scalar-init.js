@@ -20,6 +20,8 @@ Scalar.createApiReference("#app", {
 	telemetry: false,
 	agent: { disabled: true },
 	mcp: { disabled: true },
+	// the sidebar names each operation by its path (/token, /account) rather than its summary: Scalar takes one or the other
+	operationTitleSource: "path",
 	hideClientButton: true,
 	showDeveloperTools: "never",
 });
