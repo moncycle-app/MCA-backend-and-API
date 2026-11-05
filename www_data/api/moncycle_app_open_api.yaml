@@ -3,7 +3,7 @@ openapi: 3.0.3
 info:
   title: moncycle.app API
   version: "3.0"
-  termsOfService: https://www.moncycle.app/ToS/term_of_service_fr.html
+  termsOfService: https://moncycle.app/en/term_of_service.html
   license:
     name: AGPL-3.0-or-later
     url: https://www.gnu.org/licenses/agpl-3.0.html
@@ -1921,7 +1921,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Day'
+              $ref: '#/components/schemas/DayBody'
             examples:
               cervicalMucus:
                 summary: Cervical mucus — first day of a cycle (POST /day/2026-03-10)
@@ -3034,7 +3034,14 @@ components:
         - **method-specific**: `freeMucus*` and `freeOther` for `cervicalMucus`, `codified*` for FertilityCare.
 
         A field of the other method is accepted but not displayed.
-      required: [date]
+      allOf:
+        - $ref: '#/components/schemas/DayBody'
+        - type: object
+          required: [date]
+
+    DayBody:
+      type: object
+      description: "The fields of a `Day`, as `POST /day/{date}` takes them: `date` is optional there, the address says it."
       properties:
 
         date:
@@ -3759,8 +3766,16 @@ components:
           type: string
           format: uri
           nullable: true
-          description: "The https page of the terms of service. `POST /register` requires `termsAccepted: true`: a client that signs people up shows or links this page beside the box to tick. `null` when there is none."
-          example: https://www.moncycle.app/ToS/term_of_service_fr.html
+          description: "The default https page of the terms of service (English on the official instance): the one for a language that has no page in `termsOfServiceUrls`. `POST /register` requires `termsAccepted: true`: a client that signs people up shows or links the page of the user's language beside the box to tick. `null` when there is none."
+          example: https://moncycle.app/en/term_of_service.html
+        termsOfServiceUrls:
+          type: object
+          description: "The pages of the terms of service that are not the default one: the key is a lower case language code (`fr`, `de`, `pt-br`...), the value an https page. A client takes the page of its user's language, else `termsOfServiceUrl`. Only the languages the server has a page for are listed; empty when there are none."
+          additionalProperties:
+            type: string
+            format: uri
+          example:
+            fr: https://www.moncycle.app/ToS/term_of_service_fr.html
         passwordPolicyRegex:
           type: string
           description: The regex (no delimiters; PCRE and JavaScript syntax) a new password must match, else `400` with the issue `password_too_weak`. By default 10 characters at least, a lower case letter, an upper case letter and a digit. A form can use it as a `pattern`.
@@ -3923,7 +3938,7 @@ components:
         autoMailExport:
           type: boolean
           nullable: true
-          description: Optional setting. Mail the export of each finished cycle (PDF, CSV and NFP file) to the login address and `notificationEmails`. `null` puts it back to the default (`false`: no mail).
+          description: "Optional setting. Mail the export of each finished cycle (PDF, CSV and NFP file) to the login address and `notificationEmails`. `null` puts it back to the default (`false`: no mail)."
         dayBackgroundColor:
           type: boolean
           nullable: true
@@ -3942,10 +3957,11 @@ components:
           type: object
           description: "Keys of third parties: `key -> whole number or text`, `null` deletes the key. Only the keys sent change. A key is 1 to 64 characters of `a-z`, `0-9`, `_`, `.`, `-`; a text is 255 characters at most; 50 keys at most."
           additionalProperties:
-            oneOf:
+            anyOf:
               - type: integer
+                nullable: true
               - type: string
-              - type: "null"
+                nullable: true
         lastWriteClientUtc:
           type: string
           format: date-time

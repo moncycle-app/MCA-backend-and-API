@@ -52,6 +52,7 @@ function server_info(): array {
 		"newsUrl" => server_news_url(),
 		"passwordPolicyRegex" => sec_password_policy_regex(),
 		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
+		"termsOfServiceUrls" => (object) TERMS_OF_SERVICE_URLS,
 		"limits" => [
 			"passwordMaxChars" => PASSWORD_MAX_CHARS,
 			"accountNicknameMaxChars" => ACCOUNT_LIMIT_NICKNAME_CHARS,

@@ -30,7 +30,7 @@ if (preg_match('#^/api/v3/([a-z_]+)(?:\.php)?(/.*)?$#', $path, $m)) {
 	return true;
 }
 
-if (!str_starts_with($path, "/_test/")) return false;   // static files (the Swagger page, the contract)
+if (!str_starts_with($path, "/_test/")) return false;   // static files (the Scalar page, the contract)
 
 require_once "$docroot/config.php";
 header("Content-Type: application/json");

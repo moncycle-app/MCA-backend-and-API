@@ -120,7 +120,8 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 | `DEMO_ENABLED` | `false` | The two public demo accounts. See [Demo accounts](#demo-accounts). |
 | `MAINTENANCE_MODE` | `false` | Every endpoint answers `503 maintenance` and the cron refuses to run. See [Maintenance mode](#maintenance-mode). |
 | `NEWS_URL` | `https://tech4fertility.org/latest-news.json` | JSON file of the news banner (`{"fr": {"title", "description", "url", "pubDate"}, ...}`), fetched by the browser. https, or `http://localhost:PORT/...` for development. **Empty: no banner.** |
-| `TERMS_OF_SERVICE_URL` | `https://www.moncycle.app/ToS/term_of_service_fr.html` | https page of your terms of service, shown in an iframe on the sign-up page (the box to tick is required by `POST /api/v3/register`), linked from the settings page and told by `GET /api/v3/server_info`. Empty: nothing to show. Change `info.termsOfService` in the OpenAPI file too. A page that forbids framing cannot be shown. |
+| `TERMS_OF_SERVICE_URL` | `https://moncycle.app/en/term_of_service.html` | The **default** https page of your terms of service (English): shown in an iframe on the sign-up page (the box to tick is required by `POST /api/v3/register`), linked from the settings page and told by `GET /api/v3/server_info` (`termsOfServiceUrl`). It is the page of every language that has none in `TERMS_OF_SERVICE_URLS`. Empty: no default page. Change `info.termsOfService` in the OpenAPI file too. A page that forbids framing cannot be shown. |
+| `TERMS_OF_SERVICE_URLS` | `fr=https://www.moncycle.app/ToS/term_of_service_fr.html` | One page per language, `fr=https://...,de=https://...` (language code in lower case, https only; a bad pair is ignored). Told by `server_info` as `termsOfServiceUrls`; a client shows the page of its user's language, else the default. A new language is one more pair. Empty: only the default page. |
 | `WEEKLY_REPORT_EMAILS` | – | Addresses, comma separated, that get the weekly report of the team (French, sent by the cron on Mondays: accounts, usage, sign-up comments, database health, each compared with the week before). **Empty: no report.** See [Cron](#cron). |
 | `CRON_ENABLED` † | `true` | The container runs the daily cron (and the hourly demo reset when `DEMO_ENABLED`). `false`: schedule them yourself, never both. See [Cron](#cron). |
 
@@ -275,8 +276,8 @@ tasks: [docs/security.md](docs/security.md) and [docs/deployment.md](docs/deploy
 The HTTP API is described in OpenAPI 3.0: [`www_data/api/moncycle_app_open_api.yaml`](www_data/api/moncycle_app_open_api.yaml). **The
 spec is the contract:** change an endpoint and its YAML together.
 
-- **Interactive:** Swagger UI, served by the API itself at `<APP_URL>api/`; for the official instance,
-  [tableau.moncycle.app/api/](https://tableau.moncycle.app/api/). "Try it out" uses your session: sign in on the same instance first.
+- **Interactive:** [Scalar](https://scalar.com/), served by the API itself at `<APP_URL>api/`; for the official instance,
+  [tableau.moncycle.app/api/](https://tableau.moncycle.app/api/). "Test Request" uses your session: sign in on the same instance first.
 - **Raw spec:** `<APP_URL>api/moncycle_app_open_api.yaml`, for code generators, Postman or Insomnia.
 
 In four lines:

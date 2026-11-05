@@ -57,5 +57,8 @@ class Public(ApiTest):
         r = a.post("account", {"nickname": "x"}, headers={"Origin": "https://evil.example"})
         self.assertError(r, 403, "cross_origin_refused")
 
-    def test_swagger_page_and_contract_are_served(self):
+    def test_scalar_page_its_files_and_the_contract_are_served(self):
+        self.assertStatus(request("GET", "/api/index.html"), 200)
+        self.assertStatus(request("GET", "/vendor/scalar/api-reference/dist/browser/standalone.js"), 200)
+        self.assertStatus(request("GET", "/js/scalar-init.js"), 200)
         self.assertStatus(request("GET", "/api/moncycle_app_open_api.yaml"), 200)

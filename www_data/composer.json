@@ -3,10 +3,26 @@
 	"description": "Application de suivi de cycle menstruel pour les méthodes naturelles de régulation de naissance.",
 	"homepage": "https://www.moncycle.app",
 	"license": "AGPL-3.0-or-later",
+	"repositories": [
+		{
+			"type": "package",
+			"package": {
+				"name": "scalar/api-reference",
+				"version": "1.77.0",
+				"description": "Scalar API reference, the browser bundle of the npm package @scalar/api-reference (Scalar publishes no Composer package without a framework).",
+				"license": "MIT",
+				"dist": {
+					"url": "https://registry.npmjs.org/@scalar/api-reference/-/api-reference-1.77.0.tgz",
+					"type": "tar",
+					"shasum": "26171e1644e3f50b8f9e31f2fe572a188abeef98"
+				}
+			}
+		}
+	],
 	"require": {
 		"php": "^8.5",
 		"phpmailer/phpmailer": "7.*",
-		"swagger-api/swagger-ui" : "5.*",
+		"scalar/api-reference": "1.77.0",
 		"spomky-labs/otphp" : "11.*",
 		"bacon/bacon-qr-code" : "3.*",
 		"gregwar/captcha": "2.*",

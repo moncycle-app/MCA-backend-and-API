@@ -1,5 +1,15 @@
-<!-- HTML for static distribution bundle build -->
 <!DOCTYPE html>
+<!--
+** moncycle.app
+**
+** Copyright (C) 2021-2026 Tech 4 Fertility, aka. T4F (https://tech4fertility.org)
+** SPDX-License-Identifier: AGPL-3.0-or-later
+**
+** This program is free software: you can redistribute it and/or modify it under
+** the terms of the GNU Affero General Public License as published by the Free
+** Software Foundation, either version 3 of the License, or (at your option) any
+** later version. It is distributed WITHOUT ANY WARRANTY; see the licence for details.
+-->
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
@@ -27,15 +37,12 @@
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
 		<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-		<title>moncycle.app - API - Swagger UI</title>
-		<link rel="stylesheet" type="text/css" href="../vendor/swagger-api/swagger-ui/dist/swagger-ui.css" />
-		<link rel="stylesheet" type="text/css" href="../vendor/swagger-api/swagger-ui/dist/index.css" />
-		<script src="../vendor/swagger-api/swagger-ui/dist/swagger-ui-bundle.js" charset="UTF-8" defer></script>
-		<script src="../vendor/swagger-api/swagger-ui/dist/swagger-ui-standalone-preset.js" charset="UTF-8" defer></script>
+		<title>moncycle.app - API</title>
+		<script src="../vendor/scalar/api-reference/dist/browser/standalone.js" charset="UTF-8" defer></script>
+		<script src="../js/scalar-init.js" defer></script>
 	</head>
 
 	<body>
-		<div id="swagger-ui"></div>
-		<script src="../js/swagger-init.js" defer></script>
+		<div id="app"></div>
 	</body>
 </html>

@@ -67,6 +67,21 @@ function env_origins(string $name): array {
 	return array_values(array_unique($origins));
 }
 
+// A comma list of "language=https://page" pairs ("fr=https://a/fr.html,de=https://a/de.html") as ["fr" => "https://a/fr.html", ...]: the language
+// code in lower case (2 or 3 letters, an optional region: pt-br), the page https. An item that is anything else is dropped; the last one of a
+// language wins. A new language is one more pair, no code.
+function parse_language_urls(string $list): array {
+	$urls = [];
+	foreach (explode(",", $list) as $item) {
+		$parts = explode("=", trim($item), 2);
+		if (count($parts) !== 2) continue;
+		$code = strtolower(trim($parts[0]));
+		$url = trim($parts[1]);
+		if (preg_match('/^[a-z]{2,3}(-[a-z0-9]{2,8})?$/', $code) === 1 && str_starts_with($url, "https://")) $urls[$code] = $url;
+	}
+	return $urls;
+}
+
 // The addresses and CIDR ranges ("10.0.0.0/8", "fd00::/8") of a comma list; an item that is not
 // one is dropped.
 function env_ip_ranges(string $name): array {

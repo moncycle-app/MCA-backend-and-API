@@ -87,7 +87,7 @@ frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'
 - `connect-src`: the origin of `NEWS_URL` (the news banner is a JSON file the web app fetches). That server must answer with
   `Access-Control-Allow-Origin` for the app's origin.
 
-Pages served by anything else need the same policy from their own server. Swagger UI is covered by it too.
+Pages served by anything else need the same policy from their own server. The Scalar page (`/api/`) is covered by it too.
 
 ## Without Docker, in production
 
@@ -100,7 +100,7 @@ with `www_data/` as its document root, doing what the Docker image's Apache does
    follows the script name is its `PATH_INFO`: `/api/v3/day/2026-03-10` runs `api/v3/day.php` with `PATH_INFO=/2026-03-10`. Apache does it
    with `Options +MultiViews` and `MultiviewsMatch Any`.
 2. **Refuse what is not public** (403): `config*.php`, `constants.php`, `composer.json`, `composer.lock`, `*.sql`, `*.md`, `lib/`,
-   and `vendor/` except `vendor/components/jquery`, `vendor/chartjs` and `vendor/swagger-api/swagger-ui/dist`.
+   and `vendor/` except `vendor/components/jquery`, `vendor/chartjs` and `vendor/scalar/api-reference/dist/browser`.
 3. **Keep `script/` for the machine itself.** It holds the cron and the migrations, which are meant to be run from the command
    line.
 4. **Cap the body at 10 MB** and set `post_max_size = 10M` (see [Limits](#limits)).
@@ -153,7 +153,7 @@ A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rew
     <DirectoryMatch "^/var/www/moncycle/www_data/(lib|script|vendor)(/|$)">
         Require all denied
     </DirectoryMatch>
-    <DirectoryMatch "^/var/www/moncycle/www_data/vendor/(components/jquery|chartjs|swagger-api/swagger-ui/dist)(/|$)">
+    <DirectoryMatch "^/var/www/moncycle/www_data/vendor/(components/jquery|chartjs|scalar/api-reference/dist/browser)(/|$)">
         Require all granted
     </DirectoryMatch>
 

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "3894d3c423016c76e89f62a4e756d4c7",
+    "content-hash": "0cdeb08d13ea1a6eeb7c517e38245e79",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -511,6 +511,20 @@
             "time": "2022-11-25T14:36:26+00:00"
         },
         {
+            "name": "scalar/api-reference",
+            "version": "1.77.0",
+            "dist": {
+                "type": "tar",
+                "url": "https://registry.npmjs.org/@scalar/api-reference/-/api-reference-1.77.0.tgz",
+                "shasum": "26171e1644e3f50b8f9e31f2fe572a188abeef98"
+            },
+            "type": "library",
+            "license": [
+                "MIT"
+            ],
+            "description": "Scalar API reference, the browser bundle of the npm package @scalar/api-reference (Scalar publishes no Composer package without a framework)."
+        },
+        {
             "name": "setasign/tfpdf",
             "version": "v1.34",
             "source": {
@@ -633,67 +647,6 @@
                 }
             ],
             "time": "2026-06-06T23:41:24+00:00"
-        },
-        {
-            "name": "swagger-api/swagger-ui",
-            "version": "v5.34.1",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/swagger-api/swagger-ui.git",
-                "reference": "d3296954a6b813898d298815ac3e68daa1cf7408"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/swagger-api/swagger-ui/zipball/d3296954a6b813898d298815ac3e68daa1cf7408",
-                "reference": "d3296954a6b813898d298815ac3e68daa1cf7408",
-                "shasum": ""
-            },
-            "type": "library",
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "Apache-2.0"
-            ],
-            "authors": [
-                {
-                    "name": "Anna Bodnia",
-                    "email": "anna.bodnia@gmail.com"
-                },
-                {
-                    "name": "Buu Nguyen",
-                    "email": "buunguyen@gmail.com"
-                },
-                {
-                    "name": "Josh Ponelat",
-                    "email": "jponelat@gmail.com"
-                },
-                {
-                    "name": "Kyle Shockey",
-                    "email": "kyleshockey1@gmail.com"
-                },
-                {
-                    "name": "Robert Barnwell",
-                    "email": "robert@robertismy.name"
-                },
-                {
-                    "name": "Sahar Jafari",
-                    "email": "shr.jafari@gmail.com"
-                }
-            ],
-            "description": " Swagger UI is a collection of HTML, Javascript, and CSS assets that dynamically generate beautiful documentation from a Swagger-compliant API.",
-            "homepage": "http://swagger.io",
-            "keywords": [
-                "api",
-                "documentation",
-                "openapi",
-                "specification",
-                "swagger",
-                "ui"
-            ],
-            "support": {
-                "issues": "https://github.com/swagger-api/swagger-ui/issues",
-                "source": "https://github.com/swagger-api/swagger-ui/tree/v5.34.1"
-            },
-            "time": "2026-10-30T13:31:19+00:00"
         },
         {
             "name": "symfony/deprecation-contracts",

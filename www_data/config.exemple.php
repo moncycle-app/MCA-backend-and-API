@@ -74,9 +74,11 @@ define("TRUSTED_PROXIES", []);
 // fetches and draws as text. Empty: no banner. A dev server may be http://localhost:PORT/...
 define("NEWS_URL", "https://tech4fertility.org/latest-news.json");
 
-// The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
-// GET /api/v3/server_info tells it to every client. Empty: no page to show or link (the box stays required).
-define("TERMS_OF_SERVICE_URL", "https://www.moncycle.app/ToS/term_of_service_fr.html");
+// The terms of service: https pages. The sign-up page shows one in an iframe, beside the box to tick, the account page links to it and
+// GET /api/v3/server_info tells them to every client. TERMS_OF_SERVICE_URL is the default page (every language without a page of its own
+// gets it: English here), TERMS_OF_SERVICE_URLS one page per language (language code in lower case). Empty: no page to show or link.
+define("TERMS_OF_SERVICE_URL", "https://moncycle.app/en/term_of_service.html");
+define("TERMS_OF_SERVICE_URLS", ["fr" => "https://www.moncycle.app/ToS/term_of_service_fr.html"]);
 
 // The weekly report of the team (lib/weekly_report.php): the addresses, separated by commas, that get it every Monday from the cron
 // (script/weekly_report.php sends it by hand). An item that is not an address is skipped. Empty: no report.

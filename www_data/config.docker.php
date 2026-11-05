@@ -79,10 +79,14 @@ define("TRUSTED_PROXIES", env_ip_ranges("TRUSTED_PROXIES"));
 // image also reads it for the CSP (connect-src, server_conf/docker-entrypoint.sh).
 define("NEWS_URL", getenv("NEWS_URL") === false ? "https://tech4fertility.org/latest-news.json" : trim(getenv("NEWS_URL")));
 
-// The terms of service: an https page. The sign-up page shows it in an iframe, beside the box to tick, the account page links to it and
-// GET /api/v3/server_info tells it to every client. Unset: the official instance's. Set empty: no page to show or link (the box stays
-// required). The Docker image also reads it for the CSP (frame-src, server_conf/docker-entrypoint.sh).
-define("TERMS_OF_SERVICE_URL", getenv("TERMS_OF_SERVICE_URL") === false ? "https://www.moncycle.app/ToS/term_of_service_fr.html" : trim(getenv("TERMS_OF_SERVICE_URL")));
+// The terms of service: https pages. The sign-up page shows one in an iframe, beside the box to tick, the account page links to it and
+// GET /api/v3/server_info tells them to every client.
+// TERMS_OF_SERVICE_URL is the default page, the one of every language that has none of its own (English on the official instance).
+// TERMS_OF_SERVICE_URLS is a page per language, "fr=https://...,de=https://..." (language code in lower case): a new language is a new pair.
+// Unset: the official instance's. Set empty: none (with both empty there is no page to show or link, the box stays required).
+// The Docker image also reads them for the CSP (frame-src, server_conf/docker-entrypoint.sh).
+define("TERMS_OF_SERVICE_URL", getenv("TERMS_OF_SERVICE_URL") === false ? "https://moncycle.app/en/term_of_service.html" : trim(getenv("TERMS_OF_SERVICE_URL")));
+define("TERMS_OF_SERVICE_URLS", parse_language_urls(getenv("TERMS_OF_SERVICE_URLS") === false ? "fr=https://www.moncycle.app/ToS/term_of_service_fr.html" : getenv("TERMS_OF_SERVICE_URLS")));
 
 // The weekly report of the team (lib/weekly_report.php): the addresses, separated by commas, that get it every Monday from the cron
 // (script/weekly_report.php sends it by hand). An item that is not an address is skipped. Empty: no report.

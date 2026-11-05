@@ -311,7 +311,7 @@ must be optional and ignored by an older reader. The user's date format and temp
 The web app is its own repository, **MCA-web-APP**, with its own AGENT.md (CSP rules, forms, `store.js`, `config.js`). It talks to this
 API only through the contract, `www_data/api/moncycle_app_open_api.yaml`, which stays here: a change of an endpoint is made here, with its
 YAML, and the web app follows. The API's generation is the integer at the start of `APP_VERSION`; the web app declares the range it
-supports (`src/version.json`, `api`) and the image build refuses a pair outside it. `www_data/js/swagger-init.js`
+supports (`src/version.json`, `api`) and the image build refuses a pair outside it. `www_data/js/scalar-init.js`
 is the only front file kept here.
 
 ## The log

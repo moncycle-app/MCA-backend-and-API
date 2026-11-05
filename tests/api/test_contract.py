@@ -25,7 +25,33 @@ def documented_operations():
     return found
 
 
+def plain_values_that_are_not_yaml():
+    """Line numbers of the `key: value` lines whose unquoted value holds what YAML reads as a mapping or a comment."""
+    found, block = [], None
+    for number, line in enumerate(SPEC.splitlines(), 1):
+        indent = len(line) - len(line.lstrip())
+        if block is not None:
+            if not line.strip() or indent > block:
+                continue
+            block = None
+        m = re.match(r"^\s*(?:- )*()[^\s:#'\"]+:\s+(\S.*)$", line)
+        if not m:
+            continue
+        value = m.group(2)
+        if value[0] in "|>":
+            block = m.start(1)
+        elif value[0] not in "'\"[{&*!#" and (": " in value or value.endswith(":") or " #" in value):
+            found.append(number)
+    return found
+
+
 class Contract(ApiTest):
+    def test_no_plain_value_breaks_the_yaml_of_the_file(self):
+        self.assertEqual(plain_values_that_are_not_yaml(), [])
+
+    def test_no_schema_uses_the_null_type_that_openapi_3_0_does_not_have(self):
+        self.assertIsNone(re.search(r"type:\s*[\"']?null\b", SPEC))
+
     def test_the_file_declares_the_operations_we_expect_to_find(self):
         self.assertGreaterEqual(len(documented_operations()), 29)
 
