@@ -73,7 +73,7 @@ foreach (db_querie_select_cycles_finished($db) as $account) {
 
 	$nfp_method = intval($account["nfp_method"]);
 	$csv = fopen('php://memory', 'rw');
-	$display = user_setting_display(user_setting_load($db, intval($account["no_user_account"])), $account["language"]);
+	$display = user_setting_display(user_setting_load($db, intval($account["no_user_account"])));
 	doc_csv_cycle($csv, $days, $nfp_method, $display);
 	rewind($csv);
 

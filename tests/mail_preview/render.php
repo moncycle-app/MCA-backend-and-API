@@ -9,6 +9,7 @@ declare(strict_types=1);
 namespace PHPMailer\PHPMailer {
 	class PHPMailer {
 		const ENCRYPTION_SMTPS = "ssl";
+		const ENCRYPTION_STARTTLS = "tls";
 		public $Host, $SMTPAuth, $Username, $Password, $SMTPSecure, $Port, $Timeout, $CharSet, $Subject, $Body, $AltBody, $ErrorInfo = "";
 		public array $to = [], $reply = [], $files = [];
 		static string $dir = "", $name = "";

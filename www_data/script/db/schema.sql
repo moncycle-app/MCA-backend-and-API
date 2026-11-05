@@ -1,7 +1,7 @@
 SET NAMES utf8mb4;
 
 CREATE TABLE `user_account` (
-  `no_user_account` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `no_user_account` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `name` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `nfp_method` smallint(5) unsigned NOT NULL DEFAULT 1,
   `age` smallint(5) unsigned NOT NULL,
@@ -27,12 +27,14 @@ CREATE TABLE `user_account` (
   `terms_accepted_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`no_user_account`),
   UNIQUE KEY `login_email` (`login_email`),
-  UNIQUE KEY `email_token_hash` (`email_token_hash`)
+  UNIQUE KEY `email_token_hash` (`email_token_hash`),
+  KEY `inscription_date` (`inscription_date`),
+  KEY `email_verified_at_inscription_date` (`email_verified_at`,`inscription_date`)
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `user_setting` (
-  `no_user_setting` int(10) unsigned NOT NULL AUTO_INCREMENT,
-  `no_user_account` mediumint(8) unsigned NOT NULL,
+  `no_user_setting` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `no_user_account` bigint(20) unsigned NOT NULL,
   `name` varchar(255) COLLATE utf8mb4_bin NOT NULL,
   `value_int` int(11) DEFAULT NULL,
   `value_str` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
@@ -40,13 +42,13 @@ CREATE TABLE `user_setting` (
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
   PRIMARY KEY (`no_user_setting`),
   UNIQUE KEY `unique_user_account_and_name` (`no_user_account`,`name`),
-  CONSTRAINT `user_setting_ibfk_1` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
+  CONSTRAINT `fk_user_setting_user_account` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `day_timeline` (
-  `no_day` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `no_user_account` mediumint(8) unsigned NOT NULL,
-  `date_obs` date NOT NULL DEFAULT '0000-00-00',
+  `no_day` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `no_user_account` bigint(20) unsigned NOT NULL,
+  `date_obs` date NOT NULL,
   `day_not_observed` tinyint(1) unsigned DEFAULT NULL,
   `fc_bleeding` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL,
   `fc_bleeding_brown` tinyint(1) unsigned DEFAULT NULL,
@@ -68,19 +70,20 @@ CREATE TABLE `day_timeline` (
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
   PRIMARY KEY (`no_day`),
   UNIQUE KEY `unique_user_account_and_date` (`no_user_account`,`date_obs`),
-  KEY `no_user_account` (`no_user_account`),
-  KEY `date_obs` (`date_obs`),
-  CONSTRAINT `day_timeline_ibfk_1` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
+  KEY `user_account_last_write_date` (`no_user_account`,`last_write_db`,`date_obs`),
+  KEY `user_account_cycle_1st_day_date` (`no_user_account`,`cycle_1st_day`,`date_obs`),
+  KEY `user_account_paused_date` (`no_user_account`,`observation_paused`,`date_obs`),
+  KEY `date_obs_user_account` (`date_obs`,`no_user_account`),
+  CONSTRAINT `fk_day_timeline_user_account` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=100 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `auth_token` (
-  `no_auth_token` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `no_user_account` mediumint(8) unsigned NOT NULL,
+  `no_auth_token` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `no_user_account` bigint(20) unsigned NOT NULL,
   `name` varchar(256) COLLATE utf8mb4_bin NOT NULL,
   `scope` tinyint(1) unsigned NOT NULL DEFAULT 2,
   `expire` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `date_expire` timestamp NULL DEFAULT NULL,
-  `contry_code` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL,
   `date_creation` timestamp NOT NULL DEFAULT current_timestamp(),
   `date_use` timestamp NULL DEFAULT NULL,
   `user_agent` varchar(255) COLLATE utf8mb4_bin DEFAULT NULL,
@@ -93,40 +96,38 @@ CREATE TABLE `auth_token` (
   PRIMARY KEY (`no_auth_token`),
   UNIQUE KEY `auth_token_str` (`auth_token_str`),
   UNIQUE KEY `unique_user_account_and_prefix` (`no_user_account`,`auth_token_prefix`),
-  KEY `no_user_account` (`no_user_account`),
-  CONSTRAINT `day_timeline_ibfk_2` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
+  CONSTRAINT `fk_auth_token_user_account` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `login_attempt_ip` (
-  `no_login_attempt_ip` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `no_login_attempt_ip` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `ip_address` varchar(45) COLLATE utf8mb4_bin NOT NULL,
   `date_attempt` timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`no_login_attempt_ip`),
-  KEY `ip_address_date_attempt` (`ip_address`,`date_attempt`)
+  KEY `ip_address_date_attempt` (`ip_address`,`date_attempt`),
+  KEY `date_attempt` (`date_attempt`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `day_description` (
-  `no_day_description` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `no_user_account` mediumint(8) unsigned DEFAULT NULL,
+  `no_day_description` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `no_user_account` bigint(20) unsigned NOT NULL,
   `name` varchar(256) COLLATE utf8mb4_bin NOT NULL,
   `type` tinyint(1) unsigned NOT NULL DEFAULT 0,
   `last_write_client_UTC` timestamp NULL DEFAULT NULL,
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
   PRIMARY KEY (`no_day_description`),
-  KEY `no_user_account` (`no_user_account`),
   UNIQUE KEY `unique_user_account_and_name` (`no_user_account`,`name`),
-  CONSTRAINT `day_timeline_ibfk_3` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
+  CONSTRAINT `fk_day_description_user_account` FOREIGN KEY (`no_user_account`) REFERENCES `user_account` (`no_user_account`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=50 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `link_day_timeline_day_description` (
-  `no_day` mediumint(8) unsigned NOT NULL,
-  `no_day_description` mediumint(8) unsigned NOT NULL,
+  `no_day` bigint(20) unsigned NOT NULL,
+  `no_day_description` bigint(20) unsigned NOT NULL,
   `last_write_db` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE current_timestamp(),
-  KEY `no_day` (`no_day`),
+  PRIMARY KEY (`no_day`,`no_day_description`),
   KEY `no_day_description` (`no_day_description`),
-  UNIQUE KEY `unique_day_timeline_and_day_description` (`no_day`,`no_day_description`),
-  CONSTRAINT `day_timeline_ibfk_4` FOREIGN KEY (`no_day`) REFERENCES `day_timeline` (`no_day`) ON DELETE CASCADE,
-  CONSTRAINT `day_timeline_ibfk_5` FOREIGN KEY (`no_day_description`) REFERENCES `day_description` (`no_day_description`) ON DELETE CASCADE
+  CONSTRAINT `fk_link_day_timeline` FOREIGN KEY (`no_day`) REFERENCES `day_timeline` (`no_day`) ON DELETE CASCADE,
+  CONSTRAINT `fk_link_day_description` FOREIGN KEY (`no_day_description`) REFERENCES `day_description` (`no_day_description`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 CREATE TABLE `key_value` (

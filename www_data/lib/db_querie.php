@@ -41,6 +41,17 @@ function db_querie_release_lock($db, string $name): void {
 	db_ops_value($db, "SELECT RELEASE_LOCK(:name)", ["name" => $name]);
 }
 
+// Every foreign key of the database in use, as [table, name]: a migration that widens a key they hold drops them first, whatever their name
+// (a database made by a migration does not have the names of schema.sql).
+function db_querie_select_foreign_keys($db): array {
+	return db_ops_rows($db, "SELECT rc.TABLE_NAME AS table_name, rc.CONSTRAINT_NAME AS name FROM information_schema.REFERENTIAL_CONSTRAINTS AS rc WHERE rc.CONSTRAINT_SCHEMA = DATABASE() ORDER BY rc.TABLE_NAME, rc.CONSTRAINT_NAME");
+}
+
+// $table and $name come from db_querie_select_foreign_keys(), never from a client: an identifier cannot be a bound parameter.
+function db_querie_drop_foreign_key($db, string $table, string $name): void {
+	db_ops_exec($db, "ALTER TABLE `$table` DROP FOREIGN KEY `$name`");
+}
+
 // ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------
@@ -207,11 +218,11 @@ function db_querie_update_is_inactive($db, $no_user_account, int $is_inactive): 
 // The account behind a token (its SHA-256), with the token's own columns.
 function db_querie_select_user_account_auth_token($db, string $auth_token_str): ?array {
 	return db_ops_row($db,
-		"SELECT J.no_user_account, J.no_auth_token, J.auth_token_prefix AS prefix_auth_token, C.name AS name_user_account, J.contry_code, J.name AS name_auth_token,
+		"SELECT J.no_user_account, J.no_auth_token, J.auth_token_prefix AS prefix_auth_token, C.name AS name_user_account,
 		J.scope AS scope_auth_token, " . db_querie_sql_old_auth_token("J.") . " AS expired_auth_token,
-		J.date_creation AS d_creation_auth_token, J.date_use AS d_use_auth_token, C.nfp_method, C.age, C.login_email, ne.value_str AS notification_emails,
-		C.nb_connection_attempts, C.last_failed_attempt, C.user_enabled, C.is_inactive, C.last_auth_date, C.inscription_date,
-		C.last_password_change, C.register_comment, tk.value_str AS totp_secret, ts.value_int AS totp_state, C.research, C.language, C.last_write_client_UTC
+		C.nfp_method, C.age, C.login_email, ne.value_str AS notification_emails,
+		C.nb_connection_attempts, C.last_failed_attempt, C.user_enabled, C.is_inactive, C.inscription_date,
+		tk.value_str AS totp_secret, ts.value_int AS totp_state, C.research, C.language, C.last_write_client_UTC
 		FROM auth_token AS J INNER JOIN user_account AS C ON J.no_user_account = C.no_user_account"
 		. db_querie_sql_setting_join("C", "ts", USER_SETTING_TOTP_STATE) . db_querie_sql_setting_join("C", "tk", USER_SETTING_TOTP_SECRET) . db_querie_sql_setting_join("C", "ne", "notification_emails") . "
 		WHERE auth_token_str = :auth_token_str LIMIT 1",
@@ -337,7 +348,7 @@ function db_querie_select_day_description($db, $no_day_description, $no_user_acc
 
 // is the name taken by another description of the account?
 function db_querie_select_day_description_name_exists($db, string $name, $no_user_account, $no_day_description): bool {
-	return boolval(db_ops_value($db, "SELECT COUNT(no_day_description) > 0 FROM day_description WHERE name = :name AND no_user_account = :no_user_account AND no_day_description != :no_day_description",
+	return boolval(db_ops_value($db, "SELECT EXISTS (SELECT 1 FROM day_description AS d WHERE d.name = :name AND d.no_user_account = :no_user_account AND d.no_day_description <> :no_day_description)",
 		["name" => $name, "no_user_account" => $no_user_account, "no_day_description" => $no_day_description]));
 }
 
@@ -425,7 +436,9 @@ function db_querie_update_day_timeline_touch_day_description($db, $no_user_accou
 }
 
 // ---------------------------------------------------------------------------
-// Days. date_obs is unique per account: equality on the account then a range on the date is a range scan of that index, in order.
+// Days. date_obs is unique per account: equality on the account then a range on the date is a range scan of that index, in order. A sync
+// asks three more things of an account, each from an index of its own without reading a row: the dates written since (last_write_db), the
+// cycles and the pauses (cycle_1st_day, observation_paused).
 // ---------------------------------------------------------------------------
 
 function db_querie_select_all_day_timeline($db, $no_user_account): array {
@@ -559,10 +572,10 @@ function db_querie_select_user_account_inactive($db): array {
 		"SELECT c.no_user_account, c.name, MAX(o.last_write_db) AS last_day_written, c.login_email, ne.value_str AS notification_emails, c.language, c.inscription_date
 		FROM user_account AS c LEFT JOIN day_timeline AS o ON c.no_user_account = o.no_user_account"
 		. db_querie_sql_setting_join("c", "ne", "notification_emails") . "
-		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0 AND c.email_verified_at IS NOT NULL
+		WHERE c.no_user_account NOT IN (" . ACCOUNT_DEMO_IDS_SQL . ") AND c.is_inactive = 0 AND c.email_verified_at IS NOT NULL AND c.inscription_date < DATE(NOW()) - INTERVAL 35 DAY
 		GROUP BY c.no_user_account, c.name, c.login_email, ne.value_str, c.language, c.inscription_date
-		HAVING (DATE(last_day_written) < DATE(NOW()) - INTERVAL 35 DAY OR last_day_written IS NULL) AND c.inscription_date < DATE(NOW()) - INTERVAL 35 DAY
-		ORDER BY last_day_written DESC LIMIT 20"
+		HAVING DATE(last_day_written) < DATE(NOW()) - INTERVAL 35 DAY OR last_day_written IS NULL
+		ORDER BY last_day_written DESC, c.no_user_account LIMIT 20"
 	);
 }
 

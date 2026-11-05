@@ -24,6 +24,26 @@ require_once __DIR__ . "/../vendor/autoload.php";
 require_once __DIR__ . "/log.php";
 require_once __DIR__ . "/res.php";
 
+// The mail server of a URL (SMTP_URL, config.docker.php): host, port, login, password, sender, and whether TLS is there from the first byte
+// ("smtps") or asked for with STARTTLS ("smtp", which PHPMailer then requires). SMTP_PASSWORD wins over a password in the URL. Throws what is
+// not such a URL, with a message that does not repeat it: it may hold the password.
+function mail_smtp_settings(#[\SensitiveParameter] string $url): array {
+	$uri = new \Uri\Rfc3986\Uri($url);
+	$scheme = $uri->getScheme();
+	$host = $uri->getHost();
+	if (!in_array($scheme, ["smtps", "smtp"], true) || !$host) throw new InvalidArgumentException("SMTP_URL is not smtps://login@host:port or smtp://login@host:port");
+	$login = rawurldecode($uri->getRawUsername() ?? "");
+	parse_str($uri->getRawQuery() ?? "", $query);
+	return [
+		"host" => $host,
+		"port" => $uri->getPort() ?? ($scheme === "smtps" ? 465 : 587),
+		"login" => $login,
+		"password" => SMTP_PASSWORD !== "" ? SMTP_PASSWORD : rawurldecode($uri->getRawPassword() ?? ""),
+		"from" => is_string($query["from"] ?? null) ? $query["from"] : $login,
+		"implicit_tls" => $scheme === "smtps",
+	];
+}
+
 // Sends one mail. $kind names it in the log, which keeps nothing else of it but how many addresses and files (never an address, a
 // subject or a body: several hold a link that opens an account). $body is the slots of the template (the subject added), or a whole HTML
 // page of its own (the weekly report). $text is the plain-text part: with slots, its body only (the frame adds greeting, link, sign-off
@@ -32,17 +52,18 @@ require_once __DIR__ . "/res.php";
 function mail_send(string $kind, array $to, string $subject, array|string $body, ?string $text = null, array $attachments = [], array $log_fields = []): bool {
 	$log = ["kind" => $kind, "to" => count(array_filter($to)), "fil" => count($attachments)] + $log_fields;
 	try {
+		$smtp = mail_smtp_settings(SMTP_URL);
 		$mail = new PHPMailer();
 		$mail->isSMTP();
-		$mail->Host       = SMTP_HOST;
+		$mail->Host       = $smtp["host"];
 		$mail->SMTPAuth   = true;
-		$mail->Username   = SMTP_MAIL;
-		$mail->Password   = SMTP_PASSWORD;
-		$mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
-		$mail->Port       = SMTP_PORT;
+		$mail->Username   = $smtp["login"];
+		$mail->Password   = $smtp["password"];
+		$mail->SMTPSecure = $smtp["implicit_tls"] ? PHPMailer::ENCRYPTION_SMTPS : PHPMailer::ENCRYPTION_STARTTLS;
+		$mail->Port       = $smtp["port"];
 		$mail->Timeout    = 10;   // seconds; PHPMailer's 300 would hold a worker for minutes on a stalled server
 		$mail->CharSet    = 'UTF-8';
-		$mail->setFrom(SMTP_MAIL, 'MONCYCLE.APP');
+		$mail->setFrom($smtp["from"], 'MONCYCLE.APP');
 		$mail->addReplyTo(MAIL_REPLY_TO, 'MONCYCLE.APP');
 
 		foreach (array_filter($to) as $address) $mail->addAddress($address, $address);

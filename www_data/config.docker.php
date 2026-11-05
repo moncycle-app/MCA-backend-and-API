@@ -23,28 +23,19 @@ require_once __DIR__ . "/lib/env.php";
 
 define("APP_URL", env_string("APP_URL", "https://tableau.moncycle.app/"));
 
-define("DB_HOST", env_string("DB_HOST"));
-define("DB_ID",   env_string("DB_ID"));
-define("DB_NAME", env_string("DB_NAME"));
-define("DB_PORT", env_int("DB_PORT", 3306));
+// The database, as one PDO string: "mysql:host=db;port=3306;dbname=moncycle;user=moncycle". The password is in it (password=..., a ";" in it
+// written ";;") or, better, in DB_PASSWORD. Each of the two can come from a Docker secret: DB_DSN_FILE, DB_PASSWORD_FILE.
+define("DB_DSN", env_secret("DB_DSN"));
+define("DB_PASSWORD", env_secret("DB_PASSWORD"));
 
-if (getenv("DB_PASSWORD_FILE") && strlen(getenv("DB_PASSWORD_FILE"))>0 && is_readable(getenv("DB_PASSWORD_FILE"))) {
-	define("DB_PASSWORD", trim(file_get_contents(getenv("DB_PASSWORD_FILE"))));
-}
-else define("DB_PASSWORD", env_string("DB_PASSWORD"));
+// The mail server, as one URL: "smtps://login@host:465" (implicit TLS, the default port is 465) or "smtp://login@host:587" (STARTTLS, required).
+// A login or password with a special character is percent-encoded (bonjour%40moncycle.app). The sender is the login, or ?from=address. The
+// password is in the URL or, better, in SMTP_PASSWORD. Each of the two can come from a Docker secret: SMTP_URL_FILE, SMTP_PASSWORD_FILE.
+define("SMTP_URL", env_secret("SMTP_URL"));
+define("SMTP_PASSWORD", env_secret("SMTP_PASSWORD"));
 
-define("SMTP_HOST", env_string("SMTP_HOST"));
-define("SMTP_PORT", env_int("SMTP_PORT", 465));
-define("SMTP_MAIL", env_string("SMTP_MAIL"));
-
-if (getenv("SMTP_PASSWORD_FILE") && strlen(getenv("SMTP_PASSWORD_FILE"))>0 && is_readable(getenv("SMTP_PASSWORD_FILE"))) {
-	define("SMTP_PASSWORD", trim(file_get_contents(getenv("SMTP_PASSWORD_FILE"))));
-}
-else define("SMTP_PASSWORD", env_string("SMTP_PASSWORD"));
-
-// (also read under their French names, CREATION_COMPTE and CONNEXION_COMPTE)
-define("REGISTRATION_ENABLED", env_bool("REGISTRATION_ENABLED", env_bool("CREATION_COMPTE", true)));
-define("LOGIN_ENABLED", env_bool("LOGIN_ENABLED", env_bool("CONNEXION_COMPTE", true)));
+define("REGISTRATION_ENABLED", env_bool("REGISTRATION_ENABLED", true));
+define("LOGIN_ENABLED", env_bool("LOGIN_ENABLED", true));
 
 // The two public demo accounts (ids 2 and 3, script/db/demo.sql; the sign-in page has a button for each, and their
 // password is "demo"). On: they can sign in, and script/demo_reset.php loads demo.sql every hour, which puts them back

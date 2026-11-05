@@ -19,10 +19,11 @@ tests/static_checks.sh       # PHP syntax of every file + the layout rules of AG
 
 A green run prints one line per file and `ALL GREEN`; a red one prints, per failed test, the assertion and the answer of the server.
 
-`tests/run.sh` starts a throwaway container `moncycle_test` (and removes it at the end) from the image of the dev container,
-serving the same `www_data` on the database `test_db_moncycle` (change it with `MONCYCLE_TEST_DB`, a name starting with `test_`; the database must exist and the DB user needs all privileges on it), rebuilt from `schema.sql` + `demo.sql` at each start. The dev app and
+`tests/run.sh` starts a throwaway container `moncycle_test` (and removes it at the end) from the image of the dev container (or
+`MONCYCLE_TEST_IMAGE`, to try a new version of PHP),
+serving the same `www_data` on the database `test_db_moncycle` (change it with `MONCYCLE_TEST_DB`, a name starting with `test_`; the database must exist and the DB user needs all privileges on it), rebuilt from `schema.sql` + `demo.sql` at each start. It takes the `DB_DSN` of the dev container and changes its `dbname`, so the dev container gives it as a variable, not as `DB_DSN_FILE`. The dev app and
 the dev database are not touched, and the SMTP port is dead: no mail leaves. The test server refuses any database whose name does not
-start with `test_`.
+start with `test_`. It runs with `E_ALL`: a PHP warning, notice or deprecation in its log, from the code or from a library, makes the run fail.
 
 ### Your own server
 
@@ -34,13 +35,14 @@ MONCYCLE_TEST_URL=http://127.0.0.1:8190 tests/run.sh
 ```
 
 Give it: `DEMO_ENABLED=true`, `CAPTCHA_SECRET` (32+ characters), `TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16`, a dead
-SMTP (`SMTP_HOST=127.0.0.1 SMTP_PORT=1`), the default password policy, and a database made by `script/db_init.php`.
+SMTP (`SMTP_URL=smtps://tests%40moncycle.test@127.0.0.1:1`), the default password policy, and a database made by `script/db_init.php`.
 
 ## What is where
 
 | File | Covers |
 |---|---|
 | `api/test_public.py` | `server_info`, `health_check`, `pub_stat`, 401/404/405/415/403 shared by all endpoints |
+| `api/test_infra.py` | the ids (`BIGINT UNSIGNED`, whole through the API), the keys the reads count on, how `SMTP_URL` is read |
 | `api/test_days.py` | `GET/POST/DELETE /day`: replace-whole-day, validation, ranges, late writes (409) |
 | `api/test_descriptions.py` | `/description`: create, rename, retype, delete, uniqueness, isolation between accounts |
 | `api/test_sync.py` | `GET /timeline_sync`: `since`, overlap, deletions, cycles |

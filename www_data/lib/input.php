@@ -276,9 +276,9 @@ function input_path_date(string $segment, array &$issues): ?string {
 	return $date;
 }
 
-// A row number: digits only, from 1, within an int column.
+// A row number: digits only, from 1, what a PHP int holds (2^63 - 1, on which intval() stops: half of what an id column holds).
 function input_path_id(string $segment, array &$issues): ?int {
-	if (preg_match('/\A[1-9][0-9]{0,9}\z/', $segment) && intval($segment) <= 2147483647) return intval($segment);
+	if (preg_match('/\A[1-9][0-9]{0,18}\z/', $segment) && strval(intval($segment)) === $segment) return intval($segment);
 	$issues[] = input_issue("path.id", "invalid_value", "The id in the URL must be a whole number from 1.");
 	return null;
 }

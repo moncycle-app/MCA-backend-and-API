@@ -39,31 +39,25 @@ function user_setting_load($db, int $no_user_account): array {
 	return $rows;
 }
 
-// What the setting is when no row says: the date format follows the language of the account.
-function user_setting_default(string $json_name, string $language): bool|string {
-	if ($json_name === "dateFormat") return USER_SETTING_DATE_FORMAT_BY_LANGUAGE[$language] ?? USER_SETTING_DATE_FORMAT_BY_LANGUAGE[ACCOUNT_DEFAULT_LANGUAGE];
-	return USER_SETTINGS[$json_name][2];
-}
-
 // The value the app uses: the row's, or the default when there is none (or when the row holds what the setting no longer takes).
-function user_setting_value(array $rows, string $json_name, string $language): bool|string {
-	[$name, $type, , $codes] = USER_SETTINGS[$json_name];
+function user_setting_value(array $rows, string $json_name): bool|string {
+	[$name, $type, $default, $codes] = USER_SETTINGS[$json_name];
 	$row = $rows[$name] ?? null;
-	if (is_null($row)) return user_setting_default($json_name, $language);
+	if (is_null($row)) return $default;
 
-	if ($type === USER_SETTING_TYPE_BOOL) return is_null($row["int"]) ? user_setting_default($json_name, $language) : $row["int"] === 1;
-	if ($type === USER_SETTING_TYPE_CHOICE) return in_array($row["str"], $codes, true) ? $row["str"] : user_setting_default($json_name, $language);
-	return $row["str"] ?? user_setting_default($json_name, $language);
+	if ($type === USER_SETTING_TYPE_BOOL) return is_null($row["int"]) ? $default : $row["int"] === 1;
+	if ($type === USER_SETTING_TYPE_CHOICE) return in_array($row["str"], $codes, true) ? $row["str"] : $default;
+	return $row["str"] ?? $default;
 }
 
 // The optional settings as GET /api/v3/account tells them: each with the value in force, whether the account set it, and the default.
-function user_setting_to_json(array $rows, string $language): array {
+function user_setting_to_json(array $rows): array {
 	$json = [];
-	foreach (USER_SETTINGS as $json_name => [$name]) {
+	foreach (USER_SETTINGS as $json_name => [$name, , $default]) {
 		$json[$json_name] = [
-			"value" => user_setting_value($rows, $json_name, $language),
+			"value" => user_setting_value($rows, $json_name),
 			"isSet" => isset($rows[$name]),
-			"default" => user_setting_default($json_name, $language),
+			"default" => $default,
 		];
 	}
 	return $json;
@@ -82,10 +76,10 @@ function user_setting_custom_to_json(array $rows): array {
 
 // How a server-made document shows what is stored: the order of day and month of the compact date (the PDF) and the temperature unit
 // of the account.
-function user_setting_display(array $rows, string $language): array {
+function user_setting_display(array $rows): array {
 	return [
-		"date_order" => user_setting_value($rows, "dateOrder", $language),
-		"temperature_unit" => user_setting_value($rows, "temperatureUnit", $language),
+		"date_order" => user_setting_value($rows, "dateOrder"),
+		"temperature_unit" => user_setting_value($rows, "temperatureUnit"),
 	];
 }
 

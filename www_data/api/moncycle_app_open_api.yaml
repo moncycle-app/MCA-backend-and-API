@@ -1484,7 +1484,7 @@ paths:
 
         - **Mandatory** (asked at sign-up, kept in the account): `nickname`, `method`, `temperatureTracking`, `birthYear`,
           `language`, `research`, `loginEmail`, `newPassword`. `GET /account` shows them flat.
-        - **Optional** (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat`, `dateOrder`, `temperatureUnit`,
+        - **Optional** (`timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateOrder`, `temperatureUnit`,
           `notificationEmails`): sent flat in the same body, e.g. `{"temperatureUnit": "F"}`. `GET /account` lists them all in
           `settings`, each as `{value, isSet, default}`: `isSet: false` means the account never chose, `value` is then the
           `default`. **`null` puts an optional setting back to its default** (the only place where `null` means something).
@@ -1500,7 +1500,6 @@ paths:
         | `timelineAscending` | boolean: `false` puts today at the top of the table | `true` |
         | `autoMailExport` | boolean: mail the export of each finished cycle | `false` |
         | `dayBackgroundColor` | boolean: show the colour behind each day | `true` |
-        | `dateFormat` | `DMY_SLASH` 31/12/26, `DMY_DOT` 31.12.26, `DMY_DASH` 31-12-26, `MDY_SLASH` 12/31/26, `YMD_DASH` 26-12-31, `YMD_SLASH` 26/12/31, `YMD_DOT` 26.12.31 (dates only, never times). **Deprecated, no effect**: still accepted and told so that no client breaks, but nothing reads it. The CSV of an export writes ISO dates (spreadsheets read them in any locale), and every date a person reads is the compact or the long date (`dateOrder`, below). Do not offer it | by `language`: `DMY_DOT` for `DE` and `PL`, `DMY_SLASH` for the others |
         | `dateOrder` | `DAY_FIRST` or `MONTH_FIRST`: the order of the day and the month in the compact and the long date, whatever the language of the account | `DAY_FIRST` |
         | `temperatureUnit` | `C` or `F`. **Temperatures stay in Celsius in the API and in the NFP files**: the client converts. The PDF and the CSV of an export follow it. | `C` |
         | `notificationEmails` | see below (needs the password) | `""` |
@@ -1567,7 +1566,7 @@ paths:
         | `birthYear` | integer | This year or up to 100 years earlier. |
         | `language` | `EN`, `FR`, `ES`, `DE`, `IT`, `PL`, `PT` | Language of the account. |
         | `timelineAscending`, `autoMailExport`, `dayBackgroundColor` | boolean | Optional settings, see above. |
-        | `dateFormat`, `dateOrder`, `temperatureUnit` | string | Optional settings, see above. |
+        | `dateOrder`, `temperatureUnit` | string | Optional settings, see above. |
         | `customSettings` | object | Keys of third parties, see above. |
         | `research` | boolean | Consent to contribute anonymous data to research. |
         | `lastWriteClientUtc` | string (RFC 3339) | Your own clock. |
@@ -2944,7 +2943,7 @@ components:
           description: |-
             The optional settings, all of them, whether the account set them or not. Read-only here: write them flat in `POST /account`
             (`null` puts one back to its default).
-          required: [timelineAscending, autoMailExport, dayBackgroundColor, dateFormat, dateOrder, temperatureUnit, notificationEmails]
+          required: [timelineAscending, autoMailExport, dayBackgroundColor, dateOrder, temperatureUnit, notificationEmails]
           properties:
             timelineAscending:
               $ref: '#/components/schemas/SettingBoolean'
@@ -2952,8 +2951,6 @@ components:
               $ref: '#/components/schemas/SettingBoolean'
             dayBackgroundColor:
               $ref: '#/components/schemas/SettingBoolean'
-            dateFormat:
-              $ref: '#/components/schemas/SettingDateFormat'
             dateOrder:
               $ref: '#/components/schemas/SettingDateOrder'
             temperatureUnit:
@@ -2982,23 +2979,6 @@ components:
         default:
           type: boolean
           description: What `value` is when the account chose nothing.
-
-    SettingDateFormat:
-      type: object
-      deprecated: true
-      description: Deprecated, no effect: see `dateOrder`.
-      required: [value, isSet, default]
-      properties:
-        value:
-          type: string
-          enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
-          description: The value in force. The default when `isSet` is `false`.
-        isSet:
-          type: boolean
-        default:
-          type: string
-          enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
-          description: What `value` is when the account chose nothing; it follows the `language` of the account.
 
     SettingDateOrder:
       type: object
@@ -3948,12 +3928,6 @@ components:
           type: boolean
           nullable: true
           description: Optional setting. Show the colour behind each day. `null` puts it back to the default (`true`).
-        dateFormat:
-          type: string
-          nullable: true
-          enum: [DMY_SLASH, DMY_DOT, DMY_DASH, MDY_SLASH, YMD_DASH, YMD_SLASH, YMD_DOT]
-          deprecated: true
-          description: Deprecated, no effect (see `dateOrder`; the CSV export writes ISO dates). Still accepted, checked and told, so that no client breaks. `null` puts it back to the default of the account's language.
         dateOrder:
           type: string
           nullable: true

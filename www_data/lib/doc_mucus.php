@@ -127,7 +127,7 @@ function doc_mucus_rows(array $days): array {
 		else $counter = null;
 
 		$state = doc_day_stamp_state($day);
-		$stamp = DOC_MUCUS_STATE_STAMPS[$state] ?? $day["stampColor"];
+		$stamp = DOC_MUCUS_STATE_STAMPS[$state ?? ""] ?? $day["stampColor"];
 
 		$items = [];
 		foreach (["freeMucusSensation", "freeMucusObservation"] as $field) {

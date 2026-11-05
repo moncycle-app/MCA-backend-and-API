@@ -347,7 +347,7 @@ function user_account_to_json(array $user_account, ?string $oldest_day, array $s
 		"research" => boolval($user_account["research"]),
 		"totpState" => sec_totp_state_name($user_account["totp_state"]),
 		"lastWriteClientUtc" => http_iso8601($user_account["last_write_client_UTC"]),
-		"settings" => user_setting_to_json($setting_rows, $user_account["language"]),
+		"settings" => user_setting_to_json($setting_rows),
 		"customSettings" => (object) user_setting_custom_to_json($setting_rows),
 	];
 }

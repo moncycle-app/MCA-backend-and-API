@@ -19,7 +19,7 @@ log, [docs/logs.md](docs/logs.md). Read the code before relying on any of this: 
 
 ## The project
 
-PHP 8.4 + MariaDB 11.1: a JSON HTTP API for menstrual cycle tracking (natural family planning: cervical mucus self-observation, FertilityCare) and the static
+PHP 8.5 + MariaDB 11.1: a JSON HTTP API for menstrual cycle tracking (natural family planning: cervical mucus self-observation, FertilityCare) and the static
 web app that uses it. The source is in `www_data/`, the web server's document root (`/var/www/html/` in the Docker image). There is no
 framework and no build step: PHP files, one script per endpoint. The web app (jQuery, no framework) is the repository MCA-web-APP.
 
@@ -103,7 +103,7 @@ Also:
   domain in it; one that is missing a key throws.
 - **`user_setting.php`** the table `user_setting` (one row per account and name; a number in `value_int`, a text in `value_str`; no row = the
   default of `constants.php`). Three kinds of rows: the **optional settings** (`USER_SETTINGS`: JSON name => name in the table, type, default;
-  `timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateFormat` (deprecated, no effect), `dateOrder`, `temperatureUnit`, `notificationEmails`), the **two-factor state**
+  `timelineAscending`, `autoMailExport`, `dayBackgroundColor`, `dateOrder`, `temperatureUnit`, `notificationEmails`), the **two-factor state**
   (`totp_state`, `totp_secret`: written by `user_setting_set_totp()` only, never shown as a setting) and the **custom keys** of third parties
   (`customSettings`, stored as `custom.<key>`, so that a key can never be a setting of the app). `user_setting_check_body()` /
   `user_setting_check_custom()` check what a client sends (a wrong value is an issue; `null` resets to the default; a value equal to the stored
@@ -387,7 +387,7 @@ neighbours (one behaviour per test, named as a sentence). Beyond that, a change 
 - **Side effects to avoid** on a database that holds real data: `POST /api/v3/token` mails the account's owner at **every** sign-in (the
   demo accounts excepted); `POST /api/v3/register` and `POST /api/v3/recover_password` send real mail through the configured SMTP;
   `script/cron.php` mails users and **deletes** accounts that have been inactive for years. Use a throwaway database and a dead SMTP
-  port (`SMTP_HOST=127.0.0.1`, `SMTP_PORT=1`) for anything that sends or erases, and `php cron.php --dry-run` to see what a run would
+  port (`SMTP_URL=smtps://x@127.0.0.1:1`) for anything that sends or erases, and `php cron.php --dry-run` to see what a run would
   do.
 - **The image's PHP is locked down** (`server_conf/moncycleapp_php.ini`): `disable_functions` (among them `exec`, `system`,
   `shell_exec`, `proc_open`, `popen`, `curl_exec`, `parse_ini_file`, `ini_set`, `mail`) and `open_basedir`. Code that needs one of them
@@ -414,4 +414,3 @@ Delete a line when it is fixed.
   `js/tableau.js` (`NFP_METHOD_BY_ID` is its server twin: change both), and in `js/store.js` the day a body will become
   (`day_from_body`, twin of `day_format_from_json` + `_to_json`) and the cycle start / day (`recompute_cycles`, twin of
   `data_sync_days`). They only serve until the server's own answer replaces them.
-- DB names left as they are because renaming needs a migration: the `contry_code` column.

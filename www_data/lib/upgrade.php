@@ -93,6 +93,13 @@ function upgrade_run($db): bool {
 	}
 }
 
+// Drops every foreign key of the database. Answers how many: the migration that called it makes them again.
+function upgrade_drop_foreign_keys($db): int {
+	$keys = db_querie_select_foreign_keys($db);
+	foreach ($keys as $key) db_querie_drop_foreign_key($db, $key["table_name"], $key["name"]);
+	return count($keys);
+}
+
 // The note v15 kept in one string (day_timeline.fc_score) as the columns of v16, the way v15 read it. The tables are written out here and
 // not taken from constants.php: what a v15 string means does not change with the notation of later versions. 'approximated' tells
 // that the string said more than the columns hold: two codes where one fits (the strongest stays: the handbook notes the most fertile

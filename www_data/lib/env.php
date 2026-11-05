@@ -25,6 +25,13 @@ function env_string(string $name, string $default = ""): string {
 	return $value === false || $value === "" ? $default : $value;
 }
 
+// A setting that may hold a secret: the content of the file named by <name>_FILE (a Docker secret; the newline at its end is not part of
+// it) when it can be read, else the variable itself.
+function env_secret(string $name): string {
+	$file = env_string($name . "_FILE");
+	return $file !== "" && is_readable($file) ? trim((string) file_get_contents($file)) : env_string($name);
+}
+
 function env_int(string $name, int $default): int {
 	$value = filter_var(getenv($name), FILTER_VALIDATE_INT);
 	return $value === false ? $default : $value;

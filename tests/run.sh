@@ -7,6 +7,7 @@
 #   tests/run.sh -v              one line per test instead of one per file
 #   tests/run.sh --keep          leave the test server running afterwards (http://127.0.0.1:8190)
 #   MONCYCLE_TEST_URL=http://host:port tests/run.sh   use a server you started yourself (README, "Your own server")
+#   MONCYCLE_TEST_IMAGE=name tests/run.sh             another image than the dev container's (a new version of PHP)
 #
 # The server is a throwaway container (moncycle_test) made from the image of the dev container, serving the same
 # www_data on the test database (MONCYCLE_TEST_DB, default test_db_moncycle; its name must start with test_; rebuilt from schema.sql + demo.sql at each start), with a dead SMTP port:
@@ -24,7 +25,7 @@ ARGS=()
 for a in "$@"; do
 	case "$a" in
 		--keep) KEEP=1 ;;
-		-h|--help) sed -n '3,14p' "$0"; exit 0 ;;
+		-h|--help) sed -n '3,15p' "$0"; exit 0 ;;
 		*) ARGS+=("$a") ;;
 	esac
 done
@@ -40,8 +41,11 @@ fi
 
 # What the test container takes from the dev one: its image, its mounts (the code, the secrets) and the database host.
 env_of() { docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$DEV_CONTAINER" | grep "^$1=" | cut -d= -f2-; }
-IMAGE=$(docker inspect -f '{{.Config.Image}}' "$DEV_CONTAINER")
+IMAGE="${MONCYCLE_TEST_IMAGE:-$(docker inspect -f '{{.Config.Image}}' "$DEV_CONTAINER")}"
 NETWORK=$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}}{{end}}' "$DEV_CONTAINER")
+# the DSN of the dev container (never in a file there: tests/README.md), on the test database
+TEST_DSN=$(env_of DB_DSN | sed -E "s/dbname=[^;]*/dbname=$TEST_DB/")
+case "$TEST_DSN" in *"dbname=$TEST_DB"*) ;; *) echo "No DB_DSN with a dbname in the environment of $DEV_CONTAINER: is it up to date with the compose file?" >&2; exit 2 ;; esac
 
 docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1
 cleanup() { [ "$KEEP" = 1 ] || docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1; }
@@ -52,11 +56,10 @@ trap cleanup EXIT
 PLATFORM=$(docker inspect -f '{{.Os}}/{{.Architecture}}' "$IMAGE")   # the image's own, so that docker does not warn about emulation
 docker run -d --name "$TEST_CONTAINER" --platform "$PLATFORM" --network "$NETWORK" --volumes-from "$DEV_CONTAINER:ro" \
 	-v "$PWD/tests/support:/tests-support:ro" -p "127.0.0.1:$PORT:8000" \
-	-e DB_HOST="$(env_of DB_HOST)" -e DB_PORT="$(env_of DB_PORT)" -e DB_ID="$(env_of DB_ID)" -e DB_PASSWORD_FILE=/run/secrets/db_password \
-	-e DB_NAME=$TEST_DB -e SMTP_HOST=127.0.0.1 -e SMTP_PORT=1 -e SMTP_PASSWORD_FILE=/run/secrets/smtp_password \
+	-e DB_DSN="$TEST_DSN" -e DB_PASSWORD_FILE=/run/secrets/db_password -e SMTP_URL='smtps://tests%40moncycle.test@127.0.0.1:1' \
 	-e APP_URL=http://localhost:$PORT/ -e DEMO_ENABLED=true -e CRON_ENABLED=false -e MAINTENANCE_MODE=false -e TZ=Europe/Paris \
 	-e CAPTCHA_SECRET=tests-captcha-secret-of-at-least-32-characters \
-	-e TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 -e LOG_LEVEL=warning -e PHP_CLI_SERVER_WORKERS=8 \
+	-e TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16 -e LOG_LEVEL=warning -e PHP_CLI_SERVER_WORKERS=8 -e PHP_ERROR_REPORTING=32767 \
 	--entrypoint sh "$IMAGE" -c '
 		set -e
 		php -d open_basedir= /tests-support/reset_db.php
@@ -73,5 +76,8 @@ done
 
 MONCYCLE_TEST_URL="http://127.0.0.1:$PORT" python3 tests/run_tests.py ${ARGS[@]+"${ARGS[@]}"}
 status=$?
+# E_ALL on the test server: what PHP calls deprecated, in the code or in a library, is seen here before an upgrade of PHP makes it an error
+deprecated=$(docker logs "$TEST_CONTAINER" 2>&1 | grep -E 'PHP (Deprecated|Warning|Notice):' | sed -E 's/^.*\] PHP/PHP/' | sort -u)
+if [ -n "$deprecated" ]; then echo "PHP says:"; echo "$deprecated" | head -20; [ "$status" != 0 ] || status=1; fi
 [ "$status" = 0 ] || [ "${MONCYCLE_TEST_LOGS:-0}" = 0 ] || docker logs "$TEST_CONTAINER" 2>&1 | tail -40
 exit $status

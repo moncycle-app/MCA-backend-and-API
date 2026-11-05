@@ -144,7 +144,7 @@ A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rew
 
     # PHP goes to FPM; MultiViews resolves /api/v3/day/2026-03-10 to day.php and keeps the rest as PATH_INFO
     <FilesMatch "\.php$">
-        SetHandler "proxy:unix:/run/php/php8.4-fpm.sock|fcgi://localhost"
+        SetHandler "proxy:unix:/run/php/php8.5-fpm.sock|fcgi://localhost"
     </FilesMatch>
 
     <FilesMatch "^(config(\.[a-z]+)?\.php|constants\.php|composer\.(json|lock)|.*\.(sql|md|bak|pw)|.*\.bak\..*)$">
@@ -161,6 +161,6 @@ A virtual host for `/var/www/moncycle/www_data`, with `mod_proxy_fcgi`, `mod_rew
 </VirtualHost>
 ```
 
-In the pool (`/etc/php/8.4/fpm/pool.d/www.conf`): `catch_workers_output = yes`, and the PHP settings of rule 6 above as
+In the pool (`/etc/php/8.5/fpm/pool.d/www.conf`): `catch_workers_output = yes`, and the PHP settings of rule 6 above as
 `php_admin_value[...]` lines (`post_max_size = 10M`, `open_basedir`, `display_errors = Off`). `script/` is refused to the web but stays runnable from the command
 line for the cron.

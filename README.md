@@ -28,7 +28,7 @@ Maintained by [Tech 4 Fertility](https://tech4fertility.org/), a French non-prof
 The web app (static HTML, CSS and JavaScript) is in **MCA-web-APP**. The image, Apache and PHP settings, the entrypoint, the crontabs and
 the compose example are in **MCA-Docker-image**, whose `build.sh` builds one image from the three folders side by side.
 
-Requirements: **PHP 8.4**, **MariaDB 11.1** (tested with 11.1.3) and an SMTP server (implicit TLS, port 465) for the mails that verify
+Requirements: **PHP 8.5**, **MariaDB 11.1** (tested with 11.1.3) and an SMTP server (TLS: implicit or STARTTLS) for the mails that verify
 an address, reset a password and report new sign-ins.
 
 ## Install
@@ -41,7 +41,7 @@ takes them as environment variables.
 
 ### Without Docker
 
-You need PHP 8.4 with the extensions `gd` (with FreeType and JPEG: the captcha is a picture), `pdo_mysql`, `mbstring`, `openssl`,
+You need PHP 8.5 with the extensions `gd` (with FreeType and JPEG: the captcha is a picture), `pdo_mysql`, `mbstring`, `openssl`,
 `iconv`, `ctype`, `fileinfo` and `json`; [Composer](https://getcomposer.org); and a MariaDB server. `composer install` names any
 extension that is missing.
 
@@ -72,12 +72,12 @@ is in [Without Docker, in production](docs/deployment.md#without-docker-in-produ
    | Setting | Value |
    |---|---|
    | `APP_URL` | the public URL of your site, with a trailing `/` (it builds the links in mails) |
-   | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_ID`, `DB_PASSWORD` | the database above |
+   | `DB_DSN` (and `DB_PASSWORD`) | the database above, as one string: `mysql:host=127.0.0.1;port=3306;dbname=moncycle;user=moncycle` |
    | `REGISTRATION_ENABLED`, `LOGIN_ENABLED` | `true` (the example ships with both off) |
    | `PHP_SECURE_COOKIES` | `true` over HTTPS (the default); `false` only on plain HTTP |
    | `REQUEST_BODY_MAX_BYTES` | `10485760` (10 MB) | The biggest request body, in bytes, 1024 at least. A bigger one gets `413 file_too_large`. 15 years of daily observations make an NFP file of up to about 7.7 MB. The Docker image applies it to Apache and `post_max_size` at start-up (restart the container to change it); keep `memory_limit` (64M) about 6 times above it, and the container's `mem_limit` above 30 workers x `memory_limit`. Without Docker, set `post_max_size` and your web server's own limit to the same number. |
 | `CAPTCHA_SECRET` | 32 characters or more, random (`openssl rand -base64 48`): without it sign-up and password recovery answer `503 captcha_unavailable` |
-   | `SMTP_HOST`, `SMTP_PORT`, `SMTP_MAIL`, `SMTP_PASSWORD` | your mail server, for sign-up and password links |
+   | `SMTP_URL` (and `SMTP_PASSWORD`) | your mail server, as one URL, for sign-up and password links: `smtps://bonjour%40example.org@mail.example.org:465` |
    | `DEMO_ENABLED` | `true` to sign in with the two demo buttons and no mail server (see [Demo accounts](#demo-accounts)) |
 
    `config.docker.php` is the same file driven by environment variables, with the names of [Settings](#settings): copy it to
@@ -128,17 +128,17 @@ constants of the app (database codes, API vocabularies, limits, PDF layouts) are
 
 | Setting | Default | Description |
 |---|---|---|
-| `DB_HOST` | **required** | MariaDB host. |
-| `DB_PORT` | `3306` | MariaDB port. |
-| `DB_NAME` | **required** | Database name. |
-| `DB_ID` | **required** | Database login. |
+| `DB_DSN` | **required** | The database, as one [PDO string](https://www.php.net/manual/en/ref.pdo-mysql.connection.php): `mysql:host=db;port=3306;dbname=moncycle;user=moncycle`. A socket: `mysql:unix_socket=/run/mysqld/mysqld.sock;dbname=moncycle;user=moncycle`. It may hold the password (`;password=...`, a `;` in it written `;;`). The charset is always `utf8mb4`, whatever it says. |
+| `DB_DSN_FILE` † | – | Path of a file holding the whole of `DB_DSN`, typically a Docker secret. Wins over `DB_DSN` when the file is readable. |
+| `DB_PASSWORD` | – | Database password in clear, when it is not in the string. Wins over one in the string. |
 | `DB_PASSWORD_FILE` † | – | Path of a file holding the database password, typically a Docker secret (`/run/secrets/db_password`). Wins over `DB_PASSWORD` when the file is readable. |
-| `DB_PASSWORD` | – | Database password in clear. Set it or `DB_PASSWORD_FILE`. |
-| `SMTP_HOST` | **required** | SMTP server host. |
-| `SMTP_PORT` | `465` | SMTP port (implicit TLS only, no STARTTLS). |
-| `SMTP_MAIL` | **required** | Sender address, also the SMTP login. |
-| `SMTP_PASSWORD_FILE` † | – | Path of a file holding the SMTP password. Wins over `SMTP_PASSWORD` when the file is readable. |
-| `SMTP_PASSWORD` | – | SMTP password in clear. Set it or `SMTP_PASSWORD_FILE`. |
+| `SMTP_URL` | **required** | The mail server, as one URL. `smtps://login@host:465`: TLS from the first byte (the default port is 465). `smtp://login@host:587`: STARTTLS, and a server that does not offer it is refused (the default port is 587). A login or password with a special character is percent-encoded (`bonjour%40example.org`). It may hold the password (`smtps://login:password@host`). The sender is the login, or `?from=hello%40example.org`. |
+| `SMTP_URL_FILE` † | – | Path of a file holding the whole of `SMTP_URL`, typically a Docker secret. Wins over `SMTP_URL` when the file is readable. |
+| `SMTP_PASSWORD` | – | SMTP password in clear, when it is not in the URL. Wins over one in the URL. |
+| `SMTP_PASSWORD_FILE` † | – | Path of a file holding the SMTP password, as it is (not percent-encoded). Wins over `SMTP_PASSWORD` when the file is readable. |
+
+Two ways to keep the secrets out of the environment: the string in a variable and the password in a secret (`DB_DSN` + `DB_PASSWORD_FILE`), so
+that a look at the container's settings tells where it connects and nothing more; or the whole string in one secret (`DB_DSN_FILE`).
 
 **Network and cookies** (see [docs/deployment.md](docs/deployment.md))
 

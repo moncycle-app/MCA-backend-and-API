@@ -20,15 +20,15 @@ require_once __DIR__ . "/constants.php";
 
 define("APP_URL", "https://tableau.moncycle.app/");
 
-define("DB_HOST", "");
-define("DB_ID", "");
-define("DB_NAME", "");
-define("DB_PORT", 3306);
+// The database, as one PDO string: "mysql:host=db;port=3306;dbname=moncycle;user=moncycle". The password is in it (password=..., a ";" in it
+// written ";;") or in DB_PASSWORD.
+define("DB_DSN", "");
 define("DB_PASSWORD", "");
 
-define("SMTP_HOST", '');
-define("SMTP_PORT", 465);
-define("SMTP_MAIL", "");
+// The mail server, as one URL: "smtps://login@host:465" (implicit TLS, the default port is 465) or "smtp://login@host:587" (STARTTLS, required).
+// A login or password with a special character is percent-encoded (bonjour%40moncycle.app). The sender is the login, or ?from=address. The
+// password is in the URL or in SMTP_PASSWORD.
+define("SMTP_URL", "");
 define("SMTP_PASSWORD", "");
 
 define("REGISTRATION_ENABLED", false);

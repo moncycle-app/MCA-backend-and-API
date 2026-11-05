@@ -17,7 +17,7 @@ def account_with_a_cycle(method=2):
 class OptionalSettings(ApiTest):
     def test_every_optional_setting_is_listed_with_its_default_even_when_not_set(self):
         s = Account().get("account").data["settings"]
-        self.assertEqual(sorted(s), ["autoMailExport", "dateFormat", "dateOrder", "dayBackgroundColor", "notificationEmails", "temperatureUnit", "timelineAscending"])
+        self.assertEqual(sorted(s), ["autoMailExport", "dateOrder", "dayBackgroundColor", "notificationEmails", "temperatureUnit", "timelineAscending"])
         self.assertEqual(s["dateOrder"], {"value": "DAY_FIRST", "isSet": False, "default": "DAY_FIRST"})
         self.assertEqual(s["timelineAscending"], {"value": True, "isSet": False, "default": True})
         self.assertEqual(s["autoMailExport"], {"value": False, "isSet": False, "default": False})
@@ -49,21 +49,19 @@ class OptionalSettings(ApiTest):
 
     def test_a_wrong_value_is_refused_with_every_problem(self):
         a = Account()
-        self.assertIssues(a.post("account", {"timelineAscending": "yes", "temperatureUnit": "K", "dateFormat": 3, "dayBackgroundColor": 1}),
-                          "timelineAscending", "temperatureUnit", "dateFormat", "dayBackgroundColor")
+        self.assertIssues(a.post("account", {"timelineAscending": "yes", "temperatureUnit": "K", "dateOrder": 3, "dayBackgroundColor": 1}),
+                          "timelineAscending", "temperatureUnit", "dateOrder", "dayBackgroundColor")
         self.assertEqual(setting(a, "temperatureUnit")["isSet"], False)
 
     def test_a_refused_request_writes_nothing(self):
         a = Account()
-        self.assertStatus(a.post("account", {"temperatureUnit": "F", "dateFormat": "nope"}), 400)
+        self.assertStatus(a.post("account", {"temperatureUnit": "F", "dateOrder": "nope"}), 400)
         self.assertEqual(setting(a, "temperatureUnit")["isSet"], False)
 
-    def test_the_default_date_format_follows_the_language(self):
+    def test_date_format_is_no_setting_any_more(self):
         a = Account()
-        a.post("account", {"language": "DE"})
-        self.assertEqual(setting(a, "dateFormat"), {"value": "DMY_DOT", "isSet": False, "default": "DMY_DOT"})
-        a.post("account", {"dateFormat": "MDY_SLASH"})
-        self.assertEqual(setting(a, "dateFormat"), {"value": "MDY_SLASH", "isSet": True, "default": "DMY_DOT"})
+        self.assertIssues(a.post("account", {"dateFormat": "MDY_SLASH"}), "dateFormat")
+        self.assertNotIn("dateFormat", a.get("account").data["settings"])
 
     def test_the_date_order_does_not_follow_the_language(self):
         a = Account()
@@ -140,7 +138,7 @@ class Exports(ApiTest):
     def test_the_csv_has_iso_dates_and_follows_the_temperature_unit(self):
         a = Account(method=4)
         a.post("day/2026-09-20", {"temperature": 36.5, "cycleFirstDay": True})
-        a.post("account", {"dateFormat": "MDY_SLASH", "temperatureUnit": "F"})   # the deprecated date format has no effect
+        a.post("account", {"temperatureUnit": "F"})
         r = a.get("export/csv?from=2026-09-20&to=2026-09-20")
         self.assertStatus(r, 200)
         text = r.body.decode("utf-8")

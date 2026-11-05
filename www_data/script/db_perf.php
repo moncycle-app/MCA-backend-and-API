@@ -75,7 +75,8 @@ $results = [];   // label => list of microseconds
 $db = db_ops_open();
 
 echo "== 1. server ==" . PHP_EOL;
-echo "client: PHP " . PHP_VERSION . " (" . PHP_SAPI . "), pdo_mysql, host " . DB_HOST . ":" . DB_PORT . ", db " . DB_NAME . PHP_EOL;
+$database_name = strval(db_ops_value($db, "SELECT DATABASE()"));
+echo "client: PHP " . PHP_VERSION . " (" . PHP_SAPI . "), pdo_mysql, host " . db_ops_value($db, "SELECT @@hostname") . ":" . db_ops_value($db, "SELECT @@port") . ", db " . $database_name . PHP_EOL;
 echo "server: " . db_ops_value($db, "SELECT VERSION()") . PHP_EOL;
 
 $variables = array_column(db_ops_rows($db,
@@ -118,7 +119,7 @@ $tables = db_ops_rows($db,
 	ORDER BY t.data_length + t.index_length DESC, t.table_name"
 );
 $data_bytes = 0;
-echo "tables of " . DB_NAME . " (rows are the engine's estimate):" . PHP_EOL;
+echo "tables of " . $database_name . " (rows are the engine's estimate):" . PHP_EOL;
 foreach ($tables as $table) {
 	$data_bytes += intval($table["data_bytes"]) + intval($table["index_bytes"]);
 	echo sprintf("  %-28s %9s rows   data %8.2f MB   index %8.2f MB", $table["name"], number_format(intval($table["nb_rows"]), 0, ".", " "), $table["data_bytes"] / 1048576, $table["index_bytes"] / 1048576) . PHP_EOL;
@@ -211,7 +212,7 @@ $series = [
 	"tcp, persistent: db_ops_open(true)" => [db_ops_dsn(), [], false, true],
 ];
 if ($socket !== null) {
-	$socket_dsn = "mysql:unix_socket=" . $socket . ";dbname=" . DB_NAME . $charset;
+	$socket_dsn = str_replace("mysql:", "mysql:unix_socket=" . $socket . ";", preg_replace('/(?<=[:;])(host|port)=[^;]*;/', "", db_ops_dsn()));
 	$series["socket, charset in DSN"] = [$socket_dsn, [], false, null];
 	$series["socket, charset in DSN, persistent"] = [$socket_dsn, [PDO::ATTR_PERSISTENT => true], false, null];
 }
@@ -221,7 +222,7 @@ foreach ($series as $label => [$dsn, $pdo_options, $set_names, $through_db_open]
 	try {
 		for ($i = -$warmup; $i < $n; $i++) {
 			$t0 = hrtime(true);
-			$c = $through_db_open === null ? new PDO($dsn, DB_ID, DB_PASSWORD, $pdo_options) : db_ops_open($through_db_open);
+			$c = $through_db_open === null ? db_ops_connect($pdo_options, $dsn) : db_ops_open($through_db_open);
 			if ($set_names) $c->exec("SET NAMES utf8mb4;");
 			$c->query("SELECT 1")->fetchColumn();
 			$t1 = hrtime(true);
@@ -296,7 +297,7 @@ echo "== 4. prepares ($n runs each, SELECT of one account row) ==" . PHP_EOL;
 $prepare_sql = "SELECT C.no_user_account, C.name, C.nfp_method FROM user_account AS C WHERE C.no_user_account = :id";
 $modes = ["prepare: emulated (PDO default, db_ops_open)", "prepare: native, prepared every time", "prepare: native, prepared once"];
 foreach ($modes as $mode) {
-	$c = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_EMULATE_PREPARES => $mode === $modes[0]]);
+	$c = db_ops_connect([PDO::ATTR_EMULATE_PREPARES => $mode === $modes[0]]);
 	$once = $c->prepare($prepare_sql);
 	for ($i = -$warmup; $i < $n; $i++) {
 		$t0 = hrtime(true);
@@ -398,10 +399,10 @@ catch (\Throwable $error) {
 $locker = $handle = null;
 
 // what PDO does by itself, without db_ops_open()'s guard: information, to know whether the guard is the only defence
-$handle = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => true]);
+$handle = db_ops_connect([PDO::ATTR_PERSISTENT => true]);
 $handle->exec("START TRANSACTION");
 $handle = null;
-$handle = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => true]);
+$handle = db_ops_connect([PDO::ATTR_PERSISTENT => true]);
 $by_itself = !$handle->inTransaction();
 $handle->exec("ROLLBACK");
 $check["information: PDO alone also rolls back an open transaction"] = [null, $by_itself ? "yes: db_ops_open()'s check is a second line" : "NO: db_ops_open()'s check is the only defence"];
@@ -416,16 +417,17 @@ $handle->exec("SET @moncycle_probe = NULL");
 $check["information: a user variable survives on a kept connection"] = [null, $leaks ? "yes" : "no"];
 $handle = null;
 
-// the code holds no session state (comment lines are not code: db_ops_open() names what it avoids)
-$patterns = '/\b(GET_LOCK|RELEASE_LOCK|LOCK\s+TABLES|CREATE\s+TEMPORARY|SET\s+(SESSION|GLOBAL|@|autocommit|NAMES|CHARACTER|time_zone|sql_mode|transaction)|autocommit\s*=)/i';
+// the code holds no session state (comment lines are not code: db_ops_open() names what it avoids). GET_LOCK is not looked for: its one use
+// is db_querie_get_lock(), for script/auto_upgrade.php, on a command line, whose connection is not persistent and which releases it itself.
+$patterns = '/\b(LOCK\s+TABLES|CREATE\s+TEMPORARY|SET\s+(SESSION|GLOBAL|@|autocommit|NAMES|CHARACTER|time_zone|sql_mode|transaction)|autocommit\s*=)/i';
 $found = [];
 foreach (array_merge(glob(__DIR__ . "/../lib/*.php"), glob(__DIR__ . "/../api/v3/*.php"), glob(__DIR__ . "/*.php")) as $file) {
 	if (in_array(basename($file), ["db_perf.php", "test.php"], true)) continue;
 	if (preg_match_all($patterns, preg_replace("~^\\s*(//|\\*|/\\*).*$~m", "", file_get_contents($file)), $matches)) $found[] = basename($file) . ": " . implode(", ", array_unique($matches[0]));
 }
-$check["the code sets no session state (SET, GET_LOCK, temporary table, autocommit...)"] = [!$found, $found ? implode("; ", $found) : "lib/, api/ and script/ scanned"];
+$check["the code sets no session state (SET, temporary table, autocommit...)"] = [!$found, $found ? implode("; ", $found) : "lib/, api/ and script/ scanned"];
 
-$check["information: connections now"] = [null, db_ops_value($admin, "SELECT COUNT(*) FROM information_schema.processlist AS P WHERE P.user = :user", ["user" => DB_ID]) . " connections open for this user, max_connections is " . ($variables["max_connections"] ?? "?") . " connections (each Apache worker keeps one)"];
+$check["information: connections now"] = [null, db_ops_value($admin, "SELECT COUNT(*) FROM information_schema.processlist AS P WHERE P.user = SUBSTRING_INDEX(CURRENT_USER(), '@', 1)") . " connections open for this user, max_connections is " . ($variables["max_connections"] ?? "?") . " connections (each Apache worker keeps one)"];
 
 foreach ($check as $label => [$ok, $detail]) {
 	if ($ok === false) $failed++;

@@ -80,7 +80,7 @@ log_event("export.file", [
 ]);
 
 $filename = 'moncycle_app_' . (new DateTime($start_date))->format('d_m_y');
-$display = user_setting_display(user_setting_load($db, intval($user_account["no_user_account"])), $user_account["language"]);
+$display = user_setting_display(user_setting_load($db, intval($user_account["no_user_account"])));
 
 if ($type === EXPORT_TYPE_CSV) {
 	header("Content-Type: text/csv; charset=utf-8");

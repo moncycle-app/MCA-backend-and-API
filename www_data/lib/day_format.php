@@ -219,7 +219,7 @@ function day_format_to_json(array $day): array {
 
 // The stamp as stored: a colour letter, then "BB" with the baby (White and no colour have no letter).
 function day_format_stamp_encode(?string $color, bool $baby): string {
-	return (DAY_STAMP_COLOR_CODES[$color] ?? '') . ($baby ? 'BB' : '');
+	return (DAY_STAMP_COLOR_CODES[$color ?? ''] ?? '') . ($baby ? 'BB' : '');
 }
 
 // The fields db_querie_update_day_timeline() takes. A day is its full state, not a patch: a field left out is written empty. The descriptions

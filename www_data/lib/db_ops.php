@@ -18,9 +18,17 @@ declare(strict_types=1);
 // The database connection and the way a statement is run: prepared once per connection, parameters bound by PHP type, transactions.
 // No SQL of the app here: the statements are lib/db_querie.php.
 
-// The charset is in the DSN: PDO knows it, and the server hears it in the handshake (no SET NAMES round trip).
+// DB_DSN, whatever charset it says: every table is utf8mb4. In the DSN, PDO knows it and the server hears it in the handshake (no SET NAMES
+// round trip); PDO keeps the last value of a key.
 function db_ops_dsn(): string {
-	return "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+	if (DB_DSN === "") throw new PDOException("the setting DB_DSN is empty (docs/upgrading.md)");
+	return rtrim(DB_DSN, ";") . ";charset=utf8mb4";
+}
+
+// A connection to the database of the settings. The login is in the DSN; a password in DB_PASSWORD wins over one in the DSN. $dsn: another
+// way to reach it (script/db_perf.php).
+function db_ops_connect(array $options = [], ?string $dsn = null): PDO {
+	return new PDO($dsn ?? db_ops_dsn(), null, DB_PASSWORD === "" ? null : DB_PASSWORD, $options);
 }
 
 // Persistent in a web request: the worker keeps the connection for its next request, which saves the connect and the login (about 250
@@ -28,7 +36,7 @@ function db_ops_dsn(): string {
 // change: db_perf.php scans for them), PDO replaces a dead one, and a transaction left open by a request that died is rolled back here.
 // Each worker holds one: max_connections must cover the workers of every app container plus the cron.
 function db_ops_open(?bool $persistent = null): PDO {
-	$db = new PDO(db_ops_dsn(), DB_ID, DB_PASSWORD, [PDO::ATTR_PERSISTENT => $persistent ?? PHP_SAPI !== "cli"]);
+	$db = db_ops_connect([PDO::ATTR_PERSISTENT => $persistent ?? PHP_SAPI !== "cli"]);
 	if ($db->inTransaction()) $db->exec("ROLLBACK");
 	return $db;
 }

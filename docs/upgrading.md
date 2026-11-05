@@ -79,4 +79,22 @@ Start with the introduction of [`moncycle_app_open_api.yaml`](../www_data/api/mo
 - The API is served under `/api/v3/`; `/api/v2/` answers 404. The proxy, the health check and the web app must use the new address.
   `GET /account` changes shape: see the YAML.
 - `autoMailExport` (`auto_mail_export`) now defaults to **off**: an account without a row gets no cycle export by mail. Migrated accounts keep their stored value; accounts created from now on start with no mail.
-- `autoMailExport` (`auto_mail_export`) now defaults to **off**: an account without a row gets no cycle export by mail. Migrated accounts keep their stored value; accounts created from now on start with no mail.
+- **PHP 8.5.** The image is built on it; without Docker, install it first (`composer install` refuses an older one).
+- **The database and the mail server are one string each**, and the old settings are not read any more:
+
+  | Before | Now |
+  |---|---|
+  | `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_ID` | `DB_DSN=mysql:host=HOST;port=PORT;dbname=NAME;user=ID` |
+  | `SMTP_HOST`, `SMTP_PORT`, `SMTP_MAIL` | `SMTP_URL=smtps://MAIL@HOST:PORT`, the `@` of the address written `%40` |
+
+  `DB_PASSWORD_FILE` and `SMTP_PASSWORD_FILE` do not change, nor do the secret files. A container started with the old settings has no database:
+  it stops at `db_init` with "the setting DB_DSN is empty". `CREATION_COMPTE` and `CONNEXION_COMPTE` are gone: use `REGISTRATION_ENABLED`
+  and `LOGIN_ENABLED`.
+- **Every id becomes a `BIGINT UNSIGNED`.** That rewrites the tables: `day_timeline` took about a minute for 7 million days (on a laptop, time it on
+  your copy, step 1), and writes wait meanwhile. Stay in maintenance. The disk needs room for a second copy of each table during the rewrite.
+- **New keys** make the reads of a sync and of the cron answer from an index. For 7.4 million days, the 15-year account: a sync's list of written dates went from 200 ms to 0.07 ms,
+  its cycles from 160 ms to 0.09 ms, the cron's list of inactive accounts from 110 s to 2 s. They cost disk (the keys of `day_timeline` went from 343 MB to 1.1 GB, ids included) and
+  about 10 % on a write of a day.
+- Foreign keys and keys get the names of `schema.sql`, whatever a database came through. A label with no account, which nothing could show, is deleted (the
+  migration says how many), and `auth_token.contry_code`, which nothing wrote, is dropped.
+- The setting `dateFormat` is gone from `/api/v3/account`: the API refuses it (`400 validation_failed`) and no longer lists it. Use `dateOrder`.

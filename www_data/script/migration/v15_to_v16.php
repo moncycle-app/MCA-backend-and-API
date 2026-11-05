@@ -88,15 +88,25 @@ try {
         print(PHP_EOL);
     }
 
-    print("migrating schema (executing v15_to_v16.sql) ...");
+    // A label with no account: no read ever shows it (they all ask for an account), and the column becomes NOT NULL.
+    $orphans = $db->exec("DELETE FROM `description` WHERE `no_user_account` IS NULL");
+    print($orphans . " labels without an account deleted");
     print(PHP_EOL);
 
-    db_ops_exec_script($db, $v15_to_v16_schema_migration);
-
-    print("commiting DB changes ...");
+    print("commiting the data steps ...");
     print(PHP_EOL);
 
     $db->exec("COMMIT");
+
+    // The ids become BIGINT: a key and what refers to it must change together, so the foreign keys go first and v15_to_v16.sql makes them
+    // again, each table rebuilt once. Their names differ from one database to another (those of schema.sql, or those of the older migrations).
+    print(upgrade_drop_foreign_keys($db) . " foreign keys dropped, v15_to_v16.sql makes them again");
+    print(PHP_EOL);
+
+    print("migrating schema (executing v15_to_v16.sql): the ids of every table are rewritten, about 1 minute per 7 million days, plan for it ...");
+    print(PHP_EOL);
+
+    db_ops_exec_script($db, $v15_to_v16_schema_migration);
 
     print("DONE !");
     print(PHP_EOL);

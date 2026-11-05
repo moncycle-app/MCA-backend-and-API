@@ -34,20 +34,22 @@ if (!str_starts_with($path, "/_test/")) return false;   // static files (the Swa
 
 require_once "$docroot/config.php";
 header("Content-Type: application/json");
-if (!str_starts_with(DB_NAME, "test_")) {
+require_once "$docroot/lib/db_ops.php";
+$db = db_ops_open();
+// the database the connection is really on, whatever DB_DSN looks like
+if (!str_starts_with(strval(db_ops_value($db, "SELECT DATABASE()")), "test_")) {
 	http_response_code(403);
 	exit('{"error":"fixtures only on a test_* database"}');
 }
-require_once "$docroot/lib/db_ops.php";
 require_once "$docroot/lib/db_querie.php";
 require_once "$docroot/lib/sec.php";
 require_once "$docroot/lib/sec_captcha.php";
 require_once "$docroot/lib/sec_token.php";
 require_once "$docroot/lib/email_token.php";
+require_once "$docroot/lib/mail.php";
 require_once "$docroot/vendor/autoload.php";
 
 $in = json_decode(file_get_contents("php://input") ?: "{}", true) ?: [];
-$db = db_ops_open();
 $out = [];
 
 switch (substr($path, strlen("/_test/"))) {
@@ -86,6 +88,15 @@ case "captcha":
 	$exp = time() + 300;
 	$mac = sec_captcha_sign((string) $in["purpose"], strtolower((string) $in["email"]), $exp, "testcode", sec_captcha_ip_scope((string) $in["ip"]), sec_captcha_state($db, (string) $in["purpose"], strtolower((string) $in["email"])));
 	$out = ["token" => "$exp.$mac", "answer" => "testcode"];
+	break;
+
+case "smtp_settings":
+	// How a value of SMTP_URL is read (no mail leaves the test server, so nothing else would show it).
+	try {
+		$out = mail_smtp_settings((string) $in["url"]);
+	} catch (\Throwable $e) {
+		$out = ["refused" => $e->getMessage()];
+	}
 	break;
 
 default:

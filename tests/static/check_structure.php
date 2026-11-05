@@ -107,7 +107,14 @@ foreach (array_keys($implicit) as $pair) {
 }
 // 5: a lib function or a constant nothing refers to (a call, a use, or its name as a callback string);
 // the definition itself is one mention
-$mentions = [];
+// a migration counts as a use; a name read outside the PHP of the app does not need one (the font folder of tFPDF, the commit the Dockerfile
+// stamps in the image)
+$mentions = ["_SYSTEM_TTFONTS" => 2, "APP_COMMIT" => 2];
+foreach (glob("script/migration/*.php") as $migration) {
+	foreach (token_get_all(file_get_contents($migration)) as $tok) {
+		if (is_array($tok) && $tok[0] === T_STRING) $mentions[$tok[1]] = ($mentions[$tok[1]] ?? 0) + 1;
+	}
+}
 foreach ($files as $file) {
 	foreach (token_get_all(file_get_contents($file)) as $tok) {
 		if (!is_array($tok)) continue;

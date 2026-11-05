@@ -274,22 +274,14 @@ const USER_SETTING_INT_MAX = 2147483647;
 const USER_SETTING_DATE_ORDERS = ["DAY_FIRST", "MONTH_FIRST"];
 const USER_SETTING_DATE_ORDER_DEFAULT = "DAY_FIRST";
 
-// `dateFormat` is DEPRECATED: still accepted and told (v3 does not lose a field), but nothing reads it any more (the CSV writes ISO dates,
-// the PDF and the clients the compact date). Its codes, and the one an account that chose none has, by its language:
-const USER_SETTING_DATE_FORMAT_CODES = ["DMY_SLASH", "DMY_DOT", "DMY_DASH", "MDY_SLASH", "YMD_DASH", "YMD_SLASH", "YMD_DOT"];
-const USER_SETTING_DATE_FORMAT_BY_LANGUAGE = [
-	"EN" => "DMY_SLASH", "FR" => "DMY_SLASH", "ES" => "DMY_SLASH", "IT" => "DMY_SLASH", "PT" => "DMY_SLASH", "DE" => "DMY_DOT", "PL" => "DMY_DOT",
-];
 // A temperature is always stored and sent in Celsius; the unit is how it is shown (the client converts, and so do the exports).
 const USER_SETTING_TEMPERATURE_UNITS = ["C", "F"];
 
-// The optional settings: JSON name => [name in user_setting, type, default, the codes a choice takes]. The default of the date
-// format is null here: it depends on the language (USER_SETTING_DATE_FORMAT_BY_LANGUAGE).
+// The optional settings: JSON name => [name in user_setting, type, default, the codes a choice takes].
 const USER_SETTINGS = [
 	"timelineAscending" => ["timeline_asc", USER_SETTING_TYPE_BOOL, true, null],               // false puts today at the top of the table
 	"autoMailExport" => ["auto_mail_export", USER_SETTING_TYPE_BOOL, false, null],              // the export of each finished cycle by mail
 	"dayBackgroundColor" => ["day_background_color", USER_SETTING_TYPE_BOOL, true, null],      // the colour behind each day
-	"dateFormat" => ["date_format", USER_SETTING_TYPE_CHOICE, null, USER_SETTING_DATE_FORMAT_CODES],
 	"dateOrder" => ["date_order", USER_SETTING_TYPE_CHOICE, USER_SETTING_DATE_ORDER_DEFAULT, USER_SETTING_DATE_ORDERS],
 	"temperatureUnit" => ["temperature_unit", USER_SETTING_TYPE_CHOICE, "C", USER_SETTING_TEMPERATURE_UNITS],
 	"notificationEmails" => ["notification_emails", USER_SETTING_TYPE_EMAILS, "", null],       // wants the current password to change (user_account_update())
