@@ -79,6 +79,12 @@ define("TRUSTED_PROXIES", env_ip_ranges("TRUSTED_PROXIES"));
 // image also reads it for the CSP (connect-src, server_conf/docker-entrypoint.sh).
 define("NEWS_URL", getenv("NEWS_URL") === false ? "https://tech4fertility.org/latest-news.json" : trim(getenv("NEWS_URL")));
 
+// The "important information" box of the web app (maintenance, update, incident; not the Tech 4 Fertility news): one plain text per
+// language, SERVER_MESSAGE_EN, SERVER_MESSAGE_FR... (one variable per code of ACCOUNT_LANGUAGES). A language with no text shows the English
+// one; no English text and no text for the language: no box. At most SERVER_MESSAGE_MAX_CHARS characters, no markup (drawn as text).
+// GET /api/v3/server_info tells them as `importantMessages`.
+define("SERVER_MESSAGES", env_language_texts("SERVER_MESSAGE"));
+
 // The terms of service: https pages. The sign-up page shows one in an iframe, beside the box to tick, the account page links to it and
 // GET /api/v3/server_info tells them to every client.
 // TERMS_OF_SERVICE_URL is the default page, the one of every language that has none of its own (English on the official instance).

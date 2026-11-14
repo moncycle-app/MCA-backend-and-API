@@ -82,6 +82,18 @@ function parse_language_urls(string $list): array {
 	return $urls;
 }
 
+// The "important information" of the server, one text per language: <PREFIX>_<CODE> for each code of ACCOUNT_LANGUAGES (SERVER_MESSAGE_EN,
+// SERVER_MESSAGE_FR...). Plain text: control characters are dropped, the text is trimmed and cut at SERVER_MESSAGE_MAX_CHARS. A language
+// with no text is not listed (a client then shows the English one). Keys are lower case language codes, like TERMS_OF_SERVICE_URLS.
+function env_language_texts(string $prefix): array {
+	$texts = [];
+	foreach (ACCOUNT_LANGUAGES as $code) {
+		$text = trim(preg_replace('/[\p{Cc}\p{Cf}]+/u', " ", env_string($prefix . "_" . $code)) ?? "");
+		if ($text !== "") $texts[strtolower($code)] = mb_substr($text, 0, SERVER_MESSAGE_MAX_CHARS);
+	}
+	return $texts;
+}
+
 // The addresses and CIDR ranges ("10.0.0.0/8", "fd00::/8") of a comma list; an item that is not
 // one is dropped.
 function env_ip_ranges(string $name): array {

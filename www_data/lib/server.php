@@ -39,6 +39,11 @@ function server_news_url(): ?string {
 	return preg_match('#^(https://|http://(localhost|127\.0\.0\.1)(:[0-9]+)?/)#', NEWS_URL) === 1 ? NEWS_URL : null;
 }
 
+// The important information, per language (SERVER_MESSAGES): the non-empty texts only, a JSON object even when there is none.
+function server_important_messages(): object {
+	return (object) array_filter(SERVER_MESSAGES, fn($text) => is_string($text) && trim($text) !== "");
+}
+
 // What a client needs before it signs in, from the settings alone: no database, so it answers in maintenance too. The version told is the
 // app's (it changes with every release, so a client can tell the server was updated); it promises nothing about the contract.
 function server_info(): array {
@@ -50,6 +55,7 @@ function server_info(): array {
 		"demoEnabled" => DEMO_ENABLED,
 		"captchaAvailable" => sec_captcha_ready(),
 		"newsUrl" => server_news_url(),
+		"importantMessages" => server_important_messages(),
 		"passwordPolicyRegex" => sec_password_policy_regex(),
 		"termsOfServiceUrl" => str_starts_with(TERMS_OF_SERVICE_URL, "https://") ? TERMS_OF_SERVICE_URL : null,
 		"termsOfServiceUrls" => (object) TERMS_OF_SERVICE_URLS,

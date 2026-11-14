@@ -74,6 +74,11 @@ define("TRUSTED_PROXIES", []);
 // fetches and draws as text. Empty: no banner. A dev server may be http://localhost:PORT/...
 define("NEWS_URL", "https://tech4fertility.org/latest-news.json");
 
+// The "important information" box of the web app (maintenance, update, incident; not the Tech 4 Fertility news): one plain text per
+// language (lower case ACCOUNT_LANGUAGES code), at most SERVER_MESSAGE_MAX_CHARS characters, no markup. A language with no text shows the
+// English one; none at all: no box. GET /api/v3/server_info tells them as `importantMessages`.
+define("SERVER_MESSAGES", ["en" => "", "fr" => ""]);
+
 // The terms of service: https pages. The sign-up page shows one in an iframe, beside the box to tick, the account page links to it and
 // GET /api/v3/server_info tells them to every client. TERMS_OF_SERVICE_URL is the default page (every language without a page of its own
 // gets it: English here), TERMS_OF_SERVICE_URLS one page per language (language code in lower case). Empty: no page to show or link.

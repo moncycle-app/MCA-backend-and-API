@@ -19,7 +19,7 @@ one version at a time, and the app runs them for you at start-up.
    - Without Docker: `php www_data/script/auto_upgrade.php` (reads `config.php`; `--wait=SECONDS` waits for a database that is starting).
    - A database newer than the code, or one no migration leads from, makes it exit with status 1 and change nothing.
 4. **Without Docker, add the new settings to your `config.php`.** Copy them from `config.exemple.php` (for v15: `MAINTENANCE_MODE`,
-   `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `TERMS_OF_SERVICE_URL`, `DEMO_ENABLED`, `CAPTCHA_SECRET` and the
+   `COOKIE_SAMESITE`, `WEB_APP_ORIGINS`, `TRUSTED_PROXIES`, `NEWS_URL`, `TERMS_OF_SERVICE_URL`, `SERVER_MESSAGES`, `DEMO_ENABLED`, `CAPTCHA_SECRET` and the
    `LOGIN_*` ones). A missing one is a fatal "Undefined constant". The Docker image reads its environment and needs nothing.
 5. **Check**: sign in, write a day, export it, sign out, and look for `system.exception` in the log.
 

@@ -3762,6 +3762,15 @@ components:
           nullable: true
           description: The JSON file the web app fetches for its news banner (an object per language, each with `title`, `description`, `url`, `pubDate`). `null` when off.
           example: https://tech4fertility.org/latest-news.json
+        importantMessages:
+          type: object
+          description: "Important information from the server operator (maintenance, update, incident), not the news of Tech 4 Fertility: one plain text per language, the key a lower case language code (`en`, `fr`...). A client shows the text of its user's language, else `en`, in a box on every page, and draws it as text, never as markup. Only the languages that have a text are listed; empty when there is nothing to say. At most 500 characters each."
+          additionalProperties:
+            type: string
+            maxLength: 500
+          example:
+            en: The server will be down for maintenance on Sunday from 2 to 3 am UTC.
+            fr: Le serveur sera en maintenance dimanche de 2 h à 3 h UTC.
         termsOfServiceUrl:
           type: string
           format: uri

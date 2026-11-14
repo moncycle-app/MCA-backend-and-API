@@ -106,6 +106,7 @@ const CAPTCHA_PURPOSES = ["register", "recover", "login"];
 
 const ACCOUNT_LANGUAGES = ["EN", "FR", "ES", "DE", "IT", "PL", "PT"];   // user_account.language: the languages an account can choose
 const ACCOUNT_DEFAULT_LANGUAGE = "EN";   // user_account.language of an account that did not say
+const SERVER_MESSAGE_MAX_CHARS = 500;   // the longest "important information" of the server, per language (SERVER_MESSAGES of the config)
 // The two public demo accounts (script/db/demo.sql): never reminded, warned or erased, left out of the statistics. DEMO_ENABLED (config)
 // decides whether they can sign in and whether script/demo_reset.php puts them back every hour.
 const ACCOUNT_DEMO_ID_CERVICAL_MUCUS = 2;
