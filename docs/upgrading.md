@@ -10,7 +10,9 @@ one version at a time, and the app runs them for you at start-up.
 ## Procedure
 
 1. **Dump the database** (`mariadb-dump`) and try the migration on a copy: time it and read its output. MariaDB commits at every
-   `ALTER TABLE`, so a run that fails half way is undone by restoring the dump, never by running the script again.
+   `ALTER TABLE`, so a run that fails half way is undone by restoring the dump. The v15 to v16 migration is the exception: each of its
+   steps looks at what is already there, so after a failure (read the FIRST error in `docker logs`, later restarts repeat it) a second run
+   finishes what the first left. Migrations before v16 are not like that: restore the dump.
 2. **Keep users out meanwhile**: stop the old container, point the proxy away, or start the new one with `MAINTENANCE_MODE=true`
    (see [Maintenance mode](../README.md#maintenance-mode)).
 3. **Start the new image.** At every start the entrypoint runs `script/auto_upgrade.php`: if the database is behind

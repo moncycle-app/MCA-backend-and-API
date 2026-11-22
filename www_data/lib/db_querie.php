@@ -52,6 +52,38 @@ function db_querie_drop_foreign_key($db, string $table, string $name): void {
 	db_ops_exec($db, "ALTER TABLE `$table` DROP FOREIGN KEY `$name`");
 }
 
+// What a migration that can be run again asks before it acts: does this table, this column of the database in use exist?
+function db_querie_select_table_exists($db, string $table): bool {
+	return db_ops_value($db, "SELECT 1 FROM information_schema.TABLES AS t WHERE t.TABLE_SCHEMA = DATABASE() AND t.TABLE_NAME = :table_name", ["table_name" => $table]) !== false;
+}
+
+function db_querie_select_column_exists($db, string $table, string $column): bool {
+	return db_ops_value($db,
+		"SELECT 1 FROM information_schema.COLUMNS AS c WHERE c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = :table_name AND c.COLUMN_NAME = :column_name",
+		["table_name" => $table, "column_name" => $column]
+	) !== false;
+}
+
+// The rows the v16 foreign keys would refuse, deleted (what ON DELETE CASCADE would have done had the key been there). Each answers a row count.
+// An account that does not exist, or none for a row that needs one:
+function db_querie_delete_without_account($db, string $table): int {
+	if (!in_array($table, ["day_timeline", "auth_token", "day_description"], true)) throw new InvalidArgumentException("db_querie_delete_without_account: unknown table");
+	return db_ops_exec($db, "DELETE x FROM `$table` AS x LEFT JOIN user_account AS u ON u.no_user_account = x.no_user_account WHERE u.no_user_account IS NULL");
+}
+
+// A link whose day or label does not exist. The id of a label is no_description (v15) or no_day_description (v16), in each of the two tables
+// on its own: the migration renames them one table at a time and may find either in either.
+function db_querie_delete_link_day_timeline_day_description_orphans($db, string $link_column, string $label_column): int {
+	$names = ["no_description", "no_day_description"];
+	if (!in_array($link_column, $names, true) || !in_array($label_column, $names, true)) throw new InvalidArgumentException("unknown label column");
+	return db_ops_exec($db,
+		"DELETE l FROM link_day_timeline_day_description AS l
+		LEFT JOIN day_timeline AS t ON t.no_day = l.no_day
+		LEFT JOIN day_description AS d ON d.$label_column = l.$link_column
+		WHERE t.no_day IS NULL OR d.$label_column IS NULL"
+	);
+}
+
 // ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------

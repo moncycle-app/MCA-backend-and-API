@@ -39,9 +39,10 @@ print(PHP_EOL);
 $db = db_ops_open();
 $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
-// NOTE: MariaDB commits at every ALTER TABLE / CREATE TABLE / RENAME, so the transaction below protects the
-// data steps only, not the schema ones. A run that stops half way leaves a half migrated database: restore the
-// dump taken before (docs/upgrading.md), do not run the script again on it.
+// NOTE: MariaDB commits at every ALTER TABLE / CREATE TABLE / RENAME, so the transaction below protects the data steps only, not the
+// schema ones, and the entrypoint runs this script again at every start. A run that stops half way leaves a half migrated database,
+// so every step looks at what is there before it acts (a column, a table that exists or not) and a second run finishes the first. A
+// dump taken before (docs/upgrading.md) is still the way back.
 try {
 
     print("reading v15_to_v16.sql file ...");
@@ -55,20 +56,32 @@ try {
 
     // The FertilityCare note, split in columns: they must exist before the data step that fills them, and v15_to_v16.sql drops fc_score
     // after it. Here and not in the .sql, which runs as a whole, after the data steps. An ALTER TABLE commits: before the transaction.
-    $db->exec("ALTER TABLE `day_timeline`
-        ADD `fc_bleeding` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_score`,
-        ADD `fc_bleeding_brown` tinyint(1) unsigned DEFAULT NULL AFTER `fc_bleeding`,
-        ADD `fc_mucus_sensation` varchar(4) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_bleeding_brown`,
-        ADD `fc_mucus_observation` set('B','C','G','K','P','Y','L') COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_mucus_sensation`,
-        ADD `fc_number_observations` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_mucus_observation`,
-        ADD `fc_pain` varchar(3) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_number_observations`,
-        ALGORITHM=INSTANT");
+    // fc_score is dropped by v15_to_v16.sql once the columns are filled: no fc_score means a run that went further, columns included.
+    $has_fc_score = db_querie_select_column_exists($db, "day_timeline", "fc_score");
+    if ($has_fc_score) {
+        $db->exec("ALTER TABLE `day_timeline`
+            ADD IF NOT EXISTS `fc_bleeding` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_score`,
+            ADD IF NOT EXISTS `fc_bleeding_brown` tinyint(1) unsigned DEFAULT NULL AFTER `fc_bleeding`,
+            ADD IF NOT EXISTS `fc_mucus_sensation` varchar(4) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_bleeding_brown`,
+            ADD IF NOT EXISTS `fc_mucus_observation` set('B','C','G','K','P','Y','L') COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_mucus_sensation`,
+            ADD IF NOT EXISTS `fc_number_observations` varchar(2) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_mucus_observation`,
+            ADD IF NOT EXISTS `fc_pain` varchar(3) COLLATE utf8mb4_bin DEFAULT NULL AFTER `fc_number_observations`,
+            ALGORITHM=INSTANT");
+    }
+
+    // `description` is the label of a day (a sensation, an observation): the tables say so. Here and not in the .sql, because the rows
+    // deleted below are found by their v16 names.
+    if (db_querie_select_table_exists($db, "description")) $db->exec("RENAME TABLE `description` TO `day_description`");
+    if (db_querie_select_table_exists($db, "link_day_timeline_description")) $db->exec("RENAME TABLE `link_day_timeline_description` TO `link_day_timeline_day_description`");
 
     $db->exec("START TRANSACTION");
 
     // Data steps (before the schema ones).
     // user_setting.value_str holds 255 characters, notification_emails held 1024: a list that does not fit keeps the addresses that do.
-    $too_long = $db->query("SELECT `no_user_account`, `notification_emails` FROM `user_account` WHERE CHAR_LENGTH(`notification_emails`) > 255")->fetchAll(PDO::FETCH_ASSOC);
+    // (the column is gone once the .sql has moved it to user_setting)
+    $too_long = db_querie_select_column_exists($db, "user_account", "notification_emails")
+        ? $db->query("SELECT `no_user_account`, `notification_emails` FROM `user_account` WHERE CHAR_LENGTH(`notification_emails`) > 255")->fetchAll(PDO::FETCH_ASSOC)
+        : [];
     foreach ($too_long as $row) {
         $kept = [];
         foreach (explode(";", $row["notification_emails"]) as $address) {
@@ -80,17 +93,26 @@ try {
         print(PHP_EOL);
     }
 
-    $fc_split = upgrade_split_fc_score($db);
-    print($fc_split["read"] . " FertilityCare notes split in columns");
-    print(PHP_EOL);
-    foreach ($fc_split["approximated"] as $no_day) {
-        print("day " . $no_day . ": its FertilityCare note said more than the columns hold, the strongest codes were kept");
+    if ($has_fc_score) {
+        $fc_split = upgrade_split_fc_score($db);
+        print($fc_split["read"] . " FertilityCare notes split in columns");
         print(PHP_EOL);
+        foreach ($fc_split["approximated"] as $no_day) {
+            print("day " . $no_day . ": its FertilityCare note said more than the columns hold, the strongest codes were kept");
+            print(PHP_EOL);
+        }
     }
 
-    // A label with no account: no read ever shows it (they all ask for an account), and the column becomes NOT NULL.
-    $orphans = $db->exec("DELETE FROM `description` WHERE `no_user_account` IS NULL");
-    print($orphans . " labels without an account deleted");
+    // Rows the foreign keys of v16 would refuse (a database that came through old versions, or was loaded with the checks off, can hold
+    // them): deleted, which is what ON DELETE CASCADE would have done. A label with no account is one of them, and its column becomes
+    // NOT NULL: no read ever shows it, they all ask for an account. The links last: the deletions above may have orphaned some.
+    foreach (["day_timeline" => "days", "auth_token" => "sessions", "day_description" => "labels"] as $table => $what) {
+        print(db_querie_delete_without_account($db, $table) . " " . $what . " without an account deleted");
+        print(PHP_EOL);
+    }
+    $link_column = db_querie_select_column_exists($db, "link_day_timeline_day_description", "no_day_description") ? "no_day_description" : "no_description";
+    $label_column = db_querie_select_column_exists($db, "day_description", "no_day_description") ? "no_day_description" : "no_description";
+    print(db_querie_delete_link_day_timeline_day_description_orphans($db, $link_column, $label_column) . " links to a missing day or label deleted");
     print(PHP_EOL);
 
     print("commiting the data steps ...");
