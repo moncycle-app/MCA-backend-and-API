@@ -70,7 +70,7 @@ function env_origins(string $name): array {
 // A comma list of "language=https://page" pairs ("fr=https://a/fr.html,de=https://a/de.html") as ["fr" => "https://a/fr.html", ...]: the language
 // code in lower case (2 or 3 letters, an optional region: pt-br), the page https. An item that is anything else is dropped; the last one of a
 // language wins. A new language is one more pair, no code.
-function parse_language_urls(string $list): array {
+function env_parse_language_urls(string $list): array {
 	$urls = [];
 	foreach (explode(",", $list) as $item) {
 		$parts = explode("=", trim($item), 2);

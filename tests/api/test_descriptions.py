@@ -21,6 +21,14 @@ class Descriptions(ApiTest):
         self.assertStatus(a.delete("description/%d" % did), 204)
         self.assertEqual(a.get("description").data, [])
 
+    def test_a_new_label_cannot_be_undefined(self):
+        a = Account()
+        self.assertError(a.post("description", {"name": "vague", "type": "undefined"}), 400, "validation_failed")
+        did = a.post("description", {"name": "firm", "type": "sensation"}).data["id"]
+        self.assertError(a.post("description/%d" % did, {"type": "undefined"}), 400, "validation_failed")
+        self.assertError(a.post("day/2026-03-10", {"freeOther": ["new", "x"], "freeMucusSensation": ["wet"], "lastWriteClientUtc": "2026-03-10T10:00:00Z"}), 400, "validation_failed")
+        self.assertEqual([d["name"] for d in a.get("description").data], ["firm"])   # nothing was written
+
     def test_a_name_is_unique_whatever_its_case(self):
         a = Account()
         a.post("description", {"name": "sticky", "type": "sensation"})

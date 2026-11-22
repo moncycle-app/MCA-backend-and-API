@@ -118,6 +118,9 @@ elseif ($method === "POST") {
 	data_reactivate_account($db, $user_account);
 
 	$is_new = data_save_day($db, $no_user_account, $date, $day, $last_write_client_UTC);
+	if (is_string($is_new)) {
+		input_exit_if_issues([input_issue($is_new, "invalid_value", "'$is_new' only holds labels that exist already: a new label is a sensation or an observation.")]);
+	}
 	if (is_null($is_new)) {
 		http_error(409, "stale_write", "This day was written more recently than this change: it was not saved.");
 	}

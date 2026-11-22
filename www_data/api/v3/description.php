@@ -66,7 +66,8 @@ else {
 	if ($name === "") $issues[] = input_issue("name", "invalid_value", "'name' must not be empty.");
 	elseif ($creates) input_require($body, "name", $issues);
 
-	$type_name = input_choice($body, "type", DESCRIPTION_TYPE_NAMES, $issues, $creates);
+	// "undefined" is only what older labels are: a label is never made, or made again, with it.
+	$type_name = input_choice($body, "type", array_diff(DESCRIPTION_TYPE_NAMES, [DESCRIPTION_TYPE_NAMES[DESCRIPTION_TYPE_UNDEFINED]]), $issues, $creates);
 	$type = is_null($type_name) ? null : array_search($type_name, DESCRIPTION_TYPE_NAMES, true);
 	if (!$creates && !array_key_exists("name", $body) && !array_key_exists("type", $body)) {
 		$issues[] = input_issue("body", "missing_field", "Send the 'name' or the 'type' to change (or both).");

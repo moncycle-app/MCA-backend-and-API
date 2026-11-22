@@ -92,7 +92,7 @@ define("SERVER_MESSAGES", env_language_texts("SERVER_MESSAGE"));
 // Unset: the official instance's. Set empty: none (with both empty there is no page to show or link, the box stays required).
 // The Docker image also reads them for the CSP (frame-src, server_conf/docker-entrypoint.sh).
 define("TERMS_OF_SERVICE_URL", getenv("TERMS_OF_SERVICE_URL") === false ? "https://moncycle.app/en/term_of_service.html" : trim(getenv("TERMS_OF_SERVICE_URL")));
-define("TERMS_OF_SERVICE_URLS", parse_language_urls(getenv("TERMS_OF_SERVICE_URLS") === false ? "fr=https://www.moncycle.app/ToS/term_of_service_fr.html" : getenv("TERMS_OF_SERVICE_URLS")));
+define("TERMS_OF_SERVICE_URLS", env_parse_language_urls(getenv("TERMS_OF_SERVICE_URLS") === false ? "fr=https://www.moncycle.app/ToS/term_of_service_fr.html" : getenv("TERMS_OF_SERVICE_URLS")));
 
 // The weekly report of the team (lib/weekly_report.php): the addresses, separated by commas, that get it every Monday from the cron
 // (script/weekly_report.php sends it by hand). An item that is not an address is skipped. Empty: no report.

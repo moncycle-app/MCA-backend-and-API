@@ -84,12 +84,14 @@ function data_description_to_json(array $row): array {
 
 // The description of a name, found or created with $type. $known keeps the answers between calls (a file repeats a few names on every
 // day). A name is one row whatever type it is asked as: "type" is the one it has, "created" whether this call made it.
-function data_resolve_description($db, int $no_user_account, string $name, int $type, string $last_write_client_UTC, array &$known = []): array {
+// A name that does not exist is never created as DESCRIPTION_TYPE_UNDEFINED: null then.
+function data_resolve_description($db, int $no_user_account, string $name, int $type, string $last_write_client_UTC, array &$known = []): ?array {
 	$name = day_format_description_name($name);
 	if (isset($known[$name])) return $known[$name] + ["created" => false];
 
 	$existing = db_querie_select_day_description_exact_name($db, $no_user_account, $name);
 	$created = is_null($existing);
+	if ($created && $type === DESCRIPTION_TYPE_UNDEFINED) return null;
 	$known[$name] = [
 		"id" => $created ? intval(db_querie_insert_day_description($db, $no_user_account, $name, $type, $last_write_client_UTC)) : intval($existing["no_day_description"]),
 		"type" => $created ? $type : intval($existing["type"]),
@@ -124,8 +126,9 @@ function data_day_for_write($db, int $no_user_account, string $date, string $las
 
 // A day checked by day_format_validate(), with its descriptions (created when a name is new), in one transaction. True when the day is
 // new, null when the stored day is later than the write. The log names the day and the descriptions made, never the ones the day
-// carries (one join would give back what the day holds).
-function data_save_day($db, int $no_user_account, string $date, array $day, string $last_write_client_UTC): ?bool {
+// carries (one join would give back what the day holds). A new name in `freeOther` is refused (nothing is written): the answer is then the
+// name of that field.
+function data_save_day($db, int $no_user_account, string $date, array $day, string $last_write_client_UTC): bool|string|null {
 	$saved = db_ops_transaction($db, function () use ($db, $no_user_account, $date, $day, $last_write_client_UTC) {
 		$existing = data_day_for_write($db, $no_user_account, $date, $last_write_client_UTC);
 		if ($existing === false) return null;
@@ -133,9 +136,10 @@ function data_save_day($db, int $no_user_account, string $date, array $day, stri
 		$known = [];
 		$no_descriptions = [];
 		$created = [];
-		foreach ([DESCRIPTION_TYPE_OBSERVATION => 'freeMucusObservation', DESCRIPTION_TYPE_SENSATION => 'freeMucusSensation', DESCRIPTION_TYPE_UNDEFINED => 'freeOther'] as $type => $field) {
+		foreach ([DESCRIPTION_TYPE_UNDEFINED => 'freeOther', DESCRIPTION_TYPE_OBSERVATION => 'freeMucusObservation', DESCRIPTION_TYPE_SENSATION => 'freeMucusSensation'] as $type => $field) {
 			foreach ($day[$field] ?? [] as $name) {
 				$description = data_resolve_description($db, $no_user_account, $name, $type, $last_write_client_UTC, $known);
+				if (is_null($description)) return $field;
 				$no_descriptions[] = $description["id"];
 				if ($description["created"]) $created[] = $description["id"];
 			}
@@ -144,7 +148,7 @@ function data_save_day($db, int $no_user_account, string $date, array $day, stri
 		log_context(["day" => data_write_day($db, $no_user_account, $date, $existing, day_format_from_json($day), $no_descriptions, $last_write_client_UTC)]);
 		return [is_null($existing), $created];
 	});
-	if (is_null($saved)) return null;
+	if (is_null($saved) || is_string($saved)) return $saved;
 
 	[$is_new, $created] = $saved;
 	log_event("data.day_saved", ["dt" => $date, "new" => $is_new, "dsc" => $created ?: null]);
